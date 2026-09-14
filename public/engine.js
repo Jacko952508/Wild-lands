@@ -10,12 +10,14 @@ camera.rotation.order='YXZ';
 
 const renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
 renderer.setSize(innerWidth,innerHeight);
-renderer.setPixelRatio(Math.min(devicePixelRatio,1.35));
+let renderScale=Math.min(devicePixelRatio,1.2);
+renderer.setPixelRatio(renderScale);
 renderer.outputColorSpace=T.SRGBColorSpace;
 renderer.toneMapping=T.ACESFilmicToneMapping;
 renderer.toneMappingExposure=1.05;
 renderer.shadowMap.enabled=true;
 renderer.shadowMap.type=T.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
 
 const hemi=new T.HemisphereLight(0xd9ecff,0x334238,1.1);
 const sun=new T.DirectionalLight(0xffe2ad,2.2);
@@ -227,6 +229,31 @@ function terrain(cx,cz,seg){
  mesh.position.set(cx*CH,0,cz*CH);mesh.receiveShadow=seg>12;return mesh;
 }
 
+const farTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,5),farPineGeo=new T.ConeGeometry(1.3,4.2,6),farLeafGeo=new T.ConeGeometry(1.55,4.4,6);
+function addFarTrees(group,d,cx,cz){
+ const trees=[];
+ for(let i=0;i<d.trees.length;i+=3){
+   const q=d.trees[i],wx=cx*CH+q[0],wz=cz*CH+q[1];
+   if(!inCityZone(wx,wz))trees.push({wx,wz,s:q[2],pine:biome(wx,wz)==='pine'})
+ }
+ if(!trees.length)return;
+ const trunks=new T.InstancedMesh(farTrunkGeo,mats.trunk,trees.length),
+       pineCount=trees.reduce((n,q)=>n+(q.pine?1:0),0),
+       leafCount=trees.length-pineCount,
+       pines=pineCount?new T.InstancedMesh(farPineGeo,mats.pine,pineCount):null,
+       leaves=leafCount?new T.InstancedMesh(farLeafGeo,mats.leaf,leafCount):null,
+       o=new T.Object3D();
+ let pi=0,li=0;
+ trees.forEach((q,i)=>{
+   const y=H(q.wx,q.wz);
+   o.position.set(q.wx,y+1.9*q.s,q.wz);o.scale.setScalar(q.s);o.rotation.set(0,0,0);o.updateMatrix();trunks.setMatrixAt(i,o.matrix);
+   o.position.set(q.wx,y+4*q.s,q.wz);o.scale.setScalar(q.s);o.updateMatrix();
+   if(q.pine)pines.setMatrixAt(pi++,o.matrix);else leaves.setMatrixAt(li++,o.matrix)
+ });
+ trunks.instanceMatrix.needsUpdate=true;trunks.frustumCulled=true;group.add(trunks);
+ if(pines){pines.instanceMatrix.needsUpdate=true;group.add(pines)}
+ if(leaves){leaves.instanceMatrix.needsUpdate=true;group.add(leaves)}
+}
 function makeTree(wx,wz,s,detail){
  let g=new T.Group(),b=biome(wx,wz),tr=new T.Mesh(new T.CylinderGeometry(0.18*s,0.38*s,3.8*s,detail?7:5),mats.trunk);
  tr.position.y=1.9*s;tr.castShadow=detail;g.add(tr);
@@ -280,7 +307,7 @@ function anomalyModel(type,cx,cz){
  if(type==='ufo'){
    let disc=new T.Mesh(new T.CylinderGeometry(3.4,5.2,1.1,20),mats.ufo);disc.scale.y=0.65;g.add(disc);
    let dome=new T.Mesh(new T.SphereGeometry(2.0,14,8),mats.glass);dome.position.y=0.7;dome.scale.y=0.55;g.add(dome);
-   for(let i=0;i<8;i++){let a=i/8*Math.PI*2,l=new T.PointLight(0x8fffe8,0.45,7);l.position.set(Math.cos(a)*3.8,-0.2,Math.sin(a)*3.8);g.add(l)}
+   for(let i=0;i<8;i++){let a=i/8*Math.PI*2,l=new T.PointLight(0x8fffe8,0.45,7);l.position.set(Math.cos(a)*3.8,-0.2,Math.sin(a)*3.8);l.userData.baseIntensity=.45;l.userData.owner=g;l.userData.maxDistance=55;g.add(l);managedLights.push(l)}
    addVehicleLights(g,4.7,.25,1.2,0xc7ffff,5.8,65);
    g.position.set(wx,H(wx,wz)+11+hash(cx,cz,143)*7,wz);g.userData.float=true;g.userData.baseY=g.position.y;g.userData.phase=hash(cx,cz,144)*6.28;
  }else if(type==='beast'){
@@ -302,14 +329,15 @@ function anomalyModel(type,cx,cz){
 
 const vehicles=[];
 let activeVehicle=null;
-const flashingRunwayLights=[];
+const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
  for(const sx of[-spread,spread]){
    const bulb=new T.Mesh(new T.SphereGeometry(.11,8,6),new T.MeshBasicMaterial({color}));
    bulb.position.set(sx,y,zFront);g.add(bulb);
    const light=new T.SpotLight(color,power,range,Math.PI/7,.45,1.4);
    light.position.set(sx,y,zFront+.05);light.target.position.set(sx,y-.35,zFront+14);
-   g.add(light,light.target)
+   light.userData.baseIntensity=power;light.userData.owner=g;light.userData.maxDistance=Math.max(75,range*1.8);
+   g.add(light,light.target);managedLights.push(light)
  }
 }
 function wheel(r=.42,wid=.28){let w=new T.Mesh(new T.CylinderGeometry(r,r,wid,14),new T.MeshStandardMaterial({color:0x181a1c,roughness:.96,metalness:.08}));w.rotation.z=Math.PI/2;return w}
@@ -743,6 +771,31 @@ function makeMoonWorld(){
 }
 const moonGroup=makeMoonWorld();
 
+// Manage local lights by distance so dozens of inactive lights do not burden
+// the GPU every frame. Their visible lamp meshes remain, only illumination is culled.
+scene.traverse(o=>{
+ if((o.isPointLight||o.isSpotLight)&&o!==sun&&!managedLights.includes(o)){
+   o.userData.baseIntensity=o.intensity;
+   o.userData.owner=o.parent||scene;
+   o.userData.maxDistance=o.distance?Math.max(55,o.distance*1.7):85;
+   managedLights.push(o)
+ }
+});
+const lightProbe=new T.Vector3();let lightUpdateAt=0;
+function updateManagedLights(day){
+ const now=performance.now();if(now-lightUpdateAt<180)return;lightUpdateAt=now;
+ const dark=moonMode?1:T.MathUtils.clamp(1-day+.08,0,1);
+ for(const l of managedLights){
+   const owner=l.userData.owner;
+   if(!owner||!owner.visible||!l.parent){l.visible=false;continue}
+   l.getWorldPosition(lightProbe);
+   const py=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:H(player.x,player.z)+1.7;
+   const d=Math.hypot(lightProbe.x-player.x,lightProbe.y-py,lightProbe.z-player.z);
+   const max=l.userData.maxDistance||85,on=d<max&&dark>.08;
+   l.visible=on;if(on)l.intensity=(l.userData.baseIntensity||1)*dark
+ }
+}
+
 function createChunk(cx,cz){
  let k=key(cx,cz),d=descriptor(cx,cz),root=new T.Group(),near=new T.Group(),far=new T.Group();
 
@@ -752,18 +805,18 @@ function createChunk(cx,cz){
  if(!world.saved[k])world.saved[k]=JSON.parse(JSON.stringify(d));
  d=world.saved[k];
 
- // Near/far terrain must have identical topology or the ground visibly
- // reshapes when a chunk changes LOD. Decorations still use separate LOD.
- near.add(terrain(cx,cz,20));far.add(terrain(cx,cz,20));
+ // Keep one terrain mesh per chunk for both LOD modes. This preserves
+ // identical ground topology while avoiding two full terrain meshes per chunk.
+ const ground=terrain(cx,cz,20);root.add(ground);
  for(const q of d.trees){
    let wx=cx*CH+q[0],wz=cz*CH+q[1];if(!inCityZone(wx,wz))near.add(makeTree(wx,wz,q[2],true));
  }
- for(let i=0;i<d.trees.length;i+=3){let q=d.trees[i],wx=cx*CH+q[0],wz=cz*CH+q[1];if(!inCityZone(wx,wz))far.add(makeTree(wx,wz,q[2],false))}
+ addFarTrees(far,d,cx,cz);
  for(const q of d.rocks){let wx=cx*CH+q[0],wz=cz*CH+q[1];if(inCityZone(wx,wz))continue;let m=new T.Mesh(new T.DodecahedronGeometry(q[2],0),mats.rock);m.position.set(wx,H(wx,wz)+q[2]*0.55,wz);m.scale.y=0.7;m.castShadow=true;near.add(m)}
  if(d.mark){near.add(landmarkModel(cx,cz,d.mark));addTrail(near,cx,cz,d)}
  let anomaly=null;if(d.anomaly){anomaly=anomalyModel(d.anomaly,cx,cz);near.add(anomaly)}
  root.add(near,far);near.visible=false;far.visible=false;scene.add(root);
- let c={cx,cz,k,d,root,near,far,mode:'none',agents:[],anomaly,lastUsed:performance.now()};
+ let c={cx,cz,k,d,root,near,far,ground,mode:'none',agents:[],anomaly,lastUsed:performance.now()};
  chunks.set(k,c);return c;
 }
 
@@ -788,7 +841,8 @@ function setMode(c,mode){
  c.lastUsed=performance.now();
  if(c.mode===mode)return;
  c.mode=mode;
- c.near.visible=mode==='near';c.far.visible=mode==='far';
+ c.near.visible=mode==='near';c.far.visible=mode==='far';c.ground.visible=mode!=='none';
+ c.ground.receiveShadow=mode==='near';
  if(mode==='near')loadAnimals(c);else unloadAnimals(c);
 }
 
@@ -802,11 +856,18 @@ function rebuildColliders(nearSet){
    if(c.d.mark==='tower')colliders.push({x:c.cx*CH,z:c.cz*CH,r:2.2});
    }
 }
-function blocked(x,z,radius=0.6,ignoreVehicle=null){
- const staticCols=moonMode?moonColliders:[...colliders,...cityColliders,...startColliders];
- for(const c of staticCols){
+function colliderListBlocked(list,x,z,radius){
+ for(const c of list){
    if(c.r!=null){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}
    else if(Math.abs(x-c.x)<c.hx+radius&&Math.abs(z-c.z)<c.hz+radius)return true
+ }
+ return false
+}
+function blocked(x,z,radius=0.6,ignoreVehicle=null){
+ if(moonMode){
+   if(colliderListBlocked(moonColliders,x,z,radius))return true
+ }else{
+   if(colliderListBlocked(colliders,x,z,radius)||colliderListBlocked(cityColliders,x,z,radius)||colliderListBlocked(startColliders,x,z,radius))return true
  }
  for(const v of vehicles){
    if(v===activeVehicle||v===ignoreVehicle)continue;
@@ -821,8 +882,9 @@ function queueFar(cx,cz){
  let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
  farPending.add(k);farQueue.push({cx,cz,k,generation:syncGeneration});
 }
+let farBuildAt=0;
 function processFarQueue(){
- if(!farQueue.length)return;
+ const now=performance.now();if(now-farBuildAt<55||!farQueue.length)return;farBuildAt=now;
  let cc=chunkOf(player.x,player.z),job=farQueue.shift();farPending.delete(job.k);
  if(job.generation!==syncGeneration)return;
  if(chunks.has(job.k))return;
@@ -853,7 +915,7 @@ function sync(force=false){
    let dx=Math.abs(c.cx-cc.cx),dz=Math.abs(c.cz-cc.cz);
    if(dx>CACHE||dz>CACHE){
      unloadAnimals(c);scene.remove(c.root);chunks.delete(k);
-   }else if(!keepSet.has(k)){c.near.visible=false;c.far.visible=false;c.mode='none';unloadAnimals(c)}
+   }else if(!keepSet.has(k)){c.near.visible=false;c.far.visible=false;c.ground.visible=false;c.mode='none';unloadAnimals(c)}
  }
  rebuildColliders(nearSet);
  saveVisitedDescriptor(cc.cx,cc.cz);
@@ -1214,10 +1276,12 @@ function leaveMoon(v){
  toast('Leaving lunar gravity');
 }
 
+let skyUiAt=0;
 function updateSky(time,dt=0.016){
  let hour=worldCtl.autoTime?((time/480)*24)%24:worldCtl.time,cycle=hour/24,a=cycle*Math.PI*2-Math.PI/2,sy=Math.sin(a),day=T.MathUtils.clamp((sy+0.18)*2.3,0,1),w=worldCtl.weather;
- if(worldCtl.autoTime){worldCtl.time=hour;$('timeSlider').value=hour.toFixed(2)}
- $('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
+ const now=performance.now(),updateUi=now-skyUiAt>180;if(updateUi)skyUiAt=now;
+ if(worldCtl.autoTime){worldCtl.time=hour;if(updateUi)$('timeSlider').value=hour.toFixed(2)}
+ if(updateUi)$('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
  sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);hemi.intensity=(0.18+day*0.95)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
  let ufoAlt=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.alt:0,
      spaceFactor=moonMode?1:T.MathUtils.clamp((ufoAlt-110)/170,0,1),
@@ -1236,8 +1300,7 @@ function updateSky(time,dt=0.016){
  let wet=!moonMode&&(w==='rain'||w==='storm')&&spaceFactor<0.45;
  rain.material.opacity=wet?(w==='storm'?0.82:0.55):0;
  rain.position.set(player.x,0,player.z);
- for(let i=0;i<rainCount;i++){rainPos[i*3+1]-=dt*(w==='storm'?28:20);if(rainPos[i*3+1]<0)rainPos[i*3+1]=42}
- rainGeo.attributes.position.needsUpdate=wet;
+ if(wet){for(let i=0;i<rainCount;i++){rainPos[i*3+1]-=dt*(w==='storm'?28:20);if(rainPos[i*3+1]<0)rainPos[i*3+1]=42}rainGeo.attributes.position.needsUpdate=true}
 
  cloudGroup.visible=!moonMode&&spaceFactor<0.72;
  cloudGroup.children.forEach((g,i)=>{let u=g.userData;u.a+=dt*(w==='storm'?0.09:0.035);g.position.set(player.x+Math.cos(u.a)*u.r,u.h,player.z+Math.sin(u.a)*u.r);g.children.forEach(m=>m.material.opacity=w==='clear'?0.1:w==='cloudy'?0.38:w==='rain'?0.52:w==='storm'?0.68:0.22)});
@@ -1264,9 +1327,11 @@ function updateSky(time,dt=0.016){
    sun.intensity=Math.max(sun.intensity,0.18+spaceFactor*0.55);
  }
  for(const l of flashingRunwayLights){const pulse=.28+.72*(.5+.5*Math.sin(time*5.2-l.phase));l.mesh.material.opacity=pulse;l.mesh.scale.setScalar(.85+pulse*.5)}
- document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
+ updateManagedLights(day);
+ if(updateUi)document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
 }
 
+let hudUpdateAt=0,aiAccumulator=0;const cameraLerpTarget=new T.Vector3();
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
  player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);
@@ -1435,55 +1500,87 @@ function step(dt,t){
        up=v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
        camYaw=v.yaw-lx*0.9,
        camLift=ly*4.2;
-   let cam=new T.Vector3(
-     v.x-Math.sin(camYaw)*back,
-     h+up+camLift,
-     v.z-Math.cos(camYaw)*back
-   );
-   camera.position.lerp(cam,0.16);
+   cameraLerpTarget.set(v.x-Math.sin(camYaw)*back,h+up+camLift,v.z-Math.cos(camYaw)*back);
+   camera.position.lerp(cameraLerpTarget,0.16);
    camera.lookAt(v.x,h+1.1-ly*1.5,v.z);
  }else{
    player.yaw-=lx*dt*2.45;
    let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
    let dh=Math.abs(H(nx,nz)-H(player.x,player.z));
    if(!blocked(nx,nz)&&dh<1.05&&slopeAt(nx,nz)<2.35){player.x=nx;player.z=nz}
-   camera.position.lerp(new T.Vector3(player.x,H(player.x,player.z)+1.7,player.z),0.24);camera.rotation.set(player.pitch,player.yaw,0);
+   cameraLerpTarget.set(player.x,H(player.x,player.z)+1.7,player.z);camera.position.lerp(cameraLerpTarget,0.24);camera.rotation.set(player.pitch,player.yaw,0);
  }
 
  let cc=chunkOf(player.x,player.z);
  if(!moonMode&&!(activeVehicle&&activeVehicle.kind==='ufo'&&activeVehicle.alt>180)&&key(cc.cx,cc.cz)!==currentChunk)sync();
- let deg=((player.yaw*180/Math.PI)%360+360)%360,names=['N','NE','E','SE','S','SW','W','NW'];
- $('compass').textContent=names[Math.round(deg/45)%8];
- let vehicleHud='';
- if(activeVehicle){
-   const kmh=Math.round(Math.abs(activeVehicle.speed||0)*3.6);
-   vehicleHud=activeVehicle.type+' • '+kmh+' km/h';
-   if(activeVehicle.kind!=='buggy'&&activeVehicle.kind!=='moonbuggy'){
-     vehicleHud+=' • '+Math.round(activeVehicle.alt)+'m';
-     if(activeVehicle.kind==='ufo'&&activeVehicle.alt>160)vehicleHud+=' • SPACE';
-     if(activeVehicle.stalled)vehicleHud+=' • STALL';
+
+ // Wildlife/anomaly simulation does not need display-frame frequency.
+ aiAccumulator+=dt;
+ if(aiAccumulator>=0.033){
+   const simDt=Math.min(aiAccumulator,.066);aiAccumulator=0;
+   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t)}
+ }
+
+ // HUD/context checks are intentionally throttled; movement/camera remain full-rate.
+ const now=performance.now();
+ if(now-hudUpdateAt>100){
+   hudUpdateAt=now;
+   let deg=((player.yaw*180/Math.PI)%360+360)%360,names=['N','NE','E','SE','S','SW','W','NW'];
+   $('compass').textContent=names[Math.round(deg/45)%8];
+   let vehicleHud='';
+   if(activeVehicle){
+     const kmh=Math.round(Math.abs(activeVehicle.speed||0)*3.6);
+     vehicleHud=activeVehicle.type+' • '+kmh+' km/h';
+     if(activeVehicle.kind!=='buggy'&&activeVehicle.kind!=='moonbuggy'){
+       vehicleHud+=' • '+Math.round(activeVehicle.alt)+'m';
+       if(activeVehicle.kind==='ufo'&&activeVehicle.alt>160)vehicleHud+=' • SPACE';
+       if(activeVehicle.stalled)vehicleHud+=' • STALL';
+     }
+     $('modeReadout').textContent=activeVehicle.kind==='jet'||activeVehicle.kind==='heli'||activeVehicle.kind==='ufo'?'FLIGHT':activeVehicle.kind==='mek'?'MEK':'DRIVING';
+     $('vehicleCard').classList.remove('hidden');$('vehicleName').textContent=activeVehicle.type.toUpperCase();$('vehicleSpeed').textContent=kmh+' km/h';
+     vehicleHud+=' • '
+   }else{
+     $('modeReadout').textContent=moonMode?'MOON EVA':'ON FOOT';
+     $('vehicleCard').classList.add('hidden')
    }
-   $('modeReadout').textContent=activeVehicle.kind==='jet'||activeVehicle.kind==='heli'||activeVehicle.kind==='ufo'?'FLIGHT':activeVehicle.kind==='mek'?'MEK':'DRIVING';
-   $('vehicleCard').classList.remove('hidden');$('vehicleName').textContent=activeVehicle.type.toUpperCase();$('vehicleSpeed').textContent=kmh+' km/h';
-   vehicleHud+=' • '
- }else{
-   $('modeReadout').textContent=moonMode?'MOON EVA':'ON FOOT';
-   $('vehicleCard').classList.add('hidden')
+   if(activeVehicle&&activeVehicle.kind==='ufo'&&!moonMode&&activeVehicle.inSpace){let md=Math.hypot(activeVehicle.x-SPACE_MOON.x,activeVehicle.worldY-SPACE_MOON.y,activeVehicle.z-SPACE_MOON.z);vehicleHud+='MOON '+Math.round(md)+'m • '}
+   $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife');
+   refreshUse();
+   for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
+     let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
+     if(d<(c.d.anomaly==='titan'?35:20)&&!world.discoveries[id]){world.discoveries[id]=c.d.anomaly;toast(c.d.anomaly==='ufo'?'Unidentified craft discovered':c.d.anomaly==='titan'?'Giant entity discovered':'Unknown creature discovered');persist()}
+   }
  }
- if(activeVehicle&&activeVehicle.kind==='ufo'&&!moonMode&&activeVehicle.inSpace){let md=Math.hypot(activeVehicle.x-SPACE_MOON.x,activeVehicle.worldY-SPACE_MOON.y,activeVehicle.z-SPACE_MOON.z);vehicleHud+='MOON '+Math.round(md)+'m • '}
- $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife');
- refreshUse();if(!moonMode){updateAnimals(dt,t);updateAnomalies(dt,t)}updateSky(t,dt);
- for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
-   let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
-   if(d<(c.d.anomaly==='titan'?35:20)&&!world.discoveries[id]){world.discoveries[id]=c.d.anomaly;toast(c.d.anomaly==='ufo'?'Unidentified craft discovered':c.d.anomaly==='titan'?'Giant entity discovered':'Unknown creature discovered');persist()}
- }
+ updateSky(t,dt);
  saveTimer+=dt;if(saveTimer>8){saveTimer=0;for(const c of chunks.values())if(c.agents.length)world.animalState[c.k]=c.agents.map(a=>({x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(3)}));persist()}
 }
 
 sync(true);
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
-let last=performance.now(),start=performance.now()/1000-240;
-function loop(now){let dt=Math.min(0.04,(now-last)/1000);last=now;let t=now/1000;step(dt,t-start);processFarQueue();renderer.render(scene,camera);requestAnimationFrame(loop)}
+let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0;
+function loop(now){
+ let rawDt=(now-last)/1000,dt=Math.min(0.04,rawDt);last=now;let t=now/1000;
+ step(dt,t-start);processFarQueue();
+
+ // Sun shadows are expensive on mobile; refresh them often enough to look continuous
+ // without re-rendering the full shadow map on every display frame.
+ if(now-shadowAt>120){shadowAt=now;renderer.shadowMap.needsUpdate=true}
+
+ renderer.render(scene,camera);
+
+ // Adaptive internal resolution: preserve sharpness when there is GPU headroom,
+ // back off slightly during heavy scenes instead of dropping simulation/gameplay.
+ perfFrames++;perfTotal+=rawDt;
+ if(now-perfAt>1800){
+   const avg=perfTotal/Math.max(1,perfFrames),cap=Math.min(devicePixelRatio,1.25);
+   let next=renderScale;
+   if(avg>.0215)next=Math.max(.9,renderScale-.08);
+   else if(avg<.0172)next=Math.min(cap,renderScale+.04);
+   if(Math.abs(next-renderScale)>.01){renderScale=next;renderer.setPixelRatio(renderScale);renderer.setSize(innerWidth,innerHeight,false)}
+   perfAt=now;perfFrames=0;perfTotal=0
+ }
+ requestAnimationFrame(loop)
+}
 requestAnimationFrame(loop);
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
