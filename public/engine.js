@@ -275,16 +275,66 @@ function makeTree(wx,wz,s,detail){
 }
 
 function animalModel(kind){
- let g=new T.Group(),m=mats[kind],body=new T.Mesh(new T.SphereGeometry(1,10,7),m);
- let scale=kind==='wolf'?1.08:kind==='boar'?1.12:1;
- body.scale.set((kind==='boar'?1.42:1.22)*scale,(kind==='boar'?0.75:0.65)*scale,0.58*scale);body.position.y=1;g.add(body);
- let head=new T.Mesh(new T.SphereGeometry(0.42,8,6),m);head.position.set(0,kind==='deer'?1.72:1.58,0.98);head.scale.set(0.9,0.85,1.1);g.add(head);
- let legs=[];
- for(const sx of[-0.45,0.45])for(const sz of[-0.38,0.38]){let pivot=new T.Group(),l=new T.Mesh(new T.CylinderGeometry(0.06,0.075,0.92,5),m);l.position.y=-0.45;pivot.position.set(sx,0.75,sz);pivot.add(l);g.add(pivot);legs.push(pivot)}
- if(kind==='deer'){for(const s of[-1,1]){let a=new T.Mesh(new T.CylinderGeometry(0.025,0.04,0.65,5),mats.dark);a.position.set(s*0.16,2.18,0.92);a.rotation.z=s*0.15;g.add(a)}}
- if(kind==='fox'||kind==='wolf'){let tail=new T.Mesh(new T.ConeGeometry(kind==='wolf'?0.3:0.25,1.35,7),m);tail.position.set(0,1.05,-1.25);tail.rotation.x=-1.15;g.add(tail)}
- if(kind==='boar'){for(const s of[-1,1]){let tusk=new T.Mesh(new T.ConeGeometry(0.05,0.28,5),new T.MeshStandardMaterial({color:0xd8c5a8,roughness:1}));tusk.position.set(s*0.25,1.45,1.35);tusk.rotation.x=Math.PI/2;g.add(tusk)}}
- g.userData.legs=legs;return g;
+ const g=new T.Group(),m=mats[kind],dark=mats.dark,
+       eyeMat=new T.MeshBasicMaterial({color:0x080808}),
+       noseMat=new T.MeshStandardMaterial({color:0x171717,roughness:.9}),
+       boneMat=new T.MeshStandardMaterial({color:0xd8c5a8,roughness:1});
+ const isDeer=kind==='deer',isFox=kind==='fox',isWolf=kind==='wolf',isBoar=kind==='boar';
+ const scale=isWolf?1.08:isBoar?1.12:1;
+
+ // Body is elongated along the actual forward axis (+Z), giving each animal a proper silhouette.
+ const body=new T.Mesh(new T.SphereGeometry(1,14,9),m);
+ body.scale.set((isBoar?.72:.6)*scale,(isBoar?.72:.66)*scale,(isBoar?1.42:1.28)*scale);
+ body.position.y=isBoar?.92:1.05;body.castShadow=true;g.add(body);
+
+ const chest=new T.Mesh(new T.SphereGeometry(.62,12,8),m);
+ chest.scale.set(.78,isDeer?1.05:.9,.72);chest.position.set(0,isDeer?1.18:1.08,.72);chest.castShadow=true;g.add(chest);
+
+ const neck=new T.Mesh(new T.CylinderGeometry(isDeer?.18:.22,isDeer?.27:.3,isDeer?1.15:.72,8),m);
+ neck.position.set(0,isDeer?1.58:1.42,isDeer?.88:.98);neck.rotation.x=isDeer?-.48:-.72;g.add(neck);
+
+ const head=new T.Mesh(new T.SphereGeometry(.43,12,8),m);
+ head.scale.set(isBoar?1.05:.9,isDeer?1.0:.86,isBoar?1.38:1.18);
+ head.position.set(0,isDeer?2.0:1.72,isDeer?1.36:1.42);head.castShadow=true;g.add(head);
+
+ const muzzle=new T.Mesh(new T.SphereGeometry(.25,10,7),isBoar?m:noseMat);
+ muzzle.scale.set(isBoar?1.1:.75,isBoar?.65:.58,isBoar?1.25:1.05);
+ muzzle.position.set(0,isDeer?1.93:1.62,isDeer?1.72:1.79);g.add(muzzle);
+
+ for(const sx of[-1,1]){
+   const eye=new T.Mesh(new T.SphereGeometry(.045,6,4),eyeMat);eye.position.set(sx*.28,isDeer?2.08:1.82,isDeer?1.63:1.68);g.add(eye);
+   const ear=new T.Mesh(new T.ConeGeometry(isDeer?.13:.11,isDeer?.42:.3,6),m);
+   ear.position.set(sx*(isDeer?.28:.3),isDeer?2.38:2.04,isDeer?1.27:1.36);ear.rotation.z=sx*(isDeer?.28:.42);g.add(ear)
+ }
+
+ const legs=[];
+ for(const sx of[-.38,.38])for(const sz of[-.64,.62]){
+   const pivot=new T.Group(),
+         upper=new T.Mesh(new T.CylinderGeometry(isBoar?.09:.065,isBoar?.115:.085,isBoar?.68:.78,7),m),
+         lower=new T.Mesh(new T.CylinderGeometry(.045,.06,isBoar?.43:.58,6),dark);
+   upper.position.y=-.28;lower.position.y=-(isBoar?.78:.94);
+   pivot.position.set(sx,isBoar?.78:.88,sz);pivot.add(upper,lower);g.add(pivot);legs.push(pivot)
+ }
+
+ if(isDeer){
+   for(const s of[-1,1]){
+     const antler=new T.Group();
+     const stem=new T.Mesh(new T.CylinderGeometry(.025,.04,.68,6),boneMat);stem.position.y=.3;
+     const tine=new T.Mesh(new T.CylinderGeometry(.018,.028,.34,5),boneMat);tine.position.set(s*.09,.47,.02);tine.rotation.z=s*.65;
+     antler.position.set(s*.16,2.28,1.28);antler.rotation.z=s*.1;antler.add(stem,tine);g.add(antler)
+   }
+   const tail=new T.Mesh(new T.ConeGeometry(.14,.5,6),new T.MeshStandardMaterial({color:0xe7ddd0,roughness:1}));tail.position.set(0,1.15,-1.25);tail.rotation.x=1.05;g.add(tail)
+ }
+ if(isFox||isWolf){
+   const tail=new T.Mesh(new T.ConeGeometry(isWolf?.32:.27,isWolf?1.5:1.35,9),m);
+   tail.position.set(0,1.02,-1.42);tail.rotation.x=-1.08;tail.rotation.z=.12;g.add(tail);g.userData.tail=tail
+ }
+ if(isBoar){
+   const snout=new T.Mesh(new T.CylinderGeometry(.2,.25,.42,10),m);snout.rotation.x=Math.PI/2;snout.position.set(0,1.58,1.92);g.add(snout);
+   for(const s of[-1,1]){const tusk=new T.Mesh(new T.ConeGeometry(.055,.32,6),boneMat);tusk.position.set(s*.25,1.48,2.02);tusk.rotation.x=Math.PI/2;tusk.rotation.z=s*.25;g.add(tusk)}
+ }
+
+ g.userData.legs=legs;g.userData.head=head;return g;
 }
 
 function landmarkModel(cx,cz,type){
@@ -609,12 +659,39 @@ function townText(parent,text,x,y,z,w=7,h=1.15){
  m.position.set(x,y,z);parent.add(m);return m
 }
 function makeHuman(parent,x,z,shirt=0x546f8a,role='Resident',name=role){
- const g=new T.Group(),skin=cityMat(0xc99872,.8),cloth=cityMat(shirt,.82),pants=cityMat(0x2f3438,.9);
- const body=new T.Mesh(new T.CylinderGeometry(.38,.46,1.35,8),cloth);body.position.y=1.55;g.add(body);
- const head=new T.Mesh(new T.SphereGeometry(.34,10,8),skin);head.position.y=2.55;g.add(head);
- const hair=new T.Mesh(new T.SphereGeometry(.355,9,6,0,Math.PI*2,0,Math.PI*.48),cityMat(0x3d2c22,.9));hair.position.y=2.68;g.add(hair);
- for(const sx of[-.2,.2]){let leg=new T.Mesh(new T.CylinderGeometry(.11,.13,.85,7),pants);leg.position.set(sx,.55,0);g.add(leg)}
- g.position.set(x,H(x,z),z);g.userData.role=role;g.userData.name=name;parent.add(g);townHumans.push(g);
+ const g=new T.Group(),skin=cityMat(0xc99872,.72),cloth=cityMat(shirt,.72),pants=cityMat(0x2f3438,.84),shoe=cityMat(0x17191a,.9),hairMat=cityMat(0x3d2c22,.88),eyeMat=new T.MeshBasicMaterial({color:0x111111});
+
+ const hips=new T.Mesh(new T.BoxGeometry(.72,.34,.42),pants);hips.position.y=1.02;g.add(hips);
+ const torso=new T.Mesh(new T.CylinderGeometry(.34,.43,1.05,10),cloth);torso.position.y=1.62;torso.scale.z=.72;g.add(torso);
+ const neck=new T.Mesh(new T.CylinderGeometry(.11,.12,.22,8),skin);neck.position.y=2.24;g.add(neck);
+ const head=new T.Mesh(new T.SphereGeometry(.32,14,10),skin);head.scale.set(.92,1.05,.9);head.position.y=2.55;g.add(head);
+ const hair=new T.Mesh(new T.SphereGeometry(.325,12,8,0,Math.PI*2,0,Math.PI*.52),hairMat);hair.position.y=2.68;g.add(hair);
+
+ const arms=[],legs=[];
+ for(const sx of[-1,1]){
+   const armPivot=new T.Group(),upper=new T.Mesh(new T.CylinderGeometry(.075,.09,.72,8),cloth),hand=new T.Mesh(new T.SphereGeometry(.11,8,6),skin);
+   upper.position.y=-.34;hand.position.y=-.76;armPivot.position.set(sx*.47,1.95,0);armPivot.rotation.z=sx*.07;armPivot.add(upper,hand);g.add(armPivot);arms.push(armPivot);
+
+   const legPivot=new T.Group(),leg=new T.Mesh(new T.CylinderGeometry(.095,.11,.84,8),pants),boot=new T.Mesh(new T.BoxGeometry(.22,.16,.4),shoe);
+   leg.position.y=-.38;boot.position.set(0,-.82,.09);legPivot.position.set(sx*.19,.9,0);legPivot.add(leg,boot);g.add(legPivot);legs.push(legPivot);
+
+   const eye=new T.Mesh(new T.SphereGeometry(.028,6,4),eyeMat);eye.position.set(sx*.105,2.58,.287);g.add(eye)
+ }
+ const nose=new T.Mesh(new T.ConeGeometry(.035,.11,6),skin);nose.rotation.x=Math.PI/2;nose.position.set(0,2.51,.33);g.add(nose);
+
+ if(role==='Miner'||role==='Builder'||role==='Mechanic'){
+   const cap=new T.Mesh(new T.CylinderGeometry(.34,.34,.12,12),cityMat(role==='Miner'?0xe2b84c:0x606b72,.7));cap.position.y=2.88;g.add(cap)
+ }
+ if(role==='Medic'){
+   const badge=new T.Mesh(new T.BoxGeometry(.18,.18,.03),new T.MeshBasicMaterial({color:0xffffff}));badge.position.set(.18,1.82,.34);g.add(badge)
+ }
+ if(role==='Ranger'||role==='Pilot'){
+   const belt=new T.Mesh(new T.BoxGeometry(.78,.12,.5),cityMat(0x3c3328,.8));belt.position.y=1.1;g.add(belt)
+ }
+
+ g.position.set(x,H(x,z),z);
+ g.userData.role=role;g.userData.name=name;g.userData.arms=arms;g.userData.legs=legs;g.userData.phase=Math.random()*Math.PI*2;g.userData.baseY=g.position.y;
+ parent.add(g);townHumans.push(g);
  if(role!=='Shopkeeper'&&role!=='Mechanic')addTownInteraction('talk',x,z,'TALK TO '+name.toUpperCase(),{name,role});
  return g
 }
@@ -1112,10 +1189,32 @@ function updateAnimals(dt,t){
    a.group.rotation.z=T.MathUtils.clamp(-sx*0.05,-0.12,0.12);a.group.rotation.x=T.MathUtils.clamp(sz*0.05,-0.12,0.12);
    let swing=Math.sin(t*6.4*Math.max(0.7,speed)+a.phase)*0.44*mult;
    a.group.userData.legs.forEach((l,i)=>l.rotation.x=i%2?swing:-swing);
+   if(a.group.userData.tail)a.group.userData.tail.rotation.z=.12+Math.sin(t*3.2+a.phase)*.16;
+   if(a.group.userData.head)a.group.userData.head.rotation.y=Math.sin(t*.7+a.phase)*.08;
    a.group.position.y+=Math.abs(Math.sin(t*6.4*Math.max(0.7,speed)+a.phase))*0.026;
  }
 }
 
+function updateTownHumans(t){
+ for(const h of townHumans){
+   const u=h.userData,p=u.phase||0;
+   h.position.y=H(h.position.x,h.position.z)+Math.sin(t*1.35+p)*.012;
+   if(u.arms){
+     u.arms[0].rotation.x=Math.sin(t*.75+p)*.045;
+     u.arms[1].rotation.x=-Math.sin(t*.75+p)*.045
+   }
+   if(u.legs){
+     u.legs[0].rotation.x=Math.sin(t*.65+p)*.018;
+     u.legs[1].rotation.x=-Math.sin(t*.65+p)*.018
+   }
+   const d=Math.hypot(player.x-h.position.x,player.z-h.position.z);
+   if(d<6){
+     const target=Math.atan2(player.x-h.position.x,player.z-h.position.z);
+     let dif=((target-h.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
+     h.rotation.y+=T.MathUtils.clamp(dif,-.035,.035)
+   }
+ }
+}
 function updateAnomalies(dt,t){
  for(const c of chunks.values()){
    let g=c.anomaly;if(!g||c.mode!=='near')continue;
@@ -1502,13 +1601,30 @@ $('toolAction').onclick=()=>{
  }
  toast('Move close to a matching resource to use '+tool)
 };
+function standFromBench(){
+ if(!sitting)return;
+ const b=sitting,angles=[0,Math.PI,Math.PI/2,-Math.PI/2,.75,-.75];
+ let spot=null;
+ for(const r of[1.8,2.2,2.8,3.4]){
+   for(const a of angles){
+     const ang=(b.yaw||0)+a,x=b.x+Math.sin(ang)*r,z=b.z+Math.cos(ang)*r;
+     if(!blocked(x,z,.55)&&Math.abs(H(x,z)-H(b.x,b.z))<1.25){spot={x,z};break}
+   }
+   if(spot)break
+ }
+ if(!spot)spot={x:b.x+Math.sin((b.yaw||0)+Math.PI)*3.6,z:b.z+Math.cos((b.yaw||0)+Math.PI)*3.6};
+ sitting=null;move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;
+ player.x=spot.x;player.z=spot.z;player.yaw=b.exitYaw??player.yaw;
+ camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
+ refreshUse();toast('Stood up')
+}
 $('townAction').onclick=()=>{
- if(sitting){sitting=null;toast('Stood up');return}
+ if(sitting){standFromBench();return}
  const a=nearestTownInteraction();if(!a)return;
  if(a.type==='shop'){openShop();toast('Westside Supply opened')}
  else if(a.type==='bench'){
-   sitting={x:a.x,z:a.z,yaw:a.yaw||0};
-   move.x=move.y=0;look.x=look.y=0;
+   sitting={x:a.x,z:a.z,yaw:a.yaw||0,exitYaw:player.yaw};
+   move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;
    player.x=a.x+Math.sin(a.yaw||0)*.72;player.z=a.z+Math.cos(a.yaw||0)*.72;player.yaw=(a.yaw||0)+Math.PI;
    toast('Sitting on bench')
  }else if(a.type==='arcade'){
@@ -1904,7 +2020,7 @@ function step(dt,t){
  aiAccumulator+=dt;
  if(aiAccumulator>=0.033){
    const simDt=Math.min(aiAccumulator,.066);aiAccumulator=0;
-   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t)}
+   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t);updateTownHumans(t)}
  }
 
  // HUD/context checks are intentionally throttled; movement/camera remain full-rate.
