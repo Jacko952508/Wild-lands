@@ -222,7 +222,7 @@ function makeHeli(x,z){
  let tail=new T.Mesh(new T.BoxGeometry(0.32,0.32,4.2),mats.metal);tail.position.set(0,1.8,-3);g.add(tail);
  let rotor=new T.Mesh(new T.BoxGeometry(8,0.08,0.18),mats.dark);rotor.position.y=3.0;g.add(rotor);rotor.name='rotor';
  let skid1=new T.Mesh(new T.CylinderGeometry(0.07,0.07,3.8,6),mats.dark),skid2=skid1.clone();skid1.rotation.z=Math.PI/2;skid2.rotation.z=Math.PI/2;skid1.position.set(-0.9,0.45,0);skid2.position.set(0.9,0.45,0);g.add(skid1,skid2);
- g.position.set(x,H(x,z),z);scene.add(g);vehicles.push({type:'Helicopter',kind:'heli',group:g,x,z,yaw:0,speed:0,alt:0});return g;
+ g.position.set(x,H(x,z),z);scene.add(g);vehicles.push({type:'Helicopter',kind:'heli',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0});return g;
 }
 function makeJet(x,z){
  let g=new T.Group(),fuse=new T.Mesh(new T.CylinderGeometry(0.55,0.82,6.5,10),mats.metal);fuse.rotation.x=Math.PI/2;fuse.position.y=1.1;g.add(fuse);
@@ -231,7 +231,7 @@ function makeJet(x,z){
  let tail=new T.Mesh(new T.BoxGeometry(3.3,0.12,1.1),mats.metal);tail.position.set(0,1.5,-2.65);g.add(tail);
  let fin=new T.Mesh(new T.BoxGeometry(0.16,1.6,1.5),mats.red);fin.position.set(0,2.0,-2.7);g.add(fin);
  let glass=new T.Mesh(new T.SphereGeometry(0.55,10,7),mats.glass);glass.scale.set(0.8,0.45,1.4);glass.position.set(0,1.65,1.7);g.add(glass);
- g.position.set(x,H(x,z)+0.25,z);scene.add(g);vehicles.push({type:'Jet',kind:'jet',group:g,x,z,yaw:Math.PI, speed:0,alt:0});g.rotation.y=Math.PI;return g;
+ g.position.set(x,H(x,z)+0.25,z);scene.add(g);vehicles.push({type:'Jet',kind:'jet',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false});g.rotation.y=Math.PI;return g;
 }
 function runwayStrip(){
  let g=new T.Group(),verts=[],inds=[],N=24,x0=24,w=8,z0=-46,z1=46;
@@ -497,23 +497,74 @@ function step(dt,t){
      if(!blocked(nx,nz,1.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<0.95&&slopeAt(nx,nz)<2.1){v.x=nx;v.z=nz}else v.speed*=0.25;
      v.alt=0;v.group.position.set(v.x,H(v.x,v.z),v.z);v.group.rotation.y=v.yaw;
    }else if(v.kind==='heli'){
-     v.yaw-=look.x*dt*1.7;
-     let speed=(sprinting?14:8),fw=f*speed,strafe=side*speed*0.65;
-     v.x+=(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt;v.z+=(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
-     v.alt=T.MathUtils.clamp(v.alt+climbInput*dt*(sprinting?9:6),0,42);
-     if(v.alt<0.2)v.alt=0;
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;
-     v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.12,Math.min(1,dt*3));v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,f*0.08,Math.min(1,dt*3));
-     let rotor=v.group.getObjectByName('rotor');if(rotor)rotor.rotation.y+=dt*(v.alt>0||Math.abs(f)+Math.abs(side)>0?22:10);
+     v.yaw-=look.x*dt*(v.alt>0.5?1.45:0.9);
+     let speed=(sprinting?14:8),fw=f*speed,strafe=side*speed*0.68;
+     let airborne=v.alt>0.15||climbInput>0;
+     if(airborne){
+       v.x+=(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt;
+       v.z+=(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
+     }else{
+       let nx=v.x+(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt,nz=v.z+(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
+       if(!blocked(nx,nz,1.6)&&Math.abs(H(nx,nz)-H(v.x,v.z))<0.55){v.x=nx;v.z=nz}
+     }
+     v.vy+=(climbInput*(sprinting?9:6)-v.vy*1.65)*dt;
+     if(!climbInput)v.vy*=Math.max(0,1-dt*1.1);
+     v.alt=T.MathUtils.clamp(v.alt+v.vy*dt,0,42);
+     if(v.alt<=0.02){v.alt=0;v.vy=Math.max(0,v.vy)}
+     let targetPitch=f*0.14,targetRoll=-side*0.18;
+     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*3.6));
+     v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.8));
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+     let rotor=v.group.getObjectByName('rotor');if(rotor)rotor.rotation.y+=dt*(v.alt>0||Math.abs(f)+Math.abs(side)+Math.abs(climbInput)>0?24:10);
    }else{
-     v.yaw-=look.x*dt*(v.alt>1?0.8:0.45);
-     let target=Math.max(0,f)*(sprinting?32:16);v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.8));
-     if(f<-.2)v.speed=T.MathUtils.lerp(v.speed,-4,Math.min(1,dt*2));
+     let onGround=v.alt<0.12;
+     let turnInput=side-look.x*0.65;
+     if(onGround)v.yaw+=turnInput*dt*0.55;
+     else{
+       v.roll=T.MathUtils.lerp(v.roll,-turnInput*0.42,Math.min(1,dt*2.4));
+       v.yaw+=turnInput*dt*(0.35+Math.min(0.55,Math.abs(v.roll)*1.3));
+     }
+
+     if(f>0.05){
+       let target=f*(sprinting?34:24);v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.4));
+     }else if(f<-.15){
+       v.speed=T.MathUtils.lerp(v.speed,onGround?-5:Math.max(5,v.speed-6),Math.min(1,dt*1.7));
+     }else{
+       v.speed*=Math.max(0,onGround?1-dt*0.45:1-dt*0.055);
+     }
+
+     if(climbInput!==0)v.pitch=T.MathUtils.clamp(v.pitch+climbInput*dt*0.48,-0.28,0.34);
+     else v.pitch=T.MathUtils.lerp(v.pitch,0,Math.min(1,dt*0.28));
+
+     let stallSpeed=7.0;
+     v.stalled=v.alt>0.6&&v.speed<stallSpeed;
+     if(v.stalled){
+       v.pitch=T.MathUtils.lerp(v.pitch,-0.14,Math.min(1,dt*0.8));
+       v.vy=Math.max(v.vy-dt*5.5,-7);
+     }else if(v.speed>=stallSpeed){
+       let desiredVy=Math.sin(v.pitch)*v.speed*0.92;
+       v.vy=T.MathUtils.lerp(v.vy,desiredVy,Math.min(1,dt*1.8));
+     }else if(onGround){
+       v.vy=0;
+     }
+
      let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
-     if(v.alt>1||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.1)){v.x=nx;v.z=nz}else v.speed*=0.35;
-     let liftReady=v.speed>6;v.alt=T.MathUtils.clamp(v.alt+(liftReady?climbInput*dt*(sprinting?14:10):Math.min(0,climbInput)*dt*5),0,65);
-     if(v.alt<0.15)v.alt=0;
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,climbInput*0.16,Math.min(1,dt*3));v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.08,Math.min(1,dt*2));
+     if(v.alt>0.2||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.0)){v.x=nx;v.z=nz}else v.speed*=0.35;
+
+     if(v.alt<=0.15&&v.speed>stallSpeed&&v.pitch>0.07){v.airborne=true;v.alt=0.16}
+     if(v.airborne||v.alt>0.15)v.alt+=v.vy*dt;
+
+     if(v.alt<=0){
+       let hard=v.vy<-4.2;v.alt=0;v.vy=0;v.airborne=false;v.stalled=false;
+       if(hard){v.speed*=0.42;toast('Hard landing')}
+       v.pitch=T.MathUtils.lerp(v.pitch,0,Math.min(1,dt*3));
+       v.roll=T.MathUtils.lerp(v.roll,0,Math.min(1,dt*3));
+     }else{
+       v.airborne=true;
+       if(Math.abs(turnInput)<0.08)v.roll=T.MathUtils.lerp(v.roll,0,Math.min(1,dt*0.9));
+     }
+     v.alt=T.MathUtils.clamp(v.alt,0,80);
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=H(v.x,v.z)+(v.alt||0),back=v.kind==='jet'?9:v.kind==='heli'?7:5.5,up=v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5;
@@ -531,7 +582,7 @@ function step(dt,t){
  if(key(cc.cx,cc.cz)!==currentChunk)sync();
  let deg=((player.yaw*180/Math.PI)%360+360)%360,names=['N','NE','E','SE','S','SW','W','NW'];
  $('compass').textContent=names[Math.round(deg/45)%8];
- $('stats').textContent=(activeVehicle?activeVehicle.type+' • ':'')+biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife';
+ let vehicleHud='';if(activeVehicle){vehicleHud=activeVehicle.type+' • '+Math.round(Math.abs(activeVehicle.speed||0)*3.6)+' km/h';if(activeVehicle.kind!=='buggy')vehicleHud+=' • '+Math.round(activeVehicle.alt)+'m'+(activeVehicle.stalled?' • STALL':'');vehicleHud+=' • '}$('stats').textContent=vehicleHud+biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife';
  refreshUse();updateAnimals(dt,t);updateAnomalies(dt,t);updateSky(t,dt);
  for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
    let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
@@ -555,7 +606,7 @@ window.__world={
  teleportChunk:(cx,cz)=>{activeVehicle=null;player.x=cx*CH;player.z=cz*CH;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  mapOpen:()=>openMap(),
  animals:()=>animalAgents.slice(0,8).map(a=>({kind:a.kind,x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(2)})),
- vehicles:()=>vehicles.map(v=>{let nose=v.group.localToWorld(new T.Vector3(0,0,2)),tail=v.group.localToWorld(new T.Vector3(0,0,-2));return{type:v.type,x:+v.x.toFixed(2),z:+v.z.toFixed(2),alt:+v.alt.toFixed(2),pitch:+v.group.rotation.x.toFixed(3),noseY:+nose.y.toFixed(2),tailY:+tail.y.toFixed(2),active:v===activeVehicle}}),
+ vehicles:()=>vehicles.map(v=>{let nose=v.group.localToWorld(new T.Vector3(0,0,2)),tail=v.group.localToWorld(new T.Vector3(0,0,-2));return{type:v.type,x:+v.x.toFixed(2),z:+v.z.toFixed(2),alt:+v.alt.toFixed(2),speed:+(v.speed||0).toFixed(2),pitch:+(v.pitch||0).toFixed(3),roll:+(v.roll||0).toFixed(3),vy:+(v.vy||0).toFixed(2),stalled:!!v.stalled,noseY:+nose.y.toFixed(2),tailY:+tail.y.toFixed(2),active:v===activeVehicle}}),
  anomalies:()=>[...chunks.values()].filter(c=>c.anomaly&&c.mode==='near').map(c=>({type:c.d.anomaly,x:+c.anomaly.position.x.toFixed(1),z:+c.anomaly.position.z.toFixed(1)})),
  teleport:(x,z)=>{player.x=x;player.z=z;activeVehicle=null;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  setMove:(x,y)=>{move.x=x;move.y=y},setLook:(x,y)=>{look.x=x;look.y=y},
