@@ -743,7 +743,9 @@ function step(dt,t){
 
      v.alt=T.MathUtils.clamp(v.alt,0,95);
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
-     v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+     // Three.js X rotation is opposite to the visual aircraft convention used by this jet model.
+     // Keep physics pitch positive for climb, but invert only the rendered jet attitude so climbing lifts the nose.
+     v.group.rotation.set(-v.pitch,v.yaw,v.roll,'XYZ');
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
