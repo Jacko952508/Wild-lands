@@ -766,7 +766,7 @@ function step(dt,t){
      if(!blocked(nx,nz,1.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<0.95&&slopeAt(nx,nz)<2.1){v.x=nx;v.z=nz}else v.speed*=0.25;
      v.alt=0;v.group.position.set(v.x,H(v.x,v.z),v.z);v.group.rotation.y=v.yaw;
    }else if(v.kind==='heli'){
-     let pitchInput=move.y,rollInput=move.x;
+     let pitchInput=-move.y,rollInput=move.x;
      v.yaw+=(-v.roll)*dt*0.9;
      v.yaw-=look.x*dt*0.55;
 
@@ -781,7 +781,7 @@ function step(dt,t){
      if(flightThrottle<0.03&&v.alt<0.1)v.vy=0;
 
      let drive=Math.max(0.15,flightThrottle)*18,
-         fw=-Math.sin(v.pitch)*drive,
+         fw=Math.sin(v.pitch)*drive,
          strafe=-Math.sin(v.roll)*drive;
      if(v.alt>0.12||flightThrottle>0.52){
        v.x+=(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt;
