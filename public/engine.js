@@ -115,7 +115,7 @@ const CH=96,NEAR=1,IS_MOBILE=matchMedia('(pointer:coarse)').matches||innerWidth<
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};world.ui.fpsTarget=world.ui.fpsTarget||60;world.ui.graphicsQuality=world.ui.graphicsQuality||'balanced';world.ui.renderQuality=world.ui.renderQuality||1;world.ui.dynamicResolution=world.ui.dynamicResolution!==false;world.ui.shadows=world.ui.shadows!==false;world.ui.effects=world.ui.effects!==false;
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.progress.completed=Array.isArray(world.progress.completed)?world.progress.completed:[];world.progress.xp=Number(world.progress.xp)||0;world.progress.level=Number(world.progress.level)||1;world.progress.reputation=Number(world.progress.reputation)||0;world.progress.mission=Number(world.progress.mission)||0;world.progress.earthSites=world.progress.earthSites||{};world.progress.moonSites=world.progress.moonSites||{};world.progress.regionMilestones=world.progress.regionMilestones||{};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.gameStats=world.gameStats||{npcTalks:0,caches:0,crafted:0,upgrades:0,pois:0,moonSites:0};world.gameStats.talked=world.gameStats.talked||{};world.gameStats.npcTalks=Math.max(world.gameStats.npcTalks||0,Object.keys(world.gameStats.talked).length);world.gameStats.caches=Math.max(world.gameStats.caches||0,Object.keys(world.lootOpened||{}).length);world.gameStats.upgrades=Math.max(world.gameStats.upgrades||0,Object.values(world.vehicleUpgrades||{}).filter(v=>v>0).length);world.gameStats.pois=Math.max(world.gameStats.pois||0,Object.keys((world.progress&&world.progress.earthSites)||{}).length);world.gameStats.moonSites=Math.max(world.gameStats.moonSites||0,Object.keys((world.progress&&world.progress.moonSites)||{}).length);world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};world.ui.fpsTarget=world.ui.fpsTarget||60;world.ui.graphicsQuality=world.ui.graphicsQuality||'balanced';world.ui.renderQuality=world.ui.renderQuality||1;world.ui.dynamicResolution=world.ui.dynamicResolution!==false;world.ui.shadows=world.ui.shadows!==false;world.ui.effects=world.ui.effects!==false;
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -264,8 +264,13 @@ function saveVisitedDescriptor(cx,cz){
  if(!world.saved[k]){const live=chunks.get(k);world.saved[k]=live?live.d:descriptor(cx,cz)}
  if(!world.explored[k]){world.explored[k]=Date.now();exploredCount++;fresh=true}
  if(fresh){
+   const milestone=exploredCount%5===0?String(exploredCount):null;
+   if(milestone&&!world.progress.regionMilestones[milestone]){
+     world.progress.regionMilestones[milestone]=1;world.progress.xp+=50;world.credits+=25;updateLevel();
+     toast('REGION '+exploredCount+' • frontier milestone • +50 XP • +25 credits')
+   }else toast('Region discovered');
    // Keep discovery feedback immediate, but defer serialization/storage work.
-   toast('Region discovered');persist()
+   persist()
  }
  return fresh
 }
@@ -1016,8 +1021,20 @@ function townShell(parent,cx,cz,w,d,h,mat,label,doorSide='south'){
  townText(parent,label,cx,y+h-.95,frontZ+(doorSide==='south'?-0.24:0.24),Math.min(w*.72,9),1.05);
  for(const sx of[-.3,.3]){
    let win=new T.Mesh(new T.BoxGeometry(w*.2,1.5,.08),cityM.glass);
-   win.position.set(cx+sx*w,y+2.6,frontZ+(doorSide==='south'?-0.05:.05));parent.add(win)
+   win.position.set(cx+sx*w,y+2.6,frontZ+(doorSide==='south'?-0.05:.05));parent.add(win);
+   const fw=w*.205,fh=1.58,fz=win.position.z+(doorSide==='south'?.045:-.045);
+   for(const bx of[-fw/2,fw/2]){const bar=new T.Mesh(new T.BoxGeometry(.06,fh,.035),cityM.dark);bar.position.set(win.position.x+bx,win.position.y,fz);parent.add(bar)}
+   for(const by of[-fh/2,fh/2]){const bar=new T.Mesh(new T.BoxGeometry(fw,.06,.035),cityM.dark);bar.position.set(win.position.x,win.position.y+by,fz);parent.add(bar)}
+   const mullion=new T.Mesh(new T.BoxGeometry(.045,fh,.035),cityM.dark);mullion.position.set(win.position.x,win.position.y,fz);parent.add(mullion);win.renderOrder=2
  }
+ // Cheap interior polish: ceiling light panels, skirting and a proper doorway frame.
+ const glowMat=new T.MeshBasicMaterial({color:0xfff0c7});
+ for(const ox of[-w*.22,w*.22]){const lamp=new T.Mesh(new T.BoxGeometry(Math.min(3.2,w*.22),.035,.65),glowMat);lamp.position.set(cx+ox,y+h-.34,cz);parent.add(lamp)}
+ const trimZ=doorSide==='south'?frontZ+.28:frontZ-.28;
+ cityBox(parent,cx,y+.24,backZ,w-.8,.22,.12,cityM.dark,false);
+ cityBox(parent,cx-door/2-.12,y+1.55,trimZ,.18,3.1,.18,cityM.dark,false);
+ cityBox(parent,cx+door/2+.12,y+1.55,trimZ,.18,3.1,.18,cityM.dark,false);
+ cityBox(parent,cx,y+3.08,trimZ,door+.42,.16,.18,cityM.dark,false);
  return {y,frontZ,door}
 }
 function townBench(parent,x,z,rot=0){
@@ -1069,6 +1086,7 @@ function makeCity(){
    cityBox(g,x+1,s.y+.35,z,.45,.7,.45,cityM.dark,true)
  }
  makeHuman(g,-160,-17,0x8c3e36,'Barista','Nia');
+ addTownInteraction('cafe',-160,-18,'ORDER A HOT MEAL');
 
  // Tool workshop. The human is interactive through the main shop economy too.
  s=townShell(g,-101,34,20,20,6.2,cityM.plaster,'WORKSHOP','north');
@@ -1082,10 +1100,12 @@ function makeCity(){
  s=townShell(g,-130,34,22,20,6.1,cityM.brick,'CLINIC','north');
  for(const x of[-135,-126])cityBox(g,x,s.y+.42,31,3,.84,5,cityM.cream,true);
  makeHuman(g,-130,30,0x496579,'Medic','Dr. Vale');
+ addTownInteraction('clinic',-130,30,'USE CLINIC SERVICES');
 
  s=townShell(g,-160,34,22,20,6.3,cityM.cream,'COMMUNITY HALL','north');
  for(const x of[-166,-160,-154])cityBox(g,x,s.y+.42,31,3.5,.84,1.2,cityM.wood,true);
  makeHuman(g,-160,29,0x725d45,'Caretaker','June');
+ addTownInteraction('noticeboard',-160,31,'CHECK COMMUNITY BOARD');
 
  // Central square with fountain, trees and interactive benches.
  let py=H(-126,53);
@@ -1180,7 +1200,7 @@ function makeLootCache(parent,id,x,z,realm='earth'){
        box=new T.Mesh(new T.BoxGeometry(1.4,.8,1.0),new T.MeshStandardMaterial({color:realm==='moon'?0x7b8588:0x48553e,roughness:.72,metalness:.22})),
        band=new T.Mesh(new T.BoxGeometry(1.5,.14,1.05),new T.MeshStandardMaterial({color:0xb7c9a5,roughness:.5,metalness:.3}));
  box.position.y=.45;band.position.y=.52;g.add(box,band);g.position.set(x,y,z);parent.add(g);
- addTownInteraction('loot',x,z,'OPEN SUPPLY CACHE',{lootId:id,realm})
+ addTownInteraction('loot',x,z,'OPEN SUPPLY CACHE',{lootId:id,realm,mesh:g})
 }
 [['cache_town',-186,-55],['cache_ridge',-245,90],['cache_forest',-315,-145],['cache_airfield',55,62]].forEach(q=>makeLootCache(lootGroup,...q));
 
@@ -1788,6 +1808,7 @@ function nearestTownInteraction(){
  return best
 }
 function refreshUse(){
+ document.body.classList.toggle('vehicleMode',!!activeVehicle);
  let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction'),jump=$('jump'),tool=$('toolAction'),equip=$('equippedTool');
  if(activeVehicle){
    pickup.classList.add('hidden');town.classList.add('hidden');jump.classList.add('hidden');tool.classList.add('hidden');equip.classList.add('hidden');toolView.visible=false;
@@ -1891,42 +1912,78 @@ function setEquippedTool(name){
  rebuildToolView();persist();renderInventory();refreshUse();
  toast(name?name+' equipped':'Tool unequipped')
 }
+function missionProgress(cur,max,label=''){
+ cur=Math.max(0,Math.min(max,cur));return{cur,max,label:label||cur+' / '+max,pct:max?Math.round(cur/max*100):100}
+}
 const missions=[
- {title:'Getting Equipped',desc:'Own a Basic Hatchet and Heavy Pickaxe.',reward:80,xp:100,done:()=>inventoryQty('Basic Hatchet')>0&&inventoryQty('Heavy Pickaxe')>0},
- {title:'Gathering Ground',desc:'Collect at least 4 Wood, 4 Stone and 3 Scrap.',reward:120,xp:140,done:()=>inventoryQty('Wood')>=4&&inventoryQty('Stone')>=4&&inventoryQty('Scrap')>=3},
- {title:'Make It Yours',desc:'Place your first persistent structure.',reward:140,xp:160,done:()=>world.builds.length>0},
- {title:'Unknown Signal',desc:'Discover one anomaly in the wilderness.',reward:180,xp:220,done:()=>Object.keys(world.discoveries).length>0},
- {title:'Moonbound',desc:'Reach the lunar surface.',reward:250,xp:300,done:()=>!!world.progress.reachedMoon},
- {title:'Lunar Extraction',desc:'Extract at least 3 pieces of Lunar Ore.',reward:300,xp:360,done:()=>world.moonOre>=3},
- {title:'Return From Beyond',desc:'Bring lunar material back to Earth.',reward:450,xp:500,done:()=>!!world.progress.reachedMoon&&!moonMode&&inventoryQty('Lunar Ore')>0}
+ {title:'Getting Equipped',desc:'Own a Basic Hatchet and Heavy Pickaxe.',reward:80,xp:100,done:()=>inventoryQty('Basic Hatchet')>0&&inventoryQty('Heavy Pickaxe')>0,progress:()=>missionProgress((inventoryQty('Basic Hatchet')>0?1:0)+(inventoryQty('Heavy Pickaxe')>0?1:0),2)},
+ {title:'Gathering Ground',desc:'Collect at least 4 Wood, 4 Stone and 3 Scrap.',reward:120,xp:140,done:()=>inventoryQty('Wood')>=4&&inventoryQty('Stone')>=4&&inventoryQty('Scrap')>=3,progress:()=>missionProgress(Math.min(4,inventoryQty('Wood'))+Math.min(4,inventoryQty('Stone'))+Math.min(3,inventoryQty('Scrap')),11)},
+ {title:'Make It Yours',desc:'Place your first persistent structure.',reward:140,xp:160,done:()=>world.builds.length>0,progress:()=>missionProgress(Math.min(1,world.builds.length),1)},
+ {title:'Unknown Signal',desc:'Discover one anomaly in the wilderness.',reward:180,xp:220,done:()=>Object.keys(world.discoveries).length>0,progress:()=>missionProgress(Math.min(1,Object.keys(world.discoveries).length),1)},
+ {title:'Moonbound',desc:'Reach the lunar surface.',reward:250,xp:300,done:()=>!!world.progress.reachedMoon,progress:()=>missionProgress(world.progress.reachedMoon?1:0,1)},
+ {title:'Lunar Extraction',desc:'Extract at least 3 pieces of Lunar Ore.',reward:300,xp:360,done:()=>world.moonOre>=3,progress:()=>missionProgress(Math.min(3,world.moonOre||0),3)},
+ {title:'Return From Beyond',desc:'Bring lunar material back to Earth.',reward:450,xp:500,done:()=>!!world.progress.reachedMoon&&!moonMode&&inventoryQty('Lunar Ore')>0,progress:()=>missionProgress(world.progress.reachedMoon&&!moonMode&&inventoryQty('Lunar Ore')>0?1:0,1)},
+ {title:'Community Contract',desc:'Speak with three different residents in West Town.',reward:180,xp:220,done:()=>world.gameStats.npcTalks>=3,progress:()=>missionProgress(world.gameStats.npcTalks,3)},
+ {title:'Scavenger Route',desc:'Recover three supply caches from the frontier.',reward:220,xp:260,done:()=>world.gameStats.caches>=3,progress:()=>missionProgress(world.gameStats.caches,3)},
+ {title:'Field Engineer',desc:'Craft three items and establish three structures.',reward:260,xp:320,done:()=>world.gameStats.crafted>=3&&world.builds.length>=3,progress:()=>{const a=Math.min(3,world.gameStats.crafted),b=Math.min(3,world.builds.length);return missionProgress(a+b,6,a+'/3 crafted • '+b+'/3 built')}},
+ {title:'Motor Pool',desc:'Purchase two permanent vehicle upgrades.',reward:300,xp:360,done:()=>world.gameStats.upgrades>=2,progress:()=>missionProgress(world.gameStats.upgrades,2)},
+ {title:'Earth Survey',desc:'Inspect both major Earth field sites.',reward:280,xp:340,done:()=>world.gameStats.pois>=2,progress:()=>missionProgress(world.gameStats.pois,2)},
+ {title:'Lunar Cartographer',desc:'Log all three major lunar sites.',reward:500,xp:600,done:()=>world.gameStats.moonSites>=3,progress:()=>missionProgress(world.gameStats.moonSites,3)},
+ {title:'Frontier Veteran',desc:'Explore at least 25 distinct regions.',reward:600,xp:750,done:()=>exploredCount>=25,progress:()=>missionProgress(exploredCount,25)}
 ];
 function updateLevel(){
  const p=world.progress;p.level=1+Math.floor(p.xp/300)
 }
+let missionBannerTimer=0;
+function showMissionBanner(m){
+ const e=$('missionBanner');$('missionBannerTitle').textContent=m.title;$('missionBannerReward').textContent='+'+m.xp+' XP • +'+m.reward+' credits';
+ e.classList.remove('hidden');clearTimeout(missionBannerTimer);missionBannerTimer=setTimeout(()=>e.classList.add('hidden'),2600);
+ sfx(640,.12,.08,'triangle');setTimeout(()=>sfx(880,.18,.06,'sine'),120)
+}
 function completeMission(i){
  const p=world.progress;if(p.completed.includes(i))return;
+ const oldLevel=p.level||1;
  p.completed.push(i);p.mission=Math.max(p.mission,i+1);p.xp+=missions[i].xp;p.reputation+=1;world.credits+=missions[i].reward;updateLevel();persist();
- toast('MISSION COMPLETE • '+missions[i].title+' • +'+missions[i].reward+' credits')
+ showMissionBanner(missions[i]);
+ if(p.level>oldLevel)setTimeout(()=>toast('LEVEL '+p.level+' • stamina recovery improved'),600)
 }
 let missionCheckAt=0;
 function checkMissions(force=false){
  const now=performance.now();if(!force&&now-missionCheckAt<500)return;missionCheckAt=now;
- const p=world.progress;
- for(let i=0;i<missions.length;i++)if(!p.completed.includes(i)&&missions[i].done()){completeMission(i);break}
- const idx=missions.findIndex((m,i)=>!p.completed.includes(i));
- $('objectiveText').textContent=idx<0?'All current objectives complete — keep exploring.':missions[idx].desc
+ const p=world.progress,idx=missions.findIndex((m,i)=>!p.completed.includes(i));
+ if(idx>=0&&missions[idx].done())completeMission(idx);
+ const next=missions.findIndex((m,i)=>!p.completed.includes(i));
+ if(next<0){
+   $('objectiveName').textContent='FRONTIER COMPLETE';$('objectiveText').textContent='Campaign complete — continue building your frontier.';$('objectiveMiniProgress').firstElementChild.style.width='100%'
+ }else{
+   const pr=missions[next].progress?missions[next].progress():null;
+   $('objectiveName').textContent=missions[next].title.toUpperCase();
+   $('objectiveText').textContent=missions[next].desc+(pr&&pr.max>1?' • '+pr.label:'');
+   $('objectiveMiniProgress').firstElementChild.style.width=(pr?pr.pct:0)+'%'
+ }
 }
 function renderMissions(){
  updateLevel();
  const p=world.progress,$s=$('progressSummary'),list=$('missionList');
- $s.textContent='LEVEL '+p.level+' • '+p.xp+' XP • '+p.reputation+' reputation • '+Math.floor(world.credits)+' credits';
+ const discount=Math.min(12,p.reputation*2);
+ $s.textContent='LEVEL '+p.level+' • '+p.xp+' XP • '+p.reputation+' reputation • '+Math.floor(world.credits)+' credits • '+discount+'% town discount';
  list.innerHTML='';
+ const activeIndex=missions.findIndex((q,j)=>!p.completed.includes(j));
  missions.forEach((m,i)=>{
-   const done=p.completed.includes(i),active=!done&&i===missions.findIndex((q,j)=>!p.completed.includes(j));
+   const done=p.completed.includes(i),active=!done&&i===activeIndex,pr=m.progress?m.progress():missionProgress(done?1:0,1);
    const row=document.createElement('div');row.className='missionRow '+(done?'done':active?'active':'');
-   row.innerHTML='<strong>'+(done?'✓ ':active?'▶ ':'')+m.title+'</strong><small>'+m.desc+'</small><div class="missionReward">'+m.reward+' credits • '+m.xp+' XP</div>';
+   row.innerHTML='<strong>'+(done?'✓ ':active?'▶ ':'')+m.title+'</strong><small>'+m.desc+(active&&pr.label?' • '+pr.label:'')+'</small><div class="missionProgress"><i style="width:'+(done?100:pr.pct)+'%"></i></div><div class="missionReward">'+m.reward+' credits • '+m.xp+' XP</div>';
    list.appendChild(row)
- })
+ });
+ const sites=Object.keys(world.progress.earthSites||{}).length,moonSites=Object.keys(world.progress.moonSites||{}).length;
+ $('discoverySummary').innerHTML='<div class="journalGrid">'+
+   '<div class="journalCard"><span>REGIONS</span><b>'+exploredCount+'</b></div>'+
+   '<div class="journalCard"><span>ANOMALIES</span><b>'+Object.keys(world.discoveries).length+'</b></div>'+
+   '<div class="journalCard"><span>EARTH SITES</span><b>'+sites+' / 2</b></div>'+
+   '<div class="journalCard"><span>LUNAR SITES</span><b>'+moonSites+' / 3</b></div>'+
+   '<div class="journalCard"><span>CACHES</span><b>'+world.gameStats.caches+'</b></div>'+
+   '<div class="journalCard"><span>STRUCTURES</span><b>'+world.builds.length+'</b></div>'+
+   '<div class="journalCard journalWide"><span>FRONTIER STATUS</span><b>'+(p.completed.length>=missions.length?'VETERAN EXPLORER':p.level>=6?'DEEP FRONTIER':p.level>=3?'FIELD OPERATIVE':'ROOKIE EXPLORER')+'</b></div></div>'
 }
 $('missionsBtn').onclick=()=>{const p=$('missionsPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'missionsPanel':null);p.classList.toggle('hidden',!open);if(open)renderMissions()};
 $('missionsClose').onclick=()=>$('missionsPanel').classList.add('hidden');
@@ -2053,8 +2110,8 @@ function renderCrafting(){
    b.onclick=()=>{
      if(!Object.entries(r.needs).every(([n,q])=>inventoryQty(n)>=q)){toast('Missing materials');renderCrafting();return}
      for(const [n,q] of Object.entries(r.needs))consumeItem(n,q);
-     world.inventory[r.out]=(world.inventory[r.out]||0)+1;
-     persist();renderInventory();renderCrafting();toast(r.name+' crafted')
+     world.inventory[r.out]=(world.inventory[r.out]||0)+1;world.gameStats.crafted++;
+     persist();renderInventory();renderCrafting();checkMissions(true);sfx(430,.08,.05,'triangle');toast(r.name+' crafted')
    };
    row.appendChild(b);list.appendChild(row)
  }
@@ -2084,15 +2141,17 @@ function renderShop(){
  $('shopBuyTab').classList.toggle('active',shopMode==='buy');$('shopSellTab').classList.toggle('active',shopMode==='sell');
  const list=$('shopList');list.innerHTML='';
  if(shopMode==='buy'){
+   const discount=Math.min(12,(world.progress.reputation||0)*2)/100;
    for(const it of shopBuy){
-     const row=document.createElement('div');row.className='shopRow';row.innerHTML='<div><strong>'+it.name+'</strong><small>'+it.desc+' • '+it.price+' credits</small></div>';
+     const price=Math.max(1,Math.round(it.price*(1-discount)));
+     const row=document.createElement('div');row.className='shopRow';row.innerHTML='<div><strong>'+it.name+'</strong><small>'+it.desc+' • '+price+' credits'+(discount?' • rep discount':'')+'</small></div>';
      const owned=it.upgrade&&world.vehicleUpgrades[it.upgrade]>0;
-     const b=document.createElement('button');b.textContent=owned?'OWNED':'BUY';b.disabled=owned||world.credits<it.price;
+     const b=document.createElement('button');b.textContent=owned?'OWNED':'BUY';b.disabled=owned||world.credits<price;
      b.onclick=()=>{
-       if(world.credits<it.price||owned)return;
-       world.credits-=it.price;
-       if(it.upgrade)world.vehicleUpgrades[it.upgrade]=1;else addInventoryItem(it.name,1);
-       persist();renderInventory();renderShop();toast(it.name+' purchased')
+       if(world.credits<price||owned)return;
+       world.credits-=price;
+       if(it.upgrade){world.vehicleUpgrades[it.upgrade]=1;world.gameStats.upgrades++}else addInventoryItem(it.name,1);
+       persist();renderInventory();renderShop();checkMissions(true);sfx(520,.07,.05,'triangle');toast(it.name+' purchased')
      };
      row.appendChild(b);list.appendChild(row)
    }
@@ -2208,6 +2267,7 @@ $('townAction').onclick=()=>{
    world.arcadeScores[a.game]=Math.max(world.arcadeScores[a.game]||0,score);persist();
    toast(a.game+' • SCORE '+score)
  }else if(a.type==='talk'){
+   if(!world.gameStats.talked[a.name]){world.gameStats.talked[a.name]=1;world.gameStats.npcTalks++;persist();checkMissions(true)}
    const lines={
      Ranger:'Iris: The wilds get stranger the farther you travel.',
      Surveyor:'Theo: I have seen unusual signals beyond the northern ridges.',
@@ -2222,7 +2282,19 @@ $('townAction').onclick=()=>{
      Barista:'Nia: Coffee is easier to find than answers out here.',
      Caretaker:'June: The hall is open to anyone passing through.'
    };
-   toast(lines[a.role]||a.name+': Good to see another explorer.')
+   sfx(260,.05,.025,'sine');toast(lines[a.role]||a.name+': Good to see another explorer.')
+ }else if(a.type==='cafe'){
+   const cost=Math.max(5,Math.round(10*(1-Math.min(12,(world.progress.reputation||0)*2)/100)));
+   if(world.credits<cost){toast('A hot meal costs '+cost+' credits');return}
+   world.credits-=cost;world.playerStats.energy=Math.min(100,world.playerStats.energy+55);world.playerStats.stamina=100;persist();sfx(360,.08,.04,'sine');toast('Hot meal • energy restored • -'+cost+' credits')
+ }else if(a.type==='clinic'){
+   const cost=Math.max(8,Math.round(18*(1-Math.min(12,(world.progress.reputation||0)*2)/100)));
+   if(world.playerStats.health>=99){toast('Dr. Vale: You are already in good shape.');return}
+   if(world.credits<cost){toast('Clinic treatment costs '+cost+' credits');return}
+   world.credits-=cost;world.playerStats.health=100;persist();sfx(520,.1,.04,'sine');toast('Treatment complete • -'+cost+' credits')
+ }else if(a.type==='noticeboard'){
+   const idx=missions.findIndex((m,i)=>!world.progress.completed.includes(i));
+   toast(idx<0?'Community board: Frontier contracts complete.':'COMMUNITY BOARD • '+missions[idx].title+' • '+missions[idx].desc)
  }else if(a.type==='workbench'){
    closeSidePanels('craftPanel');$('craftPanel').classList.remove('hidden');renderCrafting();toast('Workbench ready')
  }else if(a.type==='shelter'){
@@ -2231,19 +2303,19 @@ $('townAction').onclick=()=>{
    gatherResourceWithTool(a)
  }else if(a.type==='loot'){
    if(world.lootOpened[a.lootId])return;
-   world.lootOpened[a.lootId]=1;
+   world.lootOpened[a.lootId]=1;world.gameStats.caches++;if(a.mesh)a.mesh.visible=false;
    const lunar=(a.realm==='moon'),roll=(Math.abs(Math.sin(a.x*12.13+a.z*7.77))*100)|0;
    if(lunar){addInventoryItem('Lunar Ore',1+(roll%2));world.moonOre=Math.max(world.moonOre,inventoryQty('Lunar Ore'));addInventoryItem(roll%3?'Impact Glass':'Regolith Sample',1)}
    else{addInventoryItem(roll%2?'Scrap':'Stone',2);if(roll%4===0)addInventoryItem('Trail Rations',1);world.credits+=10+(roll%25)}
-   persist();renderInventory();toast(lunar?'Lunar cache recovered':'Supply cache recovered')
+   persist();renderInventory();checkMissions(true);sfx(720,.09,.055,'triangle');toast(lunar?'Lunar cache recovered':'Supply cache recovered')
  }else if(a.type==='moonSite'){
    world.progress.moonSites=world.progress.moonSites||{};
-   if(!world.progress.moonSites[a.site])world.progress.xp+=40;
-   world.progress.moonSites[a.site]=1;updateLevel();persist();
+   if(!world.progress.moonSites[a.site]){world.progress.xp+=40;world.gameStats.moonSites++}
+   world.progress.moonSites[a.site]=1;updateLevel();persist();checkMissions(true);
    toast(a.site==='relay'?'Relay wreck logged • corrupted star map recovered':a.site==='drill'?'Abandoned drill logged • deep ore signatures detected':'Cave entrance logged • scanner shows a deep void')
  }else if(a.type==='poi'){
    world.progress.earthSites=world.progress.earthSites||{};
-   if(!world.progress.earthSites[a.poi]){world.progress.earthSites[a.poi]=1;world.progress.xp+=35;world.credits+=25;updateLevel();persist()}
+   if(!world.progress.earthSites[a.poi]){world.progress.earthSites[a.poi]=1;world.progress.xp+=35;world.credits+=25;world.gameStats.pois++;updateLevel();persist();checkMissions(true)}
    toast(a.poi==='bunker'?'Station log recovered • +25 credits':'Crash site surveyed • fragments logged')
  }
 };
@@ -2467,7 +2539,10 @@ function updateSurvival(dt,t){
  if(moving&&sprinting){
    s.stamina=Math.max(0,s.stamina-dt*18);
    if(s.stamina<4)sprinting=false
- }else s.stamina=Math.min(100,s.stamina+dt*(safe?18:11));
+ }else{
+   const regen=1+Math.min(.3,Math.max(0,(world.progress.level||1)-1)*.04);
+   s.stamina=Math.min(100,s.stamina+dt*(safe?18:11)*regen)
+ }
  s.energy=Math.max(0,s.energy-dt*(safe?.006:.014));
  if(s.energy<8)s.health=Math.max(0,s.health-dt*.28);
  if(worldCtl.weather==='storm'&&!safe&&!moonMode)s.energy=Math.max(0,s.energy-dt*.018);
@@ -2483,7 +2558,8 @@ function updateSurvival(dt,t){
  if(s.health<=0){
    s.health=100;s.stamina=100;s.energy=Math.max(35,s.energy);player.x=-14.5;player.z=-24;activeVehicle=null;sitting=null;toast('You were recovered at the airfield')
  }
- $('healthBar').style.width=s.health+'%';$('staminaBar').style.width=s.stamina+'%';$('energyBar').style.width=s.energy+'%'
+ $('healthBar').style.width=s.health+'%';$('staminaBar').style.width=s.stamina+'%';$('energyBar').style.width=s.energy+'%';
+ const danger=$('dangerVignette');if(danger)danger.style.opacity=String(T.MathUtils.clamp((45-s.health)/45,0,.72))
 }
 function nearestThreat(){
  let best=null,bd=2.8;
@@ -2496,6 +2572,16 @@ function nearestThreat(){
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
  player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);
+ let targetFov=67;
+ if(activeVehicle){
+   const sp=Math.abs(activeVehicle.speed||0);
+   if(activeVehicle.kind==='jet')targetFov=67+T.MathUtils.clamp(sp/48,0,1)*9;
+   else if(activeVehicle.kind==='ufo')targetFov=67+T.MathUtils.clamp(sp/70,0,1)*8;
+   else if(activeVehicle.kind==='heli')targetFov=67+T.MathUtils.clamp(sp/28,0,1)*4;
+   else targetFov=67+T.MathUtils.clamp(sp/18,0,1)*3
+ }else if(sprinting&&Math.hypot(move.x,move.y)>.2)targetFov=69.5;
+ const nf=T.MathUtils.lerp(camera.fov,targetFov,1-Math.exp(-dt*5.5));
+ if(Math.abs(nf-camera.fov)>.025){camera.fov=nf;camera.updateProjectionMatrix()}
  if(audioCtx&&ambientOsc&&ambientGain){
    const target=moonMode?62:worldCtl.weather==='storm'?42:worldCtl.weather==='rain'?48:52;
    ambientOsc.frequency.setTargetAtTime(target,audioCtx.currentTime,.8);

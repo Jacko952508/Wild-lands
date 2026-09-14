@@ -22,7 +22,7 @@
   <button id="craftBtn" aria-label="Crafting"><span>CRAFT</span></button>
   <button id="worldctl" aria-label="Settings"><span>SETTINGS</span></button>
 </div>
-<div id="objectiveTracker"><span>OBJECTIVE</span><b id="objectiveText">Explore the airfield</b></div>
+<div id="objectiveTracker"><span id="objectiveName">OBJECTIVE</span><b id="objectiveText">Explore the airfield</b><div id="objectiveMiniProgress"><i></i></div></div>
 <div id="vitals">
   <div class="vital"><span>HEALTH</span><i><b id="healthBar"></b></i></div>
   <div class="vital"><span>STAMINA</span><i><b id="staminaBar"></b></i></div>
@@ -61,7 +61,14 @@
   </div>
 </div>
 
-<div id="missionsPanel" class="sidePanel hidden"><div class="worldHead"><b>MISSIONS & PROGRESSION</b><button id="missionsClose">×</button></div><div id="progressSummary"></div><div id="missionList"></div></div>
+<div id="missionsPanel" class="sidePanel hidden">
+  <div class="worldHead"><b>MISSIONS & PROGRESSION</b><button id="missionsClose">×</button></div>
+  <div id="progressSummary"></div>
+  <div id="missionList"></div>
+  <div class="settingsDivider"></div>
+  <div class="settingsSectionTitle">FIELD JOURNAL</div>
+  <div id="discoverySummary"></div>
+</div>
 <div id="inventoryPanel" class="sidePanel hidden"><div class="worldHead"><b>INVENTORY</b><button id="inventoryClose">×</button></div><div id="inventoryList"></div></div>
 <div id="craftPanel" class="sidePanel hidden"><div class="worldHead"><b>CRAFTING & BUILDING</b><button id="craftClose">×</button></div><div id="craftList"></div><div class="settingsDivider"></div><div class="buildHead"><b>BUILD KITS</b><small>Craft a kit, then place it in the world.</small></div><div id="buildList"></div></div>
 <div id="shopPanel" class="sidePanel hidden"><div class="worldHead"><div><b>WESTSIDE SUPPLY</b><div id="creditsReadout">0 credits</div></div><button id="shopClose">×</button></div><div class="shopTabs"><button id="shopBuyTab" class="active">BUY</button><button id="shopSellTab">SELL</button></div><div id="shopList"></div></div>
@@ -105,6 +112,8 @@
   <button id="autoTime">AUTO TIME: ON</button>
 </div>
 
+<div id="missionBanner" class="hidden"><span>MISSION COMPLETE</span><b id="missionBannerTitle">OBJECTIVE</b><small id="missionBannerReward">+0 XP</small></div>
+<div id="dangerVignette"></div>
 <div id="toast"></div>
 
 <div id="panel" class="hidden">
