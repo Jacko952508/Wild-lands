@@ -175,7 +175,8 @@ function moonH(x,z){
  return T.MathUtils.lerp(MOON_BASE_LEVEL,raw,smooth(edge/12))
 }
 function H(x,z){return moonMode?moonH(x,z):earthH(x,z)}
-function biome(x,z){let h=H(x,z),m=fbm(x*0.002,z*0.002,50),t=fbm(x*0.0015,z*0.0015,60)-h*0.005;if(h>24)return'alpine';if(h>14)return'highland';if(t<0.4)return'pine';if(m>0.62)return'forest';if(m<0.36)return'meadow';return'woodland'}
+function biomeFromHeight(x,z,h){let m=fbm(x*0.002,z*0.002,50),t=fbm(x*0.0015,z*0.0015,60)-h*0.005;if(h>24)return'alpine';if(h>14)return'highland';if(t<0.4)return'pine';if(m>0.62)return'forest';if(m<0.36)return'meadow';return'woodland'}
+function biome(x,z){return biomeFromHeight(x,z,H(x,z))}
 const regionA=['Ash','Raven','Moon','Fox','Elder','Black','Silver','Storm','Moss','Frost','Hollow','Red'],regionB=['Reach','Vale','Moor','Wood','Fell','Hollow','Watch','Ridge','Wilds','Basin','March','Field'];
 function regionName(cx,cz){return regionA[Math.floor(hash(cx,cz,701)*regionA.length)]+' '+regionB[Math.floor(hash(cx,cz,702)*regionB.length)]}
 function slopeAt(x,z){return Math.hypot(H(x+0.8,z)-H(x-0.8,z),H(x,z+0.8)-H(x,z-0.8))}
@@ -207,17 +208,32 @@ const mats={
  trail:new T.MeshStandardMaterial({color:0x786b52,roughness:1})
 };
 
-const WORLD_BACKUP='wi_world_v3_backup';let lastBackupAt=0;
-function persist(){
+const WORLD_BACKUP='wi_world_v3_backup';
+let lastBackupAt=0,saveQueued=false,saveHandle=0,saveDirty=false,lastWorldString='';
+function persistNow(){
+ saveQueued=false;saveHandle=0;
+ if(!saveDirty)return;
+ saveDirty=false;
  try{
    const now=Date.now(),snapshot=JSON.stringify(world),pos=JSON.stringify(player);
    if(now-lastBackupAt>60000){
-     const current=localStorage.getItem(WORLD);if(current)localStorage.setItem(WORLD_BACKUP,current);
+     const current=localStorage.getItem(WORLD);
+     if(current)localStorage.setItem(WORLD_BACKUP,current);
      lastBackupAt=now
    }
-   localStorage.setItem(WORLD,snapshot);localStorage.setItem(POS,pos)
- }catch(e){console.warn('Save failed',e)}
+   localStorage.setItem(WORLD,snapshot);localStorage.setItem(POS,pos);lastWorldString=snapshot
+ }catch(e){saveDirty=true;console.warn('Save failed',e)}
 }
+function persist(){
+ saveDirty=true;
+ if(saveQueued)return;
+ saveQueued=true;
+ const run=()=>persistNow();
+ if('requestIdleCallback'in window)saveHandle=requestIdleCallback(run,{timeout:1200});
+ else saveHandle=setTimeout(run,450)
+}
+addEventListener('pagehide',persistNow);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')persistNow()});
 
 function descriptor(cx,cz){
  let k=key(cx,cz);
@@ -244,28 +260,47 @@ function descriptor(cx,cz){
 }
 
 function saveVisitedDescriptor(cx,cz){
- let k=key(cx,cz);
- if(!world.saved[k])world.saved[k]=descriptor(cx,cz);
- if(!world.explored[k]){world.explored[k]=Date.now();exploredCount++;toast('Region discovered');}
+ let k=key(cx,cz),fresh=false;
+ if(!world.saved[k]){const live=chunks.get(k);world.saved[k]=live?live.d:descriptor(cx,cz)}
+ if(!world.explored[k]){world.explored[k]=Date.now();exploredCount++;fresh=true}
+ if(fresh){
+   // Keep discovery feedback immediate, but defer serialization/storage work.
+   toast('Region discovered');persist()
+ }
+ return fresh
 }
 
+const terrainMaterial=new T.MeshStandardMaterial({vertexColors:true,roughness:1}),
+      terrainRockColor=new T.Color(0x74736c),terrainSnowColor=new T.Color(0xd5dad4),terrainColorTmp=new T.Color();
 function terrain(cx,cz,seg){
- let g=new T.PlaneGeometry(CH,CH,seg,seg);g.rotateX(-Math.PI/2);
- let p=g.attributes.position,colors=[];
+ const g=new T.PlaneGeometry(CH,CH,seg,seg);g.rotateX(-Math.PI/2);
+ const p=g.attributes.position,n=seg+1,step=CH/seg,heights=new Float32Array(p.count),worldX=new Float32Array(p.count),worldZ=new Float32Array(p.count);
+ const colors=new Float32Array(p.count*3);
  for(let i=0;i<p.count;i++){
-   let wx=p.getX(i)+cx*CH,wz=p.getZ(i)+cz*CH,h=H(wx,wz);p.setY(i,h);
-   let c=new T.Color(biomeColor[biome(wx,wz)]),sx=H(wx+1,wz)-H(wx-1,wz),sz=H(wx,wz+1)-H(wx,wz-1),sl=T.MathUtils.clamp(Math.hypot(sx,sz)/4,0,1);
-   c.lerp(new T.Color(0x74736c),sl*0.65);if(h>23)c.lerp(new T.Color(0xd5dad4),T.MathUtils.clamp((h-23)/9,0,0.8));
-   c.multiplyScalar(0.91+hash(wx*0.3,wz*0.3,9)*0.11);colors.push(c.r,c.g,c.b);
+   const wx=p.getX(i)+cx*CH,wz=p.getZ(i)+cz*CH,h=H(wx,wz);
+   worldX[i]=wx;worldZ[i]=wz;heights[i]=h;p.setY(i,h)
  }
- g.setAttribute('color',new T.Float32BufferAttribute(colors,3));g.computeVertexNormals();
- let mesh=new T.Mesh(g,new T.MeshStandardMaterial({vertexColors:true,roughness:1}));
- mesh.position.set(cx*CH,0,cz*CH);mesh.receiveShadow=seg>12;return mesh;
+ for(let i=0;i<p.count;i++){
+   const row=(i/n)|0,col=i-row*n,
+         li=row*n+Math.max(0,col-1),ri=row*n+Math.min(seg,col+1),
+         ui=Math.max(0,row-1)*n+col,di=Math.min(seg,row+1)*n+col,
+         h=heights[i],sx=(heights[ri]-heights[li])/step,sz=(heights[di]-heights[ui])/step,
+         sl=T.MathUtils.clamp(Math.hypot(sx,sz)/4,0,1),
+         wx=worldX[i],wz=worldZ[i];
+   terrainColorTmp.setHex(biomeColor[biomeFromHeight(wx,wz,h)]);
+   terrainColorTmp.lerp(terrainRockColor,sl*.65);
+   if(h>23)terrainColorTmp.lerp(terrainSnowColor,T.MathUtils.clamp((h-23)/9,0,.8));
+   terrainColorTmp.multiplyScalar(.91+hash(wx*.3,wz*.3,9)*.11);
+   colors[i*3]=terrainColorTmp.r;colors[i*3+1]=terrainColorTmp.g;colors[i*3+2]=terrainColorTmp.b
+ }
+ g.setAttribute('color',new T.BufferAttribute(colors,3));g.computeVertexNormals();
+ const mesh=new T.Mesh(g,terrainMaterial);
+ mesh.position.set(cx*CH,0,cz*CH);mesh.receiveShadow=seg>12;return mesh
 }
 
 const farTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,5),farPineGeo=new T.ConeGeometry(1.3,4.2,6),farLeafGeo=new T.ConeGeometry(1.55,4.4,6);
 const sharedChunkGeometries=new Set([farTrunkGeo,farPineGeo,farLeafGeo]);
-const sharedMaterials=new Set(Object.values(mats));
+const sharedMaterials=new Set([...Object.values(mats),terrainMaterial]);
 function disposeObjectTree(root){
  root.traverse(o=>{
    if(o.geometry&&!sharedChunkGeometries.has(o.geometry))o.geometry.dispose?.();
@@ -1399,24 +1434,50 @@ function updateShadowCasters(){
 function createChunk(cx,cz){
  let k=key(cx,cz),d=descriptor(cx,cz),root=new T.Group(),near=new T.Group(),far=new T.Group();
 
- // Freeze every chunk the first time it is actually rendered, not only when
- // the player steps into it. This prevents surrounding chunks from being
- // regenerated differently after cache eviction.
- if(!world.saved[k])world.saved[k]=JSON.parse(JSON.stringify(d));
- d=world.saved[k];
+ // Only explored/meaningfully changed chunks are persisted. Unvisited far
+ // scenery remains deterministic from the world seed instead of bloating localStorage.
+ // Existing persisted chunks are still respected, preserving old saves exactly.
+ if(world.saved[k])d=world.saved[k];
 
  // Keep one terrain mesh per chunk for both LOD modes. This preserves
  // identical ground topology while avoiding two full terrain meshes per chunk.
  const ground=terrain(cx,cz,20);root.add(ground);
- addNearNature(near,d,cx,cz);
+ // Far chunks build only their cheap representation. Detailed vegetation,
+ // landmarks and anomaly geometry are created lazily when the chunk becomes near.
  addFarTrees(far,d,cx,cz);
- if(d.mark){near.add(landmarkModel(cx,cz,d.mark));addTrail(near,cx,cz,d)}
- let anomaly=null;if(d.anomaly){anomaly=anomalyModel(d.anomaly,cx,cz);near.add(anomaly)}
  root.add(near,far);near.visible=false;far.visible=false;scene.add(root);
- let c={cx,cz,k,d,root,near,far,ground,mode:'none',agents:[],anomaly,lastUsed:performance.now()};
+ let c={cx,cz,k,d,root,near,far,ground,mode:'none',agents:[],anomaly:null,nearBuilt:false,lastUsed:performance.now()};
  chunks.set(k,c);return c;
 }
 
+function ensureNearBuilt(c){
+ if(c.nearBuilt)return;
+ addNearNature(c.near,c.d,c.cx,c.cz);
+ if(c.d.mark){c.near.add(landmarkModel(c.cx,c.cz,c.d.mark));addTrail(c.near,c.cx,c.cz,c.d)}
+ if(c.d.anomaly){c.anomaly=anomalyModel(c.d.anomaly,c.cx,c.cz);c.near.add(c.anomaly)}
+ c.nearBuilt=true
+}
+const nearBuildQueue=[],nearBuildPending=new Set();let nearBuildAt=0;
+function queueNearBuild(c){
+ if(c.nearBuilt||nearBuildPending.has(c.k))return;
+ nearBuildPending.add(c.k);nearBuildQueue.push(c)
+}
+function processNearBuildQueue(){
+ const now=performance.now();if(now-nearBuildAt<(IS_MOBILE?70:45)||!nearBuildQueue.length)return;nearBuildAt=now;
+ const c=nearBuildQueue.shift();nearBuildPending.delete(c.k);
+ if(c.mode!=='near'||chunks.get(c.k)!==c)return;
+ ensureNearBuilt(c);c.near.visible=true;c.far.visible=false;queueAnimalLoad(c)
+}
+const animalLoadQueue=[],animalLoadPending=new Set();let animalLoadAt=0;
+function queueAnimalLoad(c){
+ if(c.agents.length||animalLoadPending.has(c.k))return;
+ animalLoadPending.add(c.k);animalLoadQueue.push(c)
+}
+function processAnimalLoadQueue(){
+ const now=performance.now();if(now-animalLoadAt<90||!animalLoadQueue.length)return;animalLoadAt=now;
+ const c=animalLoadQueue.shift();animalLoadPending.delete(c.k);
+ if(c.mode==='near'&&chunks.get(c.k)===c)loadAnimals(c)
+}
 function loadAnimals(c){
  if(c.agents.length)return;
  let saved=world.animalState[c.k]||[];
@@ -1438,9 +1499,15 @@ function setMode(c,mode){
  c.lastUsed=performance.now();
  if(c.mode===mode)return;
  c.mode=mode;
- c.near.visible=mode==='near';c.far.visible=mode==='far';c.ground.visible=mode!=='none';
- c.ground.receiveShadow=mode==='near';
- if(mode==='near')loadAnimals(c);else unloadAnimals(c);
+ c.ground.visible=mode!=='none';c.ground.receiveShadow=mode==='near';
+ if(mode==='near'){
+   if(c.nearBuilt){c.near.visible=true;c.far.visible=false;queueAnimalLoad(c)}
+   else{c.near.visible=false;c.far.visible=true;queueNearBuild(c)}
+ }else if(mode==='far'){
+   c.near.visible=false;c.far.visible=true;unloadAnimals(c)
+ }else{
+   c.near.visible=false;c.far.visible=false;unloadAnimals(c)
+ }
 }
 
 function rebuildColliders(nearSet){
@@ -2637,7 +2704,7 @@ function loop(now){
  lastFrameAt=now;
 
  let rawDt=(now-last)/1000,dt=Math.min(0.04,rawDt);last=now;let t=now/1000;
- step(dt,t-start);processFarQueue();updateShadowCasters();
+ step(dt,t-start);processFarQueue();processNearBuildQueue();processAnimalLoadQueue();updateShadowCasters();
 
  // Shadows remain dynamic, but rebuilding them every 8 frames was needlessly costly.
  const shadowInterval=IS_MOBILE?260:170;
