@@ -2,7 +2,10 @@
 :root{--hud-scale:1;--panel:#09110dee;--line:#ffffff20;--soft:#ffffff0d;--bright:#eaf8ff;--accent:#8fe6c1;--danger:#ffb4a8}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08100c;font-family:system-ui,-apple-system,sans-serif;color:#fff}
 button{font:inherit;color:#fff}
-button,.pad,#flightControls,.sidePanel{touch-action:none}
+button,.pad,#flightControls{touch-action:none}
+.sidePanel,#panel{touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.sidePanel button,.sidePanel select,.sidePanel input{touch-action:manipulation}
+.sidePanel input[type=range]{touch-action:pan-x}
 input[type=range]{touch-action:pan-x}
 #game{position:fixed;inset:0;width:100%;height:100%;touch-action:none}body:after{content:"";position:fixed;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse at center,transparent 48%,#00000018 78%,#00000045 120%);mix-blend-mode:multiply}
 
@@ -55,7 +58,7 @@ input[type=range]{touch-action:pan-x}
 #engineControl{display:grid;gap:5px}.engineHead{display:flex;align-items:center;justify-content:space-between;font-size:9px;font-weight:900;letter-spacing:.12em}.engineHead b{font-size:11px;letter-spacing:0}
 #engineSlider{width:100%;height:24px;margin:0;accent-color:#a7e7c4}
 
-.sidePanel{position:fixed;right:14px;top:calc(max(12px,env(safe-area-inset-top)) + 96px);z-index:12;width:min(320px,calc(100vw - 28px));max-height:62vh;overflow:auto;padding:14px;border:1px solid #ffffff22;border-radius:18px;background:linear-gradient(180deg,#0a1410f4,#07100df2);box-shadow:0 22px 65px #0009;backdrop-filter:blur(12px)}
+.sidePanel{position:fixed;right:14px;top:calc(max(12px,env(safe-area-inset-top)) + 96px);z-index:12;width:min(320px,calc(100vw - 28px));max-height:68vh;overflow-y:auto;overflow-x:hidden;padding:14px;padding-bottom:calc(22px + env(safe-area-inset-bottom));border:1px solid #ffffff22;border-radius:18px;background:linear-gradient(180deg,#0a1410f4,#07100df2);box-shadow:0 22px 65px #0009;backdrop-filter:blur(12px)}
 .worldHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.worldHead b{font-size:12px;letter-spacing:.13em}.worldHead button{width:34px;height:34px;border:1px solid #ffffff20;background:#ffffff0b;border-radius:10px;font-size:19px}
 #inventoryList,#craftList,#buildList,#shopList{display:grid;gap:7px}.buildHead{display:grid;gap:2px;margin-bottom:8px}.buildHead b{font-size:11px;letter-spacing:.1em}.buildHead small{font-size:9px;color:#ffffff77}.invRow,.craftRow,.shopRow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid #ffffff14;border-radius:11px;background:#ffffff07;font-size:11px}.invRow b{font-size:12px}.shopRow>div{display:grid;gap:2px}.shopRow strong{font-size:12px}.shopRow small{font-size:9px;color:#ffffff83}.shopRow button{border:1px solid #8fe6c144;background:#234334;color:#eafff3;border-radius:9px;padding:8px 10px;font-size:9px;font-weight:900}.shopRow button:disabled{opacity:.35}.shopTabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}.shopTabs button{border:1px solid #ffffff20;background:#ffffff08;color:#fff;border-radius:9px;padding:8px;font-size:9px;font-weight:900}.shopTabs button.active{background:#315943;border-color:#95e1b555}#creditsReadout{font-size:10px;color:#b9ffe2;margin-top:2px}#townAction{background:#3b314de8!important;border-color:#c3a9ef55!important}
 .craftRow>div{display:grid;gap:2px}.craftRow strong{font-size:12px}.craftRow small{font-size:9px;color:#ffffff83}.craftRow button{border:1px solid #8fe6c144;background:#234334;color:#eafff3;border-radius:9px;padding:8px 10px;font-size:9px;font-weight:900}.craftRow button:disabled{opacity:.35}
@@ -65,7 +68,7 @@ input[type=range]{touch-action:pan-x}
 #toast{position:fixed;left:50%;bottom:calc(220px + env(safe-area-inset-bottom));transform:translate(-50%,12px);opacity:0;pointer-events:none;background:#07100dea;border:1px solid #ffffff20;padding:9px 13px;border-radius:999px;font-size:11px;z-index:20;transition:.2s;box-shadow:0 8px 26px #0006}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
-#panel{position:fixed;inset:max(18px,env(safe-area-inset-top)) 14px max(18px,env(safe-area-inset-bottom));z-index:14;background:linear-gradient(180deg,#0d1711f7,#09100cf7);border:1px solid #ffffff20;border-radius:22px;padding:18px;overflow:auto;box-shadow:0 20px 70px #0008}
+#panel{position:fixed;inset:max(18px,env(safe-area-inset-top)) 14px max(18px,env(safe-area-inset-bottom));z-index:14;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;touch-action:pan-y;background:linear-gradient(180deg,#0d1711f7,#09100cf7);border:1px solid #ffffff20;border-radius:22px;padding:18px;overflow:auto;box-shadow:0 20px 70px #0008}
 .hidden{display:none!important}
 .panelHead{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.panelHead h2{margin:0 0 4px;font-size:21px}.panelHead p{margin:0;color:#ffffff99;font-size:12px}
 #close{position:static;width:40px;height:40px;border-radius:12px;border:1px solid #ffffff25;background:#ffffff0d;color:#fff;font-size:24px}
