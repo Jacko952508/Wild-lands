@@ -136,6 +136,7 @@ let moonMode=false;
 function earthRawH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
 const START_PLATEAU=earthRawH(0,0);
 const TOWN_LEVEL=earthRawH(-126,8);
+const ARENA_LEVEL=earthRawH(132,0);
 function earthH(x,z){
   const raw=earthRawH(x,z),edge=Math.max(Math.abs(x),Math.abs(z));
   if(edge<=46)return START_PLATEAU;
@@ -146,6 +147,12 @@ function earthH(x,z){
   const tx=Math.max(0,-190-x,x+64),tz=Math.max(0,Math.abs(z)-70),td=Math.max(tx,tz);
   if(td<=0)return TOWN_LEVEL;
   if(td<10)return T.MathUtils.lerp(TOWN_LEVEL,raw,smooth(td/10));
+
+  // East Robot Combat Institute plateau. This is deliberately confined to
+  // the new arena side of the runway so existing terrain stays unchanged.
+  const ax=Math.max(0,72-x,x-194),az=Math.max(0,Math.abs(z)-72),ad=Math.max(ax,az);
+  if(ad<=0)return ARENA_LEVEL;
+  if(ad<12)return T.MathUtils.lerp(ARENA_LEVEL,raw,smooth(ad/12));
   return raw
 }
 function moonRawH(x,z){
@@ -180,7 +187,7 @@ function biome(x,z){return biomeFromHeight(x,z,H(x,z))}
 const regionA=['Ash','Raven','Moon','Fox','Elder','Black','Silver','Storm','Moss','Frost','Hollow','Red'],regionB=['Reach','Vale','Moor','Wood','Fell','Hollow','Watch','Ridge','Wilds','Basin','March','Field'];
 function regionName(cx,cz){return regionA[Math.floor(hash(cx,cz,701)*regionA.length)]+' '+regionB[Math.floor(hash(cx,cz,702)*regionB.length)]}
 function slopeAt(x,z){return Math.hypot(H(x+0.8,z)-H(x-0.8,z),H(x,z+0.8)-H(x,z-0.8))}
-function inStartClearZone(x,z){return Math.abs(x)<46&&Math.abs(z)<46}
+function inStartClearZone(x,z){return (Math.abs(x)<46&&Math.abs(z)<46)||(x>68&&x<198&&Math.abs(z)<76)}
 
 const biomeColor={alpine:0x858882,highland:0x6e7868,pine:0x385942,forest:0x476f48,meadow:0x7f9b64,woodland:0x617e5a};
 const mats={
@@ -242,11 +249,11 @@ function descriptor(cx,cz){
  let b=biome(cx*CH,cz*CH),treeCount=b==='forest'?42:b==='pine'?38:b==='meadow'?18:30;
  for(let i=0;i<treeCount;i++){
    let x=(hash(cx*71+i,cz*43-i,101)-0.5)*CH,z=(hash(cx*59-i,cz*67+i,102)-0.5)*CH;
-   if(hash(cx+i,cz-i,103)<0.82&&!(cx===0&&cz===0&&inStartClearZone(x,z)))d.trees.push([+x.toFixed(2),+z.toFixed(2),+(0.65+hash(cx+i,cz-i,104)*1.15).toFixed(2)]);
+   if(hash(cx+i,cz-i,103)<0.82&&!inStartClearZone(cx*CH+x,cz*CH+z))d.trees.push([+x.toFixed(2),+z.toFixed(2),+(0.65+hash(cx+i,cz-i,104)*1.15).toFixed(2)]);
  }
  for(let i=0;i<10;i++){
    let x=(hash(cx*37+i,cz*29-i,111)-0.5)*CH,z=(hash(cx*31-i,cz*41+i,112)-0.5)*CH;
-   if(!(cx===0&&cz===0&&inStartClearZone(x,z)))d.rocks.push([+x.toFixed(2),+z.toFixed(2),+(0.35+hash(cx+i,cz-i,113)*0.95).toFixed(2)]);
+   if(!inStartClearZone(cx*CH+x,cz*CH+z))d.rocks.push([+x.toFixed(2),+z.toFixed(2),+(0.35+hash(cx+i,cz-i,113)*0.95).toFixed(2)]);
  }
  let species=['deer','deer','fox','boar','wolf'];
  let n=2+Math.floor(hash(cx,cz,120)*3);
@@ -317,7 +324,7 @@ function addFarTrees(group,d,cx,cz){
  const trees=[];
  for(let i=0;i<d.trees.length;i+=3){
    const q=d.trees[i],wx=cx*CH+q[0],wz=cz*CH+q[1];
-   if(!inCityZone(wx,wz))trees.push({wx,wz,s:q[2],pine:biome(wx,wz)==='pine'})
+   if(!inCityZone(wx,wz)&&!inStartClearZone(wx,wz))trees.push({wx,wz,s:q[2],pine:biome(wx,wz)==='pine'})
  }
  if(!trees.length)return;
  const trunks=new T.InstancedMesh(farTrunkGeo,mats.trunk,trees.length),
@@ -343,8 +350,8 @@ const nearTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,7),
       nearRockGeo=new T.DodecahedronGeometry(1,0);
 sharedChunkGeometries.add(nearTrunkGeo);sharedChunkGeometries.add(nearPineGeo);sharedChunkGeometries.add(nearLeafGeo);sharedChunkGeometries.add(nearRockGeo);
 function addNearNature(group,d,cx,cz){
- const trees=d.trees.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])),
-       rocks=d.rocks.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])),
+ const trees=d.trees.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
+       rocks=d.rocks.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
        pineTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])==='pine'),
        broadTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])!=='pine'),
        trunks=trees.length?new T.InstancedMesh(nearTrunkGeo,mats.trunk,trees.length):null,
@@ -1133,6 +1140,409 @@ function makeCity(){
 }
 const cityGroup=makeCity();
 
+// ---------------------------------------------------------------------------
+// EAST ROBOT COMBAT INSTITUTE
+// A self-contained expansion on the opposite side of the runway from West Town.
+// ---------------------------------------------------------------------------
+world.robotArena=world.robotArena||{lastA:null,lastB:null,trophies:[],matches:0,winsA:0,winsB:0};
+const robotArenaGroup=new T.Group(),robotArenaLights=[],robotCabinets=[],robotDebris=[];
+let robotScoreCanvas=null,robotScoreCtx=null,robotScoreTexture=null,robotScoreAt=0;
+scene.add(robotArenaGroup);
+
+const robotPartSets={
+ head:[
+  {name:'Scout Head',hp:-4,speed:1.1,stability:0,energy:2},
+  {name:'Heavy Sensor',hp:5,speed:-.3,stability:2,energy:4},
+  {name:'Armoured Wedge',hp:10,speed:-.8,stability:4,energy:0},
+  {name:'Twin Optic',hp:1,speed:.6,stability:1,energy:3},
+  {name:'Radar Dome',hp:0,speed:.2,stability:0,energy:7},
+  {name:'Spike Front',hp:7,speed:-.2,stability:2,energy:0},
+  {name:'Angular Assault',hp:5,speed:.4,stability:2,energy:1},
+  {name:'Compact Tactical',hp:-1,speed:1.2,stability:1,energy:1},
+  {name:'Shielded Visor',hp:8,speed:-.4,stability:3,energy:2},
+  {name:'Experimental AI',hp:0,speed:1.5,stability:-1,energy:8}
+ ],
+ torso:[
+  {name:'Light Frame',hp:-15,speed:2.2,stability:-2,energy:2},
+  {name:'Balanced Chassis',hp:0,speed:0,stability:1,energy:2},
+  {name:'Heavy Fortress',hp:28,speed:-2.2,stability:7,energy:-2},
+  {name:'Wide Brawler',hp:18,speed:-1,stability:6,energy:0},
+  {name:'Agile Narrow',hp:-8,speed:2.5,stability:-1,energy:1},
+  {name:'Reactor Torso',hp:5,speed:.6,stability:0,energy:9},
+  {name:'Tank Torso',hp:24,speed:-1.8,stability:8,energy:-1},
+  {name:'Reinforced Wedge',hp:16,speed:-.6,stability:5,energy:1},
+  {name:'Hover Core Torso',hp:-5,speed:2,stability:-2,energy:7},
+  {name:'Modular Torso',hp:8,speed:.5,stability:2,energy:5}
+ ],
+ arms:[
+  {name:'Standard Manipulators',damage:0,cooldown:0,stability:1},
+  {name:'Heavy Pistons',damage:4,cooldown:.12,stability:2},
+  {name:'Blade Supports',damage:3,cooldown:-.05,stability:0},
+  {name:'Clamp Arms',damage:1,cooldown:.05,stability:3},
+  {name:'Shield Arms',damage:-1,cooldown:.08,stability:6},
+  {name:'Precision Arms',damage:2,cooldown:-.12,stability:0},
+  {name:'Long Reach Arms',damage:1,cooldown:-.03,stability:-1},
+  {name:'Hydraulic Smash',damage:6,cooldown:.18,stability:1},
+  {name:'Twin Weapon Mounts',damage:4,cooldown:-.08,stability:-1},
+  {name:'Flex Arms',damage:2,cooldown:-.1,stability:1}
+ ],
+ mobility:[
+  {name:'Standard Biped',speed:0,stability:2,dodge:.02},
+  {name:'Heavy Biped',speed:-1.2,stability:7,dodge:-.02},
+  {name:'Runner Legs',speed:3.2,stability:-2,dodge:.13},
+  {name:'Tank Treads',speed:-.7,stability:9,dodge:-.03},
+  {name:'Quad Walker',speed:.2,stability:8,dodge:.04},
+  {name:'Spider Walker',speed:.8,stability:7,dodge:.08},
+  {name:'Hover Base',speed:3.4,stability:-4,dodge:.16},
+  {name:'Monowheel',speed:4,stability:-6,dodge:.18},
+  {name:'Stabilised Treads',speed:-.3,stability:10,dodge:0},
+  {name:'Jump-Jet Legs',speed:2.2,stability:-1,dodge:.14}
+ ],
+ armour:[
+  {name:'Light Alloy',armour:2,weight:-2,resist:{}},
+  {name:'Standard Steel',armour:7,weight:0,resist:{}},
+  {name:'Reinforced Steel',armour:12,weight:2,resist:{ballistic:.88}},
+  {name:'Titanium Shell',armour:15,weight:1,resist:{kinetic:.86,ballistic:.9}},
+  {name:'Spiked Armour',armour:10,weight:1,resist:{control:.72}},
+  {name:'Heat-Resistant',armour:8,weight:0,resist:{heat:.5,energy:.88}},
+  {name:'Shock-Resistant',armour:8,weight:0,resist:{shock:.48}},
+  {name:'Energy-Diffusing',armour:9,weight:1,resist:{energy:.55,shock:.8}},
+  {name:'Layered Composite',armour:13,weight:1,resist:{kinetic:.82,ballistic:.82,heat:.86}},
+  {name:'Reactive Armour',armour:14,weight:2,resist:{explosive:.55,kinetic:.9}}
+ ],
+ core:[
+  {name:'Economy Motor',energy:2,heat:4,power:-1},
+  {name:'Balanced Core',energy:5,heat:5,power:0},
+  {name:'Overdrive Engine',energy:4,heat:-2,power:4},
+  {name:'Heavy Torque',energy:3,heat:6,power:3},
+  {name:'Turbo Reactor',energy:9,heat:-1,power:4},
+  {name:'Cooling Core',energy:5,heat:12,power:0},
+  {name:'Capacitor Core',energy:13,heat:3,power:2},
+  {name:'High-Stability Core',energy:4,heat:6,power:1,stability:5},
+  {name:'Berserker Core',energy:2,heat:-4,power:7},
+  {name:'Experimental Core',energy:15,heat:-5,power:6,stability:-2}
+ ]
+};
+const robotWeapons=[
+ {name:'Spinning Saw',type:'kinetic',damage:15,range:3.2,cooldown:.72,heat:4,desc:'Shreds light armour'},
+ {name:'Crushing Hammer',type:'kinetic',damage:23,range:3.5,cooldown:1.35,heat:3,stun:.28,desc:'Huge impact and stun'},
+ {name:'Drill Lance',type:'kinetic',damage:18,range:4.1,cooldown:.95,heat:5,pierce:.45,desc:'Penetrates armour'},
+ {name:'Flamethrower',type:'heat',damage:9,range:8,cooldown:.42,heat:9,burn:4,desc:'Heat damage over time'},
+ {name:'Plasma Cutter',type:'energy',damage:14,range:7,cooldown:.7,heat:7,pierce:.18,desc:'Reliable armour cutter'},
+ {name:'Shock Emitter',type:'shock',damage:8,range:9,cooldown:.9,heat:5,stun:.5,desc:'Disrupts electronics'},
+ {name:'Rocket Pod',type:'explosive',damage:24,range:18,cooldown:1.8,heat:8,miss:.18,desc:'High burst, can miss'},
+ {name:'Gatling Cannon',type:'ballistic',damage:7,range:16,cooldown:.23,heat:3,miss:.08,desc:'Sustained ranged fire'},
+ {name:'Grabbing Claw',type:'control',damage:7,range:3.2,cooldown:1.05,heat:2,push:4.8,stun:.18,desc:'Controls and pushes'},
+ {name:'Energy Blade',type:'energy',damage:17,range:3.8,cooldown:.58,heat:7,desc:'Fast melee cutter'}
+];
+
+function randomRobotConfig(){
+ const o={};
+ for(const k of Object.keys(robotPartSets))o[k]=Math.floor(Math.random()*10);
+ o.weapon=Math.floor(Math.random()*10);
+ return o
+}
+function normalRobotConfig(c){
+ c=c||{};const o={};
+ for(const k of Object.keys(robotPartSets))o[k]=T.MathUtils.clamp(Number(c[k])||0,0,9)|0;
+ o.weapon=T.MathUtils.clamp(Number(c.weapon)||0,0,9)|0;return o
+}
+function robotStats(c){
+ c=normalRobotConfig(c);
+ let s={hp:100,armour:0,speed:8,stability:10,energy:10,heat:12,damage:0,cooldown:0,dodge:0,power:0,weight:0};
+ for(const k of Object.keys(robotPartSets)){
+   const p=robotPartSets[k][c[k]];
+   for(const [n,v] of Object.entries(p))if(typeof v==='number')s[n]=(s[n]||0)+v
+ }
+ s.speed=Math.max(3,s.speed-s.weight*.6);s.stability=Math.max(2,s.stability);s.hp=Math.max(55,s.hp);
+ s.weapon=robotWeapons[c.weapon];return s
+}
+function robotName(c){
+ const a=['IRON','VOLT','TITAN','STEEL','GRAVE','NOVA','RAGE','CYBER','HEX','WAR'],
+       b=['HOWL','REAPER','FANG','BREAKER','VIPER','NODE','HAMMER','SPARK','CASKET','RAPTOR'];
+ return a[(c.head+c.core+c.weapon)%a.length]+' '+b[(c.torso+c.mobility+c.arms)%b.length]
+}
+function robotMaterial(hex){return new T.MeshStandardMaterial({color:hex,roughness:.42,metalness:.58})}
+
+function makeCombatRobot(c,team=0,mini=false){
+ c=normalRobotConfig(c);
+ const g=new T.Group(),primary=robotMaterial(team?0x365d9f:0xa84032),dark=robotMaterial(0x20262b),steel=robotMaterial(0x737d83),
+       glow=new T.MeshStandardMaterial({color:team?0x75b9ff:0xffa66d,emissive:team?0x164a7d:0x7d2c16,emissiveIntensity:1.1,roughness:.25});
+ const torsoI=c.torso,headI=c.head,mobI=c.mobility,armI=c.arms;
+ const tw=2.8+(torsoI%3)*.24,th=2.5+(torsoI%4)*.15,td=1.8+((torsoI+1)%3)*.18;
+ const torso=new T.Mesh(new T.BoxGeometry(tw,th,td),primary);torso.position.y=4.2;g.add(torso);
+ const chest=new T.Mesh(new T.BoxGeometry(tw*.72,.72,.18),glow);chest.position.set(0,4.25,td/2+.1);g.add(chest);
+ // Armour selection changes the visible shell, not only the stats.
+ const armourI=c.armour,plateMat=armourI===5?robotMaterial(0x6f5d4b):armourI===7?robotMaterial(0x405f6b):armourI===9?robotMaterial(0x596169):steel;
+ for(const sx of[-1,1]){
+   const plate=new T.Mesh(new T.BoxGeometry(.22,1.65,1.45),plateMat);plate.position.set(sx*(tw/2+.16),4.3,0);plate.rotation.z=sx*(armourI%4)*.035;g.add(plate)
+ }
+ if(armourI===4)for(const sx of[-1,1])for(const yy of[3.8,4.6]){const spike=new T.Mesh(new T.ConeGeometry(.16,.65,6),steel);spike.rotation.z=sx*Math.PI/2;spike.position.set(sx*(tw/2+.55),yy,0);g.add(spike)}
+ if(armourI===9){for(const yy of[3.55,4.25,4.95]){const tile=new T.Mesh(new T.BoxGeometry(tw*.84,.26,.12),plateMat);tile.position.set(0,yy,td/2+.22);g.add(tile)}}
+ // Core choice is represented by a rear power pack / capacitor bank.
+ const coreI=c.core,corePack=new T.Mesh(new T.BoxGeometry(1.5,1.45,.52),dark);corePack.position.set(0,4.35,-td/2-.32);g.add(corePack);
+ for(let i=0;i<1+(coreI%4);i++){const cell=new T.Mesh(new T.CylinderGeometry(.13,.13,.7,7),coreI>=4?glow:steel);cell.rotation.z=Math.PI/2;cell.position.set((i-(coreI%4)/2)*.34,4.35,-td/2-.62);g.add(cell)}
+ const headShape=headI%3===0?new T.BoxGeometry(1.45+.05*headI,.85,1.1):headI%3===1?new T.SphereGeometry(.68+.018*headI,10,7):new T.CylinderGeometry(.58+.015*headI,.78+.012*headI,.85,8);
+ const head=new T.Mesh(headShape,headI===9?glow:steel);head.position.y=6.15;g.add(head);
+ const eye=new T.Mesh(new T.BoxGeometry(.8,.13,.08),glow);eye.position.set(0,6.2,.63);g.add(eye);
+ const legs=[];
+ if(mobI===3||mobI===8){
+   for(const sx of[-.95,.95]){const tread=new T.Mesh(new T.BoxGeometry(1.05,.75,2.65),dark);tread.position.set(sx,.55,0);g.add(tread);legs.push(tread)}
+ }else if(mobI===6||mobI===7){
+   const base=new T.Mesh(mobI===7?new T.TorusGeometry(1.05,.38,8,16):new T.CylinderGeometry(1.7,1.9,.55,12),dark);base.position.y=.72;if(mobI===7)base.rotation.z=Math.PI/2;g.add(base);legs.push(base)
+ }else{
+   const count=(mobI===4||mobI===5)?4:2;
+   for(let i=0;i<count;i++){const sx=(i%2?1:-1)*(count===4?1.25:.82),sz=count===4?(i<2?-.65:.65):0;const leg=new T.Mesh(new T.BoxGeometry(.55,2.25,.65),dark);leg.position.set(sx,1.55,sz);g.add(leg);legs.push(leg);const foot=new T.Mesh(new T.BoxGeometry(.9,.38,1.25),steel);foot.position.set(sx,.3,sz+.2);g.add(foot)}
+ }
+ for(const sx of[-1,1]){
+   const shoulder=new T.Mesh(new T.SphereGeometry(.48,8,6),steel);shoulder.position.set(sx*(tw/2+.38),4.75,0);g.add(shoulder);
+   const arm=new T.Mesh(new T.BoxGeometry(.52,2.0,.6),primary);arm.position.set(sx*(tw/2+.5),3.65,.05);arm.rotation.z=sx*(armI%3)*.05;g.add(arm)
+ }
+ const w=robotWeapons[c.weapon],wg=new T.Group();wg.position.set(0,3.9,td/2+.65);g.add(wg);
+ if(c.weapon===0){const saw=new T.Mesh(new T.CylinderGeometry(.78,.78,.16,16),steel);saw.rotation.z=Math.PI/2;wg.add(saw);wg.userData.spin=saw}
+ else if(c.weapon===1){const shaft=new T.Mesh(new T.BoxGeometry(.22,.22,2.4),dark);shaft.position.z=1.0;wg.add(shaft);const hammer=new T.Mesh(new T.BoxGeometry(1.25,.65,.65),steel);hammer.position.z=2.0;wg.add(hammer)}
+ else if(c.weapon===2){const drill=new T.Mesh(new T.ConeGeometry(.52,2.7,12),steel);drill.rotation.x=Math.PI/2;drill.position.z=1.45;wg.add(drill);wg.userData.spin=drill}
+ else if(c.weapon===3){const nozzle=new T.Mesh(new T.CylinderGeometry(.28,.36,1.8,10),dark);nozzle.rotation.x=Math.PI/2;nozzle.position.z=.9;wg.add(nozzle)}
+ else if(c.weapon===4||c.weapon===9){const blade=new T.Mesh(new T.BoxGeometry(.16,.42,2.8),glow);blade.position.z=1.5;wg.add(blade)}
+ else if(c.weapon===5){const ring=new T.Mesh(new T.TorusGeometry(.65,.12,8,14),glow);ring.rotation.x=Math.PI/2;wg.add(ring)}
+ else if(c.weapon===6){for(const sx of[-.45,.45]){const pod=new T.Mesh(new T.BoxGeometry(.58,.58,1.4),dark);pod.position.set(sx,0,.7);wg.add(pod)}}
+ else if(c.weapon===7){const gun=new T.Mesh(new T.CylinderGeometry(.28,.34,2.5,10),dark);gun.rotation.x=Math.PI/2;gun.position.z=1.2;wg.add(gun)}
+ else if(c.weapon===8){for(const sx of[-.45,.45]){const claw=new T.Mesh(new T.BoxGeometry(.22,.28,1.65),steel);claw.position.set(sx,0,.85);claw.rotation.y=sx*.2;wg.add(claw)}}
+ g.userData={config:c,weaponGroup:wg,legs,team,name:robotName(c)};
+ if(mini)g.scale.setScalar(.22);return g
+}
+
+function makeRobotArena(){
+ const g=robotArenaGroup,y=ARENA_LEVEL,cx=140,cz=0;
+ const concrete=robotMaterial(0x555d61),black=robotMaterial(0x171d20),steel=robotMaterial(0x68747b),
+       red=robotMaterial(0x8f3028),cyan=new T.MeshStandardMaterial({color:0x75e6ef,emissive:0x1c6970,emissiveIntensity:1.25,roughness:.25}),
+       glass=new T.MeshPhysicalMaterial({color:0x6a97a9,transparent:true,opacity:.34,roughness:.08,metalness:.08});
+ // Approach plaza and runway-side boulevard.
+ startBox(g,61,y+.05,0,22,.1,14,mats.runway,false);
+ startBox(g,79,y+.06,0,18,.12,12,concrete,false);
+ for(let x=55;x<=92;x+=6){const lamp=new T.Mesh(new T.BoxGeometry(.15,3.8,.15),steel);lamp.position.set(x,y+1.9,-5.3);g.add(lamp);const bulb=new T.Mesh(new T.SphereGeometry(.15,6,5),cyan);bulb.position.set(x,y+3.85,-5.3);g.add(bulb)}
+ // Grand arena foundation and combat floor.
+ startBox(g,cx,y+.12,cz,92,.24,68,black,false);
+ startBox(g,cx,y+.19,cz,70,.14,48,new T.MeshStandardMaterial({color:0x30373b,roughness:.7,metalness:.35}),false);
+ for(const z of[-24,24])startBox(g,cx,y+2.25,z,72,4.5,.6,steel,true);
+ for(const x of[105,175])startBox(g,x,y+2.25,0,.6,4.5,48,steel,true);
+ // Open west/east gate gaps represented by inset glowing portals rather than solid wall.
+ startDoorways.push({x:105,z:0,hx:2.2,hz:5.5},{x:175,z:0,hx:2.2,hz:5.5});
+ // Floor graphics.
+ const ring=new T.Mesh(new T.RingGeometry(13,13.55,48),cyan);ring.rotation.x=-Math.PI/2;ring.position.set(cx,y+.29,cz);g.add(ring);
+ for(const z of[-16,16])startBox(g,cx,y+.3,z,54,.025,.16,cyan,false);
+ for(const x of[120,160])startBox(g,x,y+.3,0,.16,.025,35,cyan,false);
+ // Spectator stands.
+ for(const z of[-31,31])for(let i=0;i<4;i++){startBox(g,cx,y+.55+i*.55,z+(z<0?-i*1.5:i*1.5),82-i*4,.6,2.0,concrete,false)}
+ // Structural arches and premium lighting.
+ for(const x of[102,116,140,164,178]){
+   startBox(g,x,y+7,-34,.6,14,.6,steel,false);startBox(g,x,y+7,34,.6,14,.6,steel,false);
+   startBox(g,x,y+13.7,0,.42,.42,68,steel,false)
+ }
+ for(const x of[112,128,152,168])for(const z of[-27,27]){
+   const l=new T.SpotLight(0xeafcff,3.2,56,Math.PI/4,.55,1.3);l.position.set(x,y+12,z);l.target.position.set(cx,y,0);g.add(l,l.target);robotArenaLights.push(l);l.userData.baseIntensity=3.2;l.userData.owner=g;l.userData.maxDistance=170;managedLights.push(l)
+ }
+ // Design lab on southwest corner, open toward the plaza.
+ const rx=91,rz=-27,rw=24,rd=19,rh=7;
+ startBox(g,rx,y+.12,rz,rw,.24,rd,concrete,false);startBox(g,rx,y+rh,rz,rw,.32,rd,black,false);
+ startBox(g,rx-rw/2+.25,y+rh/2,rz,.5,rh,rd,black,true);
+ startBox(g,rx,y+rh/2,rz-rd/2+.25,rw,rh,.5,black,true);
+ startBox(g,rx,y+rh/2,rz+rd/2-.25,rw,rh,.5,black,true);
+ startBox(g,rx+rw/2-.25,y+rh/2,rz-6.3,.5,rh,6.4,black,true);
+ startBox(g,rx+rw/2-.25,y+rh/2,rz+6.3,.5,rh,6.4,black,true);
+ startDoorways.push({x:rx+rw/2,z:rz,hx:2.4,hz:3.1});
+ townText(g,'ROBOT DESIGN LAB',rx,y+6.15,rz-rd/2-.27,9.5,1.1);
+ // In-game design terminal.
+ const desk=startBox(g,95.5,y+.72,-27,1.25,1.44,5.0,steel,true);
+ const screen=new T.Mesh(new T.PlaneGeometry(3.3,2.0),new T.MeshBasicMaterial({color:0x7ffaff}));screen.position.set(94.82,y+2.65,-27);screen.rotation.y=Math.PI/2;g.add(screen);
+ const screenFrame=startBox(g,94.88,y+2.65,-27,.18,2.35,3.7,black,false);
+ addTownInteraction('robotTerminal',93,-27,'USE ROBOT DESIGN TERMINAL');
+ // Victory gallery along the north-west concourse.
+ for(let i=0;i<8;i++){
+   const x=84+(i%4)*5.1,z=19+(i>3?6:0);
+   const base=startBox(g,x,y+.45,z,3.6,.9,3.6,black,false);
+   const shell=new T.Mesh(new T.BoxGeometry(3.35,4.4,3.35),glass);shell.position.set(x,y+2.65,z);g.add(shell);
+   const light=new T.Mesh(new T.BoxGeometry(2.5,.08,2.5),cyan);light.position.set(x,y+4.72,z);g.add(light);
+   robotCabinets.push({x,y:y+.55,z,index:i})
+ }
+ townText(g,'VICTORY ARCHIVE',91.5,y+5.7,30.5,12,1.15);
+ // Giant in-world match scoreboard facing the combat floor.
+ robotScoreCanvas=document.createElement('canvas');robotScoreCanvas.width=768;robotScoreCanvas.height=192;robotScoreCtx=robotScoreCanvas.getContext('2d');
+ robotScoreTexture=new T.CanvasTexture(robotScoreCanvas);robotScoreTexture.colorSpace=T.SRGBColorSpace;
+ const scoreMat=new T.MeshBasicMaterial({map:robotScoreTexture}),scoreMesh=new T.Mesh(new T.PlaneGeometry(18,4.5),scoreMat);
+ scoreMesh.position.set(cx,y+10.1,-33.55);g.add(scoreMesh);
+ // External signage.
+ townText(g,'ROBOT COMBAT INSTITUTE',140,y+14.2,-34.4,17,1.35);
+ // Small gateway from runway side.
+ startBox(g,73,y+4.3,-6,.55,8.6,.55,steel,false);startBox(g,73,y+4.3,6,.55,8.6,.55,steel,false);startBox(g,73,y+8.4,0,.5,.5,12,steel,false);
+ return g
+}
+makeRobotArena();
+
+function restoreRobotTrophies(){
+ const saved=world.robotArena.trophies||[];
+ saved.slice(-8).forEach((t,i)=>{
+   const cab=robotCabinets[i];if(!cab)return;
+   const m=makeCombatRobot(t.config,t.team,true);m.position.set(cab.x,cab.y+.15,cab.z);m.rotation.y=Math.PI;robotArenaGroup.add(m);cab.robot=m
+ })
+}
+restoreRobotTrophies();
+
+let robotMatch=null,robotUiA=normalRobotConfig(world.robotArena.lastA||randomRobotConfig()),robotUiB=normalRobotConfig(world.robotArena.lastB||randomRobotConfig());
+function robotFieldMarkup(side){
+ const cfg=side==='A'?robotUiA:robotUiB,rows=[];
+ for(const k of Object.keys(robotPartSets)){
+   const opts=robotPartSets[k].map((p,i)=>'<option value="'+i+'" '+(cfg[k]===i?'selected':'')+'>'+p.name+'</option>').join('');
+   rows.push('<label class="robotField"><span>'+k.toUpperCase()+'</span><select data-side="'+side+'" data-part="'+k+'">'+opts+'</select></label>')
+ }
+ const wopts=robotWeapons.map((w,i)=>'<option value="'+i+'" '+(cfg.weapon===i?'selected':'')+'>'+w.name+'</option>').join('');
+ rows.push('<label class="robotField"><span>WEAPON</span><select data-side="'+side+'" data-part="weapon">'+wopts+'</select></label>');return rows.join('')
+}
+function statMarkup(c){
+ const s=robotStats(c),w=s.weapon;
+ return '<div class="robotStat"><span>HP</span><b>'+Math.round(s.hp)+'</b></div>'+
+ '<div class="robotStat"><span>ARMOUR</span><b>'+Math.round(s.armour)+'</b></div>'+
+ '<div class="robotStat"><span>SPEED</span><b>'+s.speed.toFixed(1)+'</b></div>'+
+ '<div class="robotStat"><span>STABILITY</span><b>'+Math.round(s.stability)+'</b></div>'+
+ '<div class="robotStat"><span>ENERGY</span><b>'+Math.round(s.energy)+'</b></div>'+
+ '<div class="robotStat"><span>HEAT CAP</span><b>'+Math.round(s.heat)+'</b></div>'+
+ '<div class="robotStat journalWide"><span>'+w.name.toUpperCase()+'</span><b>'+w.desc+'</b></div>'
+}
+function renderRobotDesigner(){
+ $('robotAFields').innerHTML=robotFieldMarkup('A');$('robotBFields').innerHTML=robotFieldMarkup('B');
+ $('robotAStats').innerHTML=statMarkup(robotUiA);$('robotBStats').innerHTML=statMarkup(robotUiB);
+ $('robotMatchStatus').textContent=robotMatch?'MATCH IN PROGRESS':'NO MATCH ACTIVE';
+ $('robotPanel').querySelectorAll('select[data-side]').forEach(sel=>sel.onchange=()=>{
+   const cfg=sel.dataset.side==='A'?robotUiA:robotUiB;cfg[sel.dataset.part]=+sel.value;renderRobotDesigner()
+ })
+}
+function openRobotDesigner(){closeSidePanels('robotPanel');$('robotPanel').classList.remove('hidden');renderRobotDesigner()}
+$('robotClose').onclick=()=>$('robotPanel').classList.add('hidden');
+$('randomA').onclick=()=>{robotUiA=randomRobotConfig();renderRobotDesigner()};
+$('randomB').onclick=()=>{robotUiB=randomRobotConfig();renderRobotDesigner()};
+$('randomBoth').onclick=()=>{robotUiA=randomRobotConfig();robotUiB=randomRobotConfig();renderRobotDesigner()};
+
+function robotDamage(attacker,defender){
+ const w=attacker.weapon,arm=robotPartSets.armour[defender.config.armour],
+       resist=(arm.resist&&arm.resist[w.type])||1,
+       armourBlock=Math.max(0,defender.stats.armour*(1-(w.pierce||0))*.22),
+       core=defender.config.core;
+ let mult=resist;
+ if(w.type==='shock'&&(core===4||core===6||core===9))mult*=1.35;
+ if(w.type==='ballistic'&&defender.config.mobility===6)mult*=1.12;
+ if(w.type==='kinetic'&&defender.config.armour===0)mult*=1.25;
+ if(w.type==='control')mult*=Math.max(.55,12/(12+defender.stats.stability));
+ let dmg=Math.max(1,(w.damage+attacker.stats.damage+attacker.stats.power*.45-armourBlock)*mult);
+ return dmg
+}
+function combatEffect(pos,type){
+ const col=type==='shock'?0x71eaff:type==='heat'?0xff783d:type==='energy'?0x9fffff:type==='explosive'?0xffbf62:0xffe1a5;
+ for(let i=0;i<(IS_MOBILE?3:5);i++)spawnVehicleParticle(pos,col,.12+Math.random()*.16,.35+.2*Math.random(),.9,.45)
+}
+function startRobotBattle(){
+ if(robotMatch)return;
+ $('robotPanel').classList.add('hidden');
+ world.robotArena.lastA=normalRobotConfig(robotUiA);world.robotArena.lastB=normalRobotConfig(robotUiB);persist();
+ const aCfg=normalRobotConfig(robotUiA),bCfg=normalRobotConfig(robotUiB),a=makeCombatRobot(aCfg,0),b=makeCombatRobot(bCfg,1);
+ a.position.set(119,ARENA_LEVEL+.3,0);b.position.set(161,ARENA_LEVEL+.3,0);a.rotation.y=Math.PI/2;b.rotation.y=-Math.PI/2;robotArenaGroup.add(a,b);
+ const sa=robotStats(aCfg),sb=robotStats(bCfg);
+ robotMatch={
+   phase:'fight',time:0,
+   a:{group:a,config:aCfg,stats:sa,weapon:sa.weapon,hp:sa.hp,cool:1,stun:0,burn:0,heat:0},
+   b:{group:b,config:bCfg,stats:sb,weapon:sb.weapon,hp:sb.hp,cool:1.25,stun:0,burn:0,heat:0},
+   winner:null,loser:null,endT:0
+ };
+ world.robotArena.matches++;sfx(180,.15,.08,'sawtooth');toast(robotName(aCfg)+' VS '+robotName(bCfg)+' • MATCH START')
+}
+$('startRobotMatch').onclick=startRobotBattle;
+
+function attackRobot(att,def,t){
+ const w=att.weapon,ap=att.group.position,dp=def.group.position,d=ap.distanceTo(dp);if(d>w.range||att.cool>0||att.stun>0)return;
+ att.cool=Math.max(.14,(w.cooldown+(att.stats.cooldown||0))*(1+att.heat*.012));
+ const miss=T.MathUtils.clamp((w.miss||0)+def.stats.dodge-(att.config.head===1||att.config.head===3?0.05:0),0,.45);
+ if(Math.random()<miss){combatEffect(dp,'ballistic');return}
+ const dmg=robotDamage(att,def);def.hp-=dmg;
+ if(w.stun&&Math.random()<w.stun)def.stun=Math.max(def.stun,.35+Math.random()*.45);
+ if(w.burn)def.burn=Math.max(def.burn,1.6);
+ if(w.push){
+   const dx=dp.x-ap.x,dz=dp.z-ap.z,len=Math.hypot(dx,dz)||1,p=w.push*Math.max(.25,10/(10+def.stats.stability));
+   def.group.position.x+=dx/len*p;def.group.position.z+=dz/len*p
+ }
+ att.heat=Math.min(att.stats.heat*1.8,att.heat+w.heat*.12);
+ combatEffect(dp.clone().add(new T.Vector3(0,3.4,0)),w.type);sfx(w.type==='explosive'?95:w.type==='shock'?620:w.type==='energy'?430:170,.045,.025,w.type==='shock'?'square':'sawtooth')
+}
+function shatterRobot(r){
+ const p=r.group.position.clone();
+ r.group.traverse(o=>{if(!o.isMesh||robotDebris.length>(IS_MOBILE?18:28))return;
+   const d=new T.Mesh(o.geometry,o.material);const wp=new T.Vector3(),wq=new T.Quaternion(),ws=new T.Vector3();o.getWorldPosition(wp);o.getWorldQuaternion(wq);o.getWorldScale(ws);d.position.copy(wp);d.quaternion.copy(wq);d.scale.copy(ws);robotArenaGroup.add(d);
+   robotDebris.push({mesh:d,vx:(Math.random()-.5)*7,vy:3+Math.random()*6,vz:(Math.random()-.5)*7,spin:(Math.random()-.5)*5,life:5})
+ });
+ robotArenaGroup.remove(r.group);combatEffect(p.add(new T.Vector3(0,3,0)),'explosive')
+}
+function archiveWinner(r){
+ const list=world.robotArena.trophies||(world.robotArena.trophies=[]),entry={config:r.config,team:r.group.userData.team,name:r.group.userData.name};
+ list.push(entry);if(list.length>8)list.shift();
+ for(const cab of robotCabinets)if(cab.robot){robotArenaGroup.remove(cab.robot);cab.robot=null}
+ restoreRobotTrophies();persist()
+}
+function endRobotMatch(win,lose){
+ if(!robotMatch||robotMatch.phase!=='fight')return;
+ robotMatch.phase='victory';robotMatch.winner=win;robotMatch.loser=lose;robotMatch.endT=0;shatterRobot(lose);
+ if(win===robotMatch.a)world.robotArena.winsA++;else world.robotArena.winsB++;
+ toast(win.group.userData.name+' WINS');sfx(720,.16,.06,'triangle')
+}
+function updateRobotScoreboard(force=false){
+ if(!robotScoreCtx||!robotScoreTexture)return;
+ const now=performance.now();if(!force&&now-robotScoreAt<100)return;robotScoreAt=now;
+ const c=robotScoreCtx;c.fillStyle='#071014';c.fillRect(0,0,768,192);c.strokeStyle='#74efff';c.lineWidth=7;c.strokeRect(6,6,756,180);
+ c.textAlign='center';c.fillStyle='#dffcff';c.font='bold 25px Arial';c.fillText('ROBOT COMBAT INSTITUTE',384,38);
+ if(!robotMatch){c.fillStyle='#7fa5a8';c.font='bold 22px Arial';c.fillText('DESIGN LAB READY // AWAITING MATCH',384,106)}
+ else{
+   const a=robotMatch.a,b=robotMatch.b,aw=Math.max(0,a.hp/a.stats.hp),bw=Math.max(0,b.hp/b.stats.hp);
+   c.textAlign='left';c.fillStyle='#ff8f76';c.font='bold 22px Arial';c.fillText(a.group.userData.name,34,77);
+   c.fillStyle='#263238';c.fillRect(34,92,300,28);c.fillStyle='#d94d39';c.fillRect(34,92,300*aw,28);
+   c.textAlign='right';c.fillStyle='#82bfff';c.fillText(b.group.userData.name,734,77);
+   c.fillStyle='#263238';c.fillRect(434,92,300,28);c.fillStyle='#4b87db';c.fillRect(734-300*bw,92,300*bw,28);
+   c.textAlign='center';c.fillStyle='#ffffff';c.font='bold 18px Arial';c.fillText(robotMatch.phase==='fight'?'LIVE MATCH':'VICTORY SEQUENCE',384,155)
+ }
+ robotScoreTexture.needsUpdate=true
+}
+function updateRobotArena(dt,t){
+ updateRobotScoreboard();
+ // Lightweight weapon idle animation even outside battles.
+ if(robotMatch&&robotMatch.phase==='fight'){
+   robotMatch.time+=dt;
+   const pair=[[robotMatch.a,robotMatch.b],[robotMatch.b,robotMatch.a]];
+   for(const [r,e] of pair){
+     r.cool=Math.max(0,r.cool-dt);r.stun=Math.max(0,r.stun-dt);r.heat=Math.max(0,r.heat-dt*.9);
+     if(r.burn>0){r.burn-=dt;r.hp-=dt*2.4}
+     const p=r.group.position,q=e.group.position,dx=q.x-p.x,dz=q.z-p.z,d=Math.hypot(dx,dz)||1,desired=Math.max(2.6,r.weapon.range*.72);
+     r.group.rotation.y=Math.atan2(dx,dz);
+     if(r.stun<=0){
+       let dir=d>desired?1:d<desired*.62?-1:0,spd=r.stats.speed*(dir<0?.65:1);
+       if(dir){p.x+=dx/d*spd*dt*dir;p.z+=dz/d*spd*dt*dir}
+       p.x=T.MathUtils.clamp(p.x,108,172);p.z=T.MathUtils.clamp(p.z,-22,22);
+       attackRobot(r,e,t)
+     }
+     const spin=r.group.userData.weaponGroup?.userData.spin;if(spin)spin.rotation.z+=dt*(5+r.stats.power*.3)
+   }
+   if(robotMatch.a.hp<=0&&robotMatch.b.hp<=0)endRobotMatch(robotMatch.a.hp>robotMatch.b.hp?robotMatch.a:robotMatch.b,robotMatch.a.hp>robotMatch.b.hp?robotMatch.b:robotMatch.a);
+   else if(robotMatch.a.hp<=0)endRobotMatch(robotMatch.b,robotMatch.a);
+   else if(robotMatch.b.hp<=0)endRobotMatch(robotMatch.a,robotMatch.b);
+   else if(robotMatch.time>75)endRobotMatch(robotMatch.a.hp>robotMatch.b.hp?robotMatch.a:robotMatch.b,robotMatch.a.hp>robotMatch.b.hp?robotMatch.b:robotMatch.a)
+ }else if(robotMatch&&robotMatch.phase==='victory'){
+   robotMatch.endT+=dt;const w=robotMatch.winner,cab=robotCabinets[(world.robotArena.trophies.length)%robotCabinets.length],q=T.MathUtils.clamp(robotMatch.endT/2.6,0,1);
+   w.group.scale.setScalar(T.MathUtils.lerp(1,.22,q));w.group.position.x=T.MathUtils.lerp(w.group.position.x,cab.x,q*.08);w.group.position.z=T.MathUtils.lerp(w.group.position.z,cab.z,q*.08);w.group.position.y=T.MathUtils.lerp(w.group.position.y,cab.y+.15,q*.08);
+   w.group.rotation.y+=dt*1.1;
+   if(robotMatch.endT>2.8){archiveWinner(w);robotArenaGroup.remove(w.group);robotMatch=null;toast('Winner archived in the Victory Gallery')}
+ }
+ for(let i=robotDebris.length-1;i>=0;i--){
+   const d=robotDebris[i];d.life-=dt;d.vy-=9.8*dt;d.mesh.position.x+=d.vx*dt;d.mesh.position.y+=d.vy*dt;d.mesh.position.z+=d.vz*dt;d.mesh.rotation.x+=d.spin*dt;d.mesh.rotation.z+=d.spin*.7*dt;
+   if(d.mesh.position.y<ARENA_LEVEL+.2){d.mesh.position.y=ARENA_LEVEL+.2;d.vy*=-.2;d.vx*=.72;d.vz*=.72}
+   if(d.life<=0){robotArenaGroup.remove(d.mesh);robotDebris.splice(i,1)}
+ }
+}
+
 const buildGroup=new T.Group(),buildColliders=[],earthResources=[];
 scene.add(buildGroup);
 function buildMat(color,metal=0){return new T.MeshStandardMaterial({color,roughness:metal?.55:.9,metalness:metal?.35:0})}
@@ -1475,8 +1885,8 @@ function createChunk(cx,cz){
 function ensureNearBuilt(c){
  if(c.nearBuilt)return;
  addNearNature(c.near,c.d,c.cx,c.cz);
- if(c.d.mark){c.near.add(landmarkModel(c.cx,c.cz,c.d.mark));addTrail(c.near,c.cx,c.cz,c.d)}
- if(c.d.anomaly){c.anomaly=anomalyModel(c.d.anomaly,c.cx,c.cz);c.near.add(c.anomaly)}
+ if(c.d.mark&&!inStartClearZone(c.cx*CH,c.cz*CH)){c.near.add(landmarkModel(c.cx,c.cz,c.d.mark));addTrail(c.near,c.cx,c.cz,c.d)}
+ if(c.d.anomaly&&!inStartClearZone(c.cx*CH,c.cz*CH)){c.anomaly=anomalyModel(c.d.anomaly,c.cx,c.cz);c.near.add(c.anomaly)}
  c.nearBuilt=true
 }
 const nearBuildQueue=[],nearBuildPending=new Set();let nearBuildAt=0;
@@ -1501,7 +1911,7 @@ function processAnimalLoadQueue(){
  if(c.mode==='near'&&chunks.get(c.k)===c)loadAnimals(c)
 }
 function loadAnimals(c){
- if(c.agents.length)return;
+ if(c.agents.length||inStartClearZone(c.cx*CH,c.cz*CH))return;
  let saved=world.animalState[c.k]||[];
  c.d.animals.forEach((q,i)=>{
    let st=saved[i],x=st?st.x:c.cx*CH+q[0],z=st?st.z:c.cz*CH+q[1],dir=st?st.dir:hash(c.cx*9+i,c.cz*7-i,200)*Math.PI*2;
@@ -1536,8 +1946,8 @@ function rebuildColliders(nearSet){
  colliders.length=0;
  for(const k of nearSet){
    let c=chunks.get(k);if(!c)continue;
-   for(const q of c.d.trees){let x=c.cx*CH+q[0],z=c.cz*CH+q[1];if(!inCityZone(x,z))colliders.push({x,z,r:0.58*q[2]})}
-   for(const q of c.d.rocks){let x=c.cx*CH+q[0],z=c.cz*CH+q[1];if(!inCityZone(x,z))colliders.push({x,z,r:0.62*q[2]})}
+   for(const q of c.d.trees){let x=c.cx*CH+q[0],z=c.cz*CH+q[1];if(!inCityZone(x,z)&&!inStartClearZone(x,z))colliders.push({x,z,r:0.58*q[2]})}
+   for(const q of c.d.rocks){let x=c.cx*CH+q[0],z=c.cz*CH+q[1];if(!inCityZone(x,z)&&!inStartClearZone(x,z))colliders.push({x,z,r:0.62*q[2]})}
    if(c.d.mark==='ring')for(let i=0;i<7;i++){let a=i/7*Math.PI*2;colliders.push({x:c.cx*CH+Math.cos(a)*5,z:c.cz*CH+Math.sin(a)*5,r:0.8})}
    if(c.d.mark==='tower')colliders.push({x:c.cx*CH,z:c.cz*CH,r:2.2});
    }
@@ -2013,7 +2423,7 @@ function renderInventory(){
 }
 rebuildToolView();
 function closeSidePanels(except=null){
- for(const id of['missionsPanel','inventoryPanel','craftPanel','shopPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
+ for(const id of['missionsPanel','inventoryPanel','craftPanel','shopPanel','worldPanel','robotPanel'])if(id!==except)$(id).classList.add('hidden')
 }
 $('inventoryBtn').onclick=()=>{const p=$('inventoryPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'inventoryPanel':null);p.classList.toggle('hidden',!open);if(open)renderInventory()};
 $('inventoryClose').onclick=()=>$('inventoryPanel').classList.add('hidden');
@@ -2256,6 +2666,7 @@ $('townAction').onclick=()=>{
  if(sitting){standFromBench();return}
  const a=nearestTownInteraction();if(!a)return;
  if(a.type==='shop'){openShop();toast('Westside Supply opened')}
+ else if(a.type==='robotTerminal'){openRobotDesigner();toast('Robot Combat Design Lab online')}
  else if(a.type==='bench'){
    sitting={x:a.x,z:a.z,yaw:a.yaw||0,exitYaw:player.yaw};
    move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;
@@ -2507,9 +2918,11 @@ function updateSky(time,dt=0.016){
  }
  const earthScene=!moonMode&&spaceFactor<0.88,
        airfieldNear=Math.hypot(player.x,player.z)<340,
-       townNear=Math.hypot(player.x+126,player.z-6)<380;
+       townNear=Math.hypot(player.x+126,player.z-6)<380,
+      arenaNear=Math.hypot(player.x-132,player.z)<390;
  startBase.visible=earthScene&&airfieldNear;
  cityGroup.visible=earthScene&&townNear;
+ robotArenaGroup.visible=earthScene&&arenaNear;
  buildGroup.visible=earthScene;
  resourceGroup.visible=earthScene&&townNear;
  lootGroup.visible=earthScene;
@@ -2535,7 +2948,7 @@ let hudUpdateAt=0,aiAccumulator=0,damageCooldown=0;const cameraLerpTarget=new T.
 function updateSurvival(dt,t){
  const s=world.playerStats;
  const moving=Math.hypot(move.x,move.y)>.15&&!activeVehicle&&!sitting;
- const safe=!moonMode&&((Math.abs(player.x)<50&&Math.abs(player.z)<50)||inCityZone(player.x,player.z))||moonMode&&(Math.abs(player.x)<35&&Math.abs(player.z-18)<38);
+ const safe=!moonMode&&((Math.abs(player.x)<50&&Math.abs(player.z)<50)||inCityZone(player.x,player.z)||(player.x>72&&player.x<194&&Math.abs(player.z)<72))||moonMode&&(Math.abs(player.x)<35&&Math.abs(player.z-18)<38);
  if(moving&&sprinting){
    s.stamina=Math.max(0,s.stamina-dt*18);
    if(s.stamina<4)sprinting=false
@@ -2571,7 +2984,7 @@ function nearestThreat(){
 }
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
- player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);
+ player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);updateRobotArena(dt,t);
  let targetFov=67;
  if(activeVehicle){
    const sp=Math.abs(activeVehicle.speed||0);

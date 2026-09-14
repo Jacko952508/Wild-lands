@@ -112,6 +112,16 @@
   <button id="autoTime">AUTO TIME: ON</button>
 </div>
 
+<div id="robotPanel" class="sidePanel robotDesigner hidden">
+  <div class="worldHead"><div><b>ROBOT COMBAT DESIGN LAB</b><div id="robotMatchStatus">NO MATCH ACTIVE</div></div><button id="robotClose">×</button></div>
+  <div class="robotSides">
+    <section class="robotSide"><h3>ROBOT A</h3><div id="robotAFields"></div><div class="robotStats" id="robotAStats"></div><button id="randomA">RANDOMISE A</button></section>
+    <section class="robotSide"><h3>ROBOT B</h3><div id="robotBFields"></div><div class="robotStats" id="robotBStats"></div><button id="randomB">RANDOMISE B</button></section>
+  </div>
+  <div class="robotActions"><button id="randomBoth">RANDOMISE BOTH</button><button id="startRobotMatch">START MATCH</button></div>
+  <div class="robotHint">Build both machines, or randomise them and watch the simulation. Weapons, armour, cores and mobility types counter each other.</div>
+</div>
+
 <div id="missionBanner" class="hidden"><span>MISSION COMPLETE</span><b id="missionBannerTitle">OBJECTIVE</b><small id="missionBannerReward">+0 XP</small></div>
 <div id="dangerVignette"></div>
 <div id="toast"></div>
