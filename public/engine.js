@@ -29,6 +29,32 @@ for(let i=0;i<420;i++){let a=Math.random()*Math.PI*2,y=Math.random()*0.72+0.2,r=
 starGeo.setAttribute('position',new T.Float32BufferAttribute(starPos,3));
 const stars=new T.Points(starGeo,new T.PointsMaterial({color:0xffffff,size:0.8,sizeAttenuation:false,transparent:true,opacity:0}));
 scene.add(stars);
+
+const spacePlanet=new T.Group();
+const planet=new T.Mesh(
+  new T.SphereGeometry(2200,48,32),
+  new T.MeshStandardMaterial({
+    color:0x245b76,
+    roughness:0.92,
+    emissive:0x07121a,
+    emissiveIntensity:0.35
+  })
+);
+const atmosphere=new T.Mesh(
+  new T.SphereGeometry(2230,48,32),
+  new T.MeshBasicMaterial({
+    color:0x5ca6cf,
+    transparent:true,
+    opacity:0.13,
+    side:T.BackSide
+  })
+);
+spacePlanet.add(planet,atmosphere);
+spacePlanet.visible=false;
+scene.add(spacePlanet);
+camera.far=7000;
+camera.updateProjectionMatrix();
+
 const rainCount=520,rainPos=new Float32Array(rainCount*3);for(let i=0;i<rainCount;i++){rainPos[i*3]=(Math.random()-.5)*80;rainPos[i*3+1]=Math.random()*42;rainPos[i*3+2]=(Math.random()-.5)*80}const rainGeo=new T.BufferGeometry();rainGeo.setAttribute('position',new T.BufferAttribute(rainPos,3));const rain=new T.Points(rainGeo,new T.PointsMaterial({color:0xc8def0,size:0.085,transparent:true,opacity:0,depthWrite:false}));scene.add(rain);
 const cloudGroup=new T.Group(),cloudGeo=new T.SphereGeometry(1,8,6),cloudMat=new T.MeshLambertMaterial({color:0xe5e8e5,transparent:true,opacity:0.25,depthWrite:false});for(let i=0;i<10;i++){let g=new T.Group();for(let j=0;j<3;j++){let m=new T.Mesh(cloudGeo,cloudMat.clone());m.scale.set(6+Math.random()*5,1.2+Math.random(),3+Math.random()*3);m.position.set((j-1)*4,Math.random(),Math.random()*2);g.add(m)}g.userData={a:i/10*Math.PI*2,r:70+Math.random()*70,h:40+Math.random()*22};cloudGroup.add(g)}scene.add(cloudGroup);
 
@@ -412,11 +438,75 @@ bindPad($('move'),move);bindPad($('look'),look);
 
 $('sprint').addEventListener('pointerdown',()=>{sprinting=true;$('sprint').classList.add('active')});
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>$('sprint').addEventListener(ev,()=>{sprinting=false;$('sprint').classList.remove('active')}));
-function nearestVehicle(){let best=null,bd=5;for(const v of vehicles){let d=Math.hypot(player.x-v.x,player.z-v.z);if(d<bd){bd=d;best=v}}return best}
-function refreshUse(){let b=$('use'),fc=$('flightControls');if(activeVehicle){b.classList.remove('hidden');b.textContent='EXIT '+activeVehicle.type.toUpperCase();fc.classList.toggle('hidden',!(activeVehicle.kind==='heli'||activeVehicle.kind==='jet'));return}fc.classList.add('hidden');let v=nearestVehicle();if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}else b.classList.add('hidden')}
+function nearestVehicle(){
+ let best=null,bd=5;
+ for(const v of vehicles){
+   let d=Math.hypot(player.x-v.x,player.z-v.z);
+   if(d<bd){bd=d;best=v}
+ }
+ for(const c of chunks.values()){
+   let g=c.anomaly;
+   if(!g||c.mode!=='near'||c.d.anomaly!=='ufo'||g.userData.piloted)continue;
+   let d=Math.hypot(player.x-g.position.x,player.z-g.position.z);
+   if(d<bd){
+     bd=d;
+     best={type:'UFO',kind:'ufoCandidate',group:g,chunk:c,x:g.position.x,z:g.position.z,yaw:g.rotation.y||0}
+   }
+ }
+ return best
+}
+function activateUfo(v){
+ let g=v.group,c=v.chunk;
+ if(c&&g.parent)c.near.remove(g);
+ scene.add(g);
+ if(c)c.anomaly=null;
+ g.userData.float=false;
+ g.userData.piloted=true;
+ let craft={
+   type:'UFO',
+   kind:'ufo',
+   group:g,
+   x:g.position.x,
+   z:g.position.z,
+   yaw:g.rotation.y||0,
+   speed:0,
+   alt:Math.max(1.8,g.position.y-H(g.position.x,g.position.z)),
+   worldY:g.position.y,
+   vy:0,
+   pitch:0,
+   roll:0,
+   inSpace:false
+ };
+ vehicles.push(craft);
+ return craft
+}
+function refreshUse(){
+ let b=$('use'),fc=$('flightControls');
+ if(activeVehicle){
+   b.classList.remove('hidden');
+   b.textContent='EXIT '+activeVehicle.type.toUpperCase();
+   fc.classList.toggle('hidden',!(activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'));
+   return
+ }
+ fc.classList.add('hidden');
+ let v=nearestVehicle();
+ if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}
+ else b.classList.add('hidden')
+}
 $('use').onclick=()=>{
- if(activeVehicle){let v=activeVehicle;activeVehicle=null;climbInput=0;$('flightControls').classList.add('hidden');player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;toast('Exited '+v.type);refreshUse();return}
- let v=nearestVehicle();if(!v)return;activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;if(v.kind==='heli'||v.kind==='jet')$('flightControls').classList.remove('hidden');else $('flightControls').classList.add('hidden');toast(v.type+' controls active');refreshUse();
+ if(activeVehicle){
+   let v=activeVehicle;
+   if(v.kind==='ufo'&&v.alt>8){toast('Land the UFO before exiting');return}
+   activeVehicle=null;climbInput=0;$('flightControls').classList.add('hidden');
+   player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;
+   toast('Exited '+v.type);refreshUse();return
+ }
+ let v=nearestVehicle();if(!v)return;
+ if(v.kind==='ufoCandidate')v=activateUfo(v);
+ activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;
+ if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo')$('flightControls').classList.remove('hidden');
+ else $('flightControls').classList.add('hidden');
+ toast(v.type+' controls active');refreshUse();
 };
 function bindHold(id,value){let b=$(id),stop=()=>{if(climbInput===value)climbInput=0};b.addEventListener('pointerdown',()=>climbInput=value);['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,stop))}
 bindHold('ascend',1);bindHold('descend',-1);
@@ -477,11 +567,39 @@ function updateSky(time,dt=0.016){
  if(worldCtl.autoTime){worldCtl.time=hour;$('timeSlider').value=hour.toFixed(2)}
  $('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
  sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);hemi.intensity=(0.18+day*0.95)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
- let dayCol=new T.Color(w==='storm'?0x48545b:w==='rain'?0x6f8088:w==='cloudy'?0x8fa2a4:0xa7c0bd),nightCol=new T.Color(0x06101a),c=nightCol.clone().lerp(dayCol,day);scene.background.copy(c);scene.fog.color.copy(c);
- scene.fog.density=w==='mist'?0.018:w==='storm'?0.012:w==='rain'?0.009:w==='cloudy'?0.0068:0.0048;
- stars.position.set(player.x,0,player.z);stars.material.opacity=(1-day)*(w==='clear'?1:0.35);
- let wet=w==='rain'||w==='storm';rain.material.opacity=wet?(w==='storm'?0.82:0.55):0;rain.position.set(player.x,0,player.z);for(let i=0;i<rainCount;i++){rainPos[i*3+1]-=dt*(w==='storm'?28:20);if(rainPos[i*3+1]<0)rainPos[i*3+1]=42}rainGeo.attributes.position.needsUpdate=wet;
+ let ufoAlt=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.alt:0,
+     spaceFactor=T.MathUtils.clamp((ufoAlt-110)/170,0,1),
+     dayCol=new T.Color(w==='storm'?0x48545b:w==='rain'?0x6f8088:w==='cloudy'?0x8fa2a4:0xa7c0bd),
+     nightCol=new T.Color(0x06101a),
+     c=nightCol.clone().lerp(dayCol,day).lerp(new T.Color(0x000106),spaceFactor);
+ scene.background.copy(c);scene.fog.color.copy(c);
+
+ let normalFog=w==='mist'?0.018:w==='storm'?0.012:w==='rain'?0.009:w==='cloudy'?0.0068:0.0048;
+ scene.fog.density=normalFog*(1-spaceFactor);
+
+ let skyY=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:0;
+ stars.position.set(player.x,skyY,player.z);
+ stars.material.opacity=Math.max((1-day)*(w==='clear'?1:0.35),spaceFactor);
+
+ let wet=(w==='rain'||w==='storm')&&spaceFactor<0.45;
+ rain.material.opacity=wet?(w==='storm'?0.82:0.55):0;
+ rain.position.set(player.x,0,player.z);
+ for(let i=0;i<rainCount;i++){rainPos[i*3+1]-=dt*(w==='storm'?28:20);if(rainPos[i*3+1]<0)rainPos[i*3+1]=42}
+ rainGeo.attributes.position.needsUpdate=wet;
+
+ cloudGroup.visible=spaceFactor<0.72;
  cloudGroup.children.forEach((g,i)=>{let u=g.userData;u.a+=dt*(w==='storm'?0.09:0.035);g.position.set(player.x+Math.cos(u.a)*u.r,u.h,player.z+Math.sin(u.a)*u.r);g.children.forEach(m=>m.material.opacity=w==='clear'?0.1:w==='cloudy'?0.38:w==='rain'?0.52:w==='storm'?0.68:0.22)});
+
+ spacePlanet.visible=spaceFactor>0.18;
+ startBase.visible=spaceFactor<0.88;
+ for(const ch of chunks.values())ch.root.visible=spaceFactor<0.88;
+ for(const craft of vehicles)if(craft!==activeVehicle)craft.group.visible=spaceFactor<0.88;
+ if(activeVehicle)activeVehicle.group.visible=true;
+ if(spacePlanet.visible){
+   spacePlanet.position.set(player.x,-2200,player.z);
+   atmosphere.material.opacity=0.13*spaceFactor;
+   sun.intensity=Math.max(sun.intensity,0.18+spaceFactor*0.55);
+ }
  document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
 }
 
@@ -516,6 +634,38 @@ function step(dt,t){
      v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.8));
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
      let rotor=v.group.getObjectByName('rotor');if(rotor)rotor.rotation.y+=dt*(v.alt>0||Math.abs(f)+Math.abs(side)+Math.abs(climbInput)>0?24:10);
+   }else if(v.kind==='ufo'){
+     let ground=H(v.x,v.z)+1.8;
+     if(v.worldY==null)v.worldY=ground+Math.max(0,v.alt||0);
+     let space=v.worldY-H(v.x,v.z)>160;
+     v.inSpace=space;
+     let turn=side-look.x*0.72;
+     v.yaw+=turn*dt*(space?1.3:0.95);
+
+     let targetSpeed=f*(space?(sprinting?165:95):(sprinting?42:24));
+     v.speed=T.MathUtils.lerp(v.speed,targetSpeed,Math.min(1,dt*(space?1.25:2.2)));
+
+     let strafe=side*(space?(sprinting?105:62):(sprinting?26:15));
+     v.x+=(Math.sin(v.yaw)*v.speed+Math.cos(v.yaw)*strafe)*dt;
+     v.z+=(Math.cos(v.yaw)*v.speed-Math.sin(v.yaw)*strafe)*dt;
+
+     let verticalAccel=space?(sprinting?190:125):(sprinting?72:46);
+     v.vy+=climbInput*verticalAccel*dt;
+     v.vy*=Math.max(0,1-dt*(space?0.32:0.85));
+     if(!climbInput&&Math.abs(v.vy)<0.03)v.vy=0;
+
+     v.worldY+=v.vy*dt;
+     ground=H(v.x,v.z)+1.8;
+     if(v.worldY<ground){v.worldY=ground;v.vy=Math.max(0,v.vy)}
+     v.worldY=Math.min(v.worldY,3400);
+     v.alt=Math.max(0,v.worldY-H(v.x,v.z));
+
+     v.pitch=T.MathUtils.lerp(v.pitch,f*0.20,Math.min(1,dt*3.1));
+     v.roll=T.MathUtils.lerp(v.roll,-side*0.28,Math.min(1,dt*3.4));
+
+     v.group.position.set(v.x,v.worldY,v.z);
+     v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+     v.group.rotation.y+=dt*(space?0.18:0.08);
    }else{
      let onGround=v.alt<0.12;
      let turnInput=side-look.x*0.65;
@@ -567,7 +717,9 @@ function step(dt,t){
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
-   let h=H(v.x,v.z)+(v.alt||0),back=v.kind==='jet'?9:v.kind==='heli'?7:5.5,up=v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5;
+   let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
+       back=v.kind==='ufo'?11:v.kind==='jet'?9:v.kind==='heli'?7:5.5,
+       up=v.kind==='ufo'?5:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5;
    let cam=new T.Vector3(v.x-Math.sin(v.yaw)*back,h+up,v.z-Math.cos(v.yaw)*back);
    camera.position.lerp(cam,0.16);camera.lookAt(v.x,h+1.1,v.z);
  }else{
@@ -579,10 +731,20 @@ function step(dt,t){
  }
 
  let cc=chunkOf(player.x,player.z);
- if(key(cc.cx,cc.cz)!==currentChunk)sync();
+ if(!(activeVehicle&&activeVehicle.kind==='ufo'&&activeVehicle.alt>180)&&key(cc.cx,cc.cz)!==currentChunk)sync();
  let deg=((player.yaw*180/Math.PI)%360+360)%360,names=['N','NE','E','SE','S','SW','W','NW'];
  $('compass').textContent=names[Math.round(deg/45)%8];
- let vehicleHud='';if(activeVehicle){vehicleHud=activeVehicle.type+' • '+Math.round(Math.abs(activeVehicle.speed||0)*3.6)+' km/h';if(activeVehicle.kind!=='buggy')vehicleHud+=' • '+Math.round(activeVehicle.alt)+'m'+(activeVehicle.stalled?' • STALL':'');vehicleHud+=' • '}$('stats').textContent=vehicleHud+biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife';
+ let vehicleHud='';
+ if(activeVehicle){
+   vehicleHud=activeVehicle.type+' • '+Math.round(Math.abs(activeVehicle.speed||0)*3.6)+' km/h';
+   if(activeVehicle.kind!=='buggy'){
+     vehicleHud+=' • '+Math.round(activeVehicle.alt)+'m';
+     if(activeVehicle.kind==='ufo'&&activeVehicle.alt>160)vehicleHud+=' • SPACE';
+     if(activeVehicle.stalled)vehicleHud+=' • STALL';
+   }
+   vehicleHud+=' • '
+ }
+ $('stats').textContent=vehicleHud+biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife';
  refreshUse();updateAnimals(dt,t);updateAnomalies(dt,t);updateSky(t,dt);
  for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
    let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
