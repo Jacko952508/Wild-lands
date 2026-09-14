@@ -31,7 +31,7 @@ camera.rotation.order='YXZ';
 
 const renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
 renderer.setSize(innerWidth,innerHeight);
-let renderScale=Math.min(devicePixelRatio,1.2);
+let renderScale=Math.min(devicePixelRatio,(matchMedia('(pointer:coarse)').matches||innerWidth<900)?1.0:1.2);
 renderer.setPixelRatio(renderScale);
 renderer.outputColorSpace=T.SRGBColorSpace;
 renderer.toneMapping=T.ACESFilmicToneMapping;
@@ -43,7 +43,7 @@ renderer.shadowMap.autoUpdate=false;renderer.shadowMap.needsUpdate=true;
 const hemi=new T.HemisphereLight(0xd9ecff,0x334238,1.1);
 const sun=new T.DirectionalLight(0xffe2ad,2.2);
 sun.castShadow=true;
-sun.shadow.mapSize.set(1024,1024);
+sun.shadow.mapSize.set((matchMedia('(pointer:coarse)').matches||innerWidth<900)?768:1024,(matchMedia('(pointer:coarse)').matches||innerWidth<900)?768:1024);
 sun.shadow.camera.left=-85;sun.shadow.camera.right=85;sun.shadow.camera.top=85;sun.shadow.camera.bottom=-85;
 scene.add(hemi,sun);
 
@@ -108,10 +108,10 @@ scene.add(spacePlanet);
 camera.far=12000;
 camera.updateProjectionMatrix();
 
-const rainCount=520,rainPos=new Float32Array(rainCount*3);for(let i=0;i<rainCount;i++){rainPos[i*3]=(Math.random()-.5)*80;rainPos[i*3+1]=Math.random()*42;rainPos[i*3+2]=(Math.random()-.5)*80}const rainGeo=new T.BufferGeometry();rainGeo.setAttribute('position',new T.BufferAttribute(rainPos,3));const rain=new T.Points(rainGeo,new T.PointsMaterial({color:0xc8def0,size:0.085,transparent:true,opacity:0,depthWrite:false}));scene.add(rain);
-const cloudGroup=new T.Group(),cloudGeo=new T.SphereGeometry(1,8,6),cloudMat=new T.MeshLambertMaterial({color:0xe5e8e5,transparent:true,opacity:0.25,depthWrite:false});for(let i=0;i<10;i++){let g=new T.Group();for(let j=0;j<3;j++){let m=new T.Mesh(cloudGeo,cloudMat.clone());m.scale.set(6+Math.random()*5,1.2+Math.random(),3+Math.random()*3);m.position.set((j-1)*4,Math.random(),Math.random()*2);g.add(m)}g.userData={a:i/10*Math.PI*2,r:70+Math.random()*70,h:40+Math.random()*22};cloudGroup.add(g)}scene.add(cloudGroup);
+const rainCount=(matchMedia('(pointer:coarse)').matches||innerWidth<900)?280:520,rainPos=new Float32Array(rainCount*3);for(let i=0;i<rainCount;i++){rainPos[i*3]=(Math.random()-.5)*80;rainPos[i*3+1]=Math.random()*42;rainPos[i*3+2]=(Math.random()-.5)*80}const rainGeo=new T.BufferGeometry();rainGeo.setAttribute('position',new T.BufferAttribute(rainPos,3));const rain=new T.Points(rainGeo,new T.PointsMaterial({color:0xc8def0,size:0.085,transparent:true,opacity:0,depthWrite:false}));scene.add(rain);
+const cloudGroup=new T.Group(),cloudGeo=new T.SphereGeometry(1,8,6),cloudMat=new T.MeshLambertMaterial({color:0xe5e8e5,transparent:true,opacity:0.25,depthWrite:false}),cloudCount=(matchMedia('(pointer:coarse)').matches||innerWidth<900)?6:10;for(let i=0;i<cloudCount;i++){let g=new T.Group();for(let j=0;j<3;j++){let m=new T.Mesh(cloudGeo,cloudMat.clone());m.scale.set(6+Math.random()*5,1.2+Math.random(),3+Math.random()*3);m.position.set((j-1)*4,Math.random(),Math.random()*2);g.add(m)}g.userData={a:i/10*Math.PI*2,r:70+Math.random()*70,h:40+Math.random()*22};cloudGroup.add(g)}scene.add(cloudGroup);
 
-const CH=96,NEAR=1,FAR=3,CACHE=4;
+const CH=96,NEAR=1,IS_MOBILE=matchMedia('(pointer:coarse)').matches||innerWidth<900,FAR=IS_MOBILE?2:3,CACHE=IS_MOBILE?3:4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
@@ -123,7 +123,7 @@ if(!player)player={x:-14.5,z:-24,yaw:Math.PI/2,pitch:-0.03};
 
 const seed=world.seed;
 const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
-let currentChunk='',saveTimer=0,lastSyncX=1e9,lastSyncZ=1e9,syncGeneration=0;
+let currentChunk='',saveTimer=0,lastSyncX=1e9,lastSyncZ=1e9,syncGeneration=0,exploredCount=Object.keys(world.explored).length;
 let mapView={cx:0,cz:0},mapSelected=null;
 
 function key(x,z){return x+','+z}
@@ -246,7 +246,7 @@ function descriptor(cx,cz){
 function saveVisitedDescriptor(cx,cz){
  let k=key(cx,cz);
  if(!world.saved[k])world.saved[k]=descriptor(cx,cz);
- if(!world.explored[k]){world.explored[k]=Date.now();toast('Region discovered');}
+ if(!world.explored[k]){world.explored[k]=Date.now();exploredCount++;toast('Region discovered');}
 }
 
 function terrain(cx,cz,seg){
@@ -264,6 +264,15 @@ function terrain(cx,cz,seg){
 }
 
 const farTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,5),farPineGeo=new T.ConeGeometry(1.3,4.2,6),farLeafGeo=new T.ConeGeometry(1.55,4.4,6);
+const sharedChunkGeometries=new Set([farTrunkGeo,farPineGeo,farLeafGeo]);
+const sharedMaterials=new Set(Object.values(mats));
+function disposeObjectTree(root){
+ root.traverse(o=>{
+   if(o.geometry&&!sharedChunkGeometries.has(o.geometry))o.geometry.dispose?.();
+   const arr=Array.isArray(o.material)?o.material:[o.material];
+   for(const m of arr)if(m&&!sharedMaterials.has(m))m.dispose?.()
+ })
+}
 function addFarTrees(group,d,cx,cz){
  const trees=[];
  for(let i=0;i<d.trees.length;i+=3){
@@ -287,6 +296,45 @@ function addFarTrees(group,d,cx,cz){
  trunks.instanceMatrix.needsUpdate=true;trunks.frustumCulled=true;group.add(trunks);
  if(pines){pines.instanceMatrix.needsUpdate=true;group.add(pines)}
  if(leaves){leaves.instanceMatrix.needsUpdate=true;group.add(leaves)}
+}
+const nearTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,7),
+      nearPineGeo=new T.ConeGeometry(1,1,8),
+      nearLeafGeo=new T.IcosahedronGeometry(1,1),
+      nearRockGeo=new T.DodecahedronGeometry(1,0);
+sharedChunkGeometries.add(nearTrunkGeo);sharedChunkGeometries.add(nearPineGeo);sharedChunkGeometries.add(nearLeafGeo);sharedChunkGeometries.add(nearRockGeo);
+function addNearNature(group,d,cx,cz){
+ const trees=d.trees.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])),
+       rocks=d.rocks.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])),
+       pineTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])==='pine'),
+       broadTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])!=='pine'),
+       trunks=trees.length?new T.InstancedMesh(nearTrunkGeo,mats.trunk,trees.length):null,
+       pines=pineTrees.length?new T.InstancedMesh(nearPineGeo,mats.pine,pineTrees.length*3):null,
+       leavesA=broadTrees.length?new T.InstancedMesh(nearLeafGeo,mats.leaf,broadTrees.length*2):null,
+       leavesB=broadTrees.length?new T.InstancedMesh(nearLeafGeo,mats.leaf2,broadTrees.length*2):null,
+       rockMesh=rocks.length?new T.InstancedMesh(nearRockGeo,mats.rock,rocks.length):null,
+       o=new T.Object3D();
+ let ti=0,pi=0,la=0,lb=0,ri=0;
+ for(const q of trees){
+   const wx=cx*CH+q[0],wz=cz*CH+q[1],s=q[2],y=H(wx,wz),pine=biome(wx,wz)==='pine';
+   o.position.set(wx,y+1.9*s,wz);o.rotation.set(0,0,0);o.scale.setScalar(s);o.updateMatrix();trunks.setMatrixAt(ti++,o.matrix);
+   if(pine){
+     for(let i=0;i<3;i++){
+       const rad=(1.3-i*.18)*s,h=2.5*s;
+       o.position.set(wx,y+(3.2+i*.75)*s,wz);o.scale.set(rad,h,rad);o.updateMatrix();pines.setMatrixAt(pi++,o.matrix)
+     }
+   }else{
+     for(let i=0;i<4;i++){
+       const a=i/4*Math.PI*2+hash(wx+i,wz,6),rs=(1+.2*hash(wx+i,wz-i,5))*s;
+       o.position.set(wx+Math.cos(a)*.55*s,y+(3.5+.4*hash(wx,wz+i,7))*s,wz+Math.sin(a)*.55*s);o.scale.setScalar(rs);o.updateMatrix();
+       (i%2?leavesB:leavesA).setMatrixAt(i%2?lb++:la++,o.matrix)
+     }
+   }
+ }
+ for(const q of rocks){
+   const wx=cx*CH+q[0],wz=cz*CH+q[1],s=q[2],y=H(wx,wz);
+   o.position.set(wx,y+s*.55,wz);o.rotation.set(0,hash(wx,wz,31)*Math.PI*2,0);o.scale.set(s,s*.7,s);o.updateMatrix();rockMesh.setMatrixAt(ri++,o.matrix)
+ }
+ for(const m of[trunks,pines,leavesA,leavesB,rockMesh])if(m){m.instanceMatrix.needsUpdate=true;m.castShadow=!IS_MOBILE;m.receiveShadow=true;group.add(m)}
 }
 function makeTree(wx,wz,s,detail){
  let g=new T.Group(),b=biome(wx,wz),tr=new T.Mesh(new T.CylinderGeometry(0.18*s,0.38*s,3.8*s,detail?7:5),mats.trunk);
@@ -1033,14 +1081,22 @@ function makeMoonWorld(){
    let pad=new T.Mesh(new T.CircleGeometry(7,24),cityM.concrete);pad.rotation.x=-Math.PI/2;pad.position.set(x,moonH(x,-13)+.08,-13);g.add(pad)
  }
 
- // Scatter lunar boulders across the rough terrain beyond the base.
+ // Scatter lunar boulders using two instanced batches instead of dozens of draw calls.
+ const moonRockGeo=new T.DodecahedronGeometry(1,1),
+       moonRockA=new T.InstancedMesh(moonRockGeo,cityMat(0x6e6d69,1),28),
+       moonRockB=new T.InstancedMesh(moonRockGeo,cityMat(0x85837d,1),42),
+       rockObj=new T.Object3D();let ra=0,rb=0;
  for(let i=0;i<70;i++){
    let a=i*2.3999632297,r=95+(i%14)*23,x=Math.cos(a)*r,z=Math.sin(a)*r+18;
    if(Math.abs(x)<58&&Math.abs(z-18)<62)continue;
-   let s=.7+(i%5)*.34,m=new T.Mesh(new T.DodecahedronGeometry(s,1),cityMat(i%3===0?0x6e6d69:0x85837d,1));
-   m.scale.set(1.15,.62+.12*(i%3),.9);m.rotation.set((i%4)*.18,a,(i%5)*.11);
-   m.position.set(x,moonH(x,z)+s*.55,z);m.castShadow=true;g.add(m)
+   let s=.7+(i%5)*.34;
+   rockObj.position.set(x,moonH(x,z)+s*.55,z);
+   rockObj.rotation.set((i%4)*.18,a,(i%5)*.11);
+   rockObj.scale.set(1.15*s,(.62+.12*(i%3))*s,.9*s);rockObj.updateMatrix();
+   if(i%3===0)moonRockA.setMatrixAt(ra++,rockObj.matrix);else moonRockB.setMatrixAt(rb++,rockObj.matrix)
  }
+ moonRockA.count=ra;moonRockB.count=rb;moonRockA.instanceMatrix.needsUpdate=true;moonRockB.instanceMatrix.needsUpdate=true;
+ moonRockA.castShadow=true;moonRockB.castShadow=true;g.add(moonRockA,moonRockB);
 
  // Distant lunar points of interest: relay wreck, abandoned drill and cave mouth.
  const wreckMat=new T.MeshStandardMaterial({color:0x51585c,roughness:.55,metalness:.65});
@@ -1094,9 +1150,9 @@ scene.traverse(o=>{
    managedLights.push(o)
  }
 });
-const lightProbe=new T.Vector3();let lightUpdateAt=0;
+const lightProbe=new T.Vector3(),shadowProbe=new T.Vector3();let lightUpdateAt=0,shadowCullAt=0;
 function updateManagedLights(day){
- const now=performance.now();if(now-lightUpdateAt<180)return;lightUpdateAt=now;
+ const now=performance.now();if(now-lightUpdateAt<220)return;lightUpdateAt=now;
  const dark=moonMode?1:T.MathUtils.clamp(1-day+.08,0,1);
  for(const l of managedLights){
    const owner=l.userData.owner;
@@ -1109,6 +1165,18 @@ function updateManagedLights(day){
          on=d<max&&dark>.08;
    l.visible=on;if(on)l.intensity=(l.userData.baseIntensity||1)*dark*beamBoost
  }
+}
+function updateShadowCasters(){
+ const now=performance.now();if(now-shadowCullAt<(IS_MOBILE?750:500))return;shadowCullAt=now;
+ const px=player.x,pz=player.z,maxDist=IS_MOBILE?52:72;
+ scene.traverse(o=>{
+   if(!o.isMesh)return;
+   if(o.userData.shadowCandidate===undefined)o.userData.shadowCandidate=!!o.castShadow;
+   if(o.isInstancedMesh){if(o.userData.shadowCandidate)o.castShadow=!IS_MOBILE;return}
+   if(!o.userData.shadowCandidate)return;
+   o.getWorldPosition(shadowProbe);
+   o.castShadow=o.visible&&Math.abs(shadowProbe.x-px)<maxDist&&Math.abs(shadowProbe.z-pz)<maxDist
+ })
 }
 
 function createChunk(cx,cz){
@@ -1123,11 +1191,8 @@ function createChunk(cx,cz){
  // Keep one terrain mesh per chunk for both LOD modes. This preserves
  // identical ground topology while avoiding two full terrain meshes per chunk.
  const ground=terrain(cx,cz,20);root.add(ground);
- for(const q of d.trees){
-   let wx=cx*CH+q[0],wz=cz*CH+q[1];if(!inCityZone(wx,wz))near.add(makeTree(wx,wz,q[2],true));
- }
+ addNearNature(near,d,cx,cz);
  addFarTrees(far,d,cx,cz);
- for(const q of d.rocks){let wx=cx*CH+q[0],wz=cz*CH+q[1];if(inCityZone(wx,wz))continue;let m=new T.Mesh(new T.DodecahedronGeometry(q[2],0),mats.rock);m.position.set(wx,H(wx,wz)+q[2]*0.55,wz);m.scale.y=0.7;m.castShadow=true;near.add(m)}
  if(d.mark){near.add(landmarkModel(cx,cz,d.mark));addTrail(near,cx,cz,d)}
  let anomaly=null;if(d.anomaly){anomaly=anomalyModel(d.anomaly,cx,cz);near.add(anomaly)}
  root.add(near,far);near.visible=false;far.visible=false;scene.add(root);
@@ -1148,7 +1213,7 @@ function loadAnimals(c){
 function unloadAnimals(c){
  if(!c.agents.length)return;
  world.animalState[c.k]=c.agents.map(a=>({x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(3)}));
- for(const a of c.agents){scene.remove(a.group);let ix=animalAgents.indexOf(a);if(ix>=0)animalAgents.splice(ix,1)}
+ for(const a of c.agents){scene.remove(a.group);disposeObjectTree(a.group);let ix=animalAgents.indexOf(a);if(ix>=0)animalAgents.splice(ix,1)}
  c.agents.length=0;
 }
 
@@ -1235,7 +1300,7 @@ function sync(force=false){
  for(const [k,c] of chunks){
    let dx=Math.abs(c.cx-cc.cx),dz=Math.abs(c.cz-cc.cz);
    if(dx>CACHE||dz>CACHE){
-     unloadAnimals(c);scene.remove(c.root);chunks.delete(k);
+     unloadAnimals(c);scene.remove(c.root);disposeObjectTree(c.root);chunks.delete(k);
    }else if(!keepSet.has(k)){c.near.visible=false;c.far.visible=false;c.ground.visible=false;c.mode='none';unloadAnimals(c)}
  }
  rebuildColliders(nearSet);
@@ -1551,7 +1616,9 @@ function completeMission(i){
  p.completed.push(i);p.mission=Math.max(p.mission,i+1);p.xp+=missions[i].xp;p.reputation+=1;world.credits+=missions[i].reward;updateLevel();persist();
  toast('MISSION COMPLETE • '+missions[i].title+' • +'+missions[i].reward+' credits')
 }
-function checkMissions(){
+let missionCheckAt=0;
+function checkMissions(force=false){
+ const now=performance.now();if(!force&&now-missionCheckAt<500)return;missionCheckAt=now;
  const p=world.progress;
  for(let i=0;i<missions.length;i++)if(!p.completed.includes(i)&&missions[i].done()){completeMission(i);break}
  const idx=missions.findIndex((m,i)=>!p.completed.includes(i));
@@ -2000,10 +2067,13 @@ function leaveMoon(v){
  toast('Leaving lunar gravity');
 }
 
-let skyUiAt=0;
+let skyUiAt=0,skyUpdateAt=0;
 function updateSky(time,dt=0.016){
+ const now=performance.now();
+ if(now-skyUpdateAt<50)return;
+ dt=Math.min(.1,skyUpdateAt?(now-skyUpdateAt)/1000:dt);skyUpdateAt=now;
  let hour=worldCtl.autoTime?((time/480)*24)%24:worldCtl.time,cycle=hour/24,a=cycle*Math.PI*2-Math.PI/2,sy=Math.sin(a),day=T.MathUtils.clamp((sy+0.18)*2.3,0,1),w=worldCtl.weather;
- const now=performance.now(),updateUi=now-skyUiAt>180;if(updateUi)skyUiAt=now;
+ const updateUi=now-skyUiAt>180;if(updateUi)skyUiAt=now;
  if(worldCtl.autoTime){worldCtl.time=hour;if(updateUi)$('timeSlider').value=hour.toFixed(2)}
  if(updateUi)$('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
  sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);hemi.intensity=(0.18+day*0.95)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
@@ -2036,12 +2106,15 @@ function updateSky(time,dt=0.016){
    let baseY=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:(moonMode?camera.position.y:0);
    spaceSun.position.set(player.x+5200,baseY+1700,player.z-4100);
  }
- startBase.visible=!moonMode&&spaceFactor<0.88;
- cityGroup.visible=!moonMode&&spaceFactor<0.88;
- buildGroup.visible=!moonMode&&spaceFactor<0.88;
- resourceGroup.visible=!moonMode&&spaceFactor<0.88;
- lootGroup.visible=!moonMode&&spaceFactor<0.88;
- poiGroup.visible=!moonMode&&spaceFactor<0.88;
+ const earthScene=!moonMode&&spaceFactor<0.88,
+       airfieldNear=Math.hypot(player.x,player.z)<340,
+       townNear=Math.hypot(player.x+126,player.z-6)<380;
+ startBase.visible=earthScene&&airfieldNear;
+ cityGroup.visible=earthScene&&townNear;
+ buildGroup.visible=earthScene;
+ resourceGroup.visible=earthScene&&townNear;
+ lootGroup.visible=earthScene;
+ poiGroup.visible=earthScene;
  moonGroup.visible=moonMode;
  for(const ch of chunks.values())ch.root.visible=!moonMode&&spaceFactor<0.88;
  for(const craft of vehicles){
@@ -2299,7 +2372,7 @@ function step(dt,t){
  aiAccumulator+=dt;
  if(aiAccumulator>=0.033){
    const simDt=Math.min(aiAccumulator,.066);aiAccumulator=0;
-   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t);updateTownHumans(t)}
+   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t);if(Math.abs(player.x+126)<115&&Math.abs(player.z-6)<100)updateTownHumans(t)}
  }
 
  // HUD/context checks are intentionally throttled; movement/camera remain full-rate.
@@ -2325,7 +2398,7 @@ function step(dt,t){
      $('vehicleCard').classList.add('hidden')
    }
    if(activeVehicle&&activeVehicle.kind==='ufo'&&!moonMode&&activeVehicle.inSpace){let md=Math.hypot(activeVehicle.x-SPACE_MOON.x,activeVehicle.worldY-SPACE_MOON.y,activeVehicle.z-SPACE_MOON.z);vehicleHud+='MOON '+Math.round(md)+'m • '}
-   $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife');
+   $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+exploredCount+' visited • '+animalAgents.length+' wildlife');
    checkMissions();refreshUse();
    for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
      let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
@@ -2338,29 +2411,34 @@ function step(dt,t){
 
 sync(true);
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
-let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0;
+let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0,lastFrameAt=0;
 function loop(now){
- let rawDt=(now-last)/1000,dt=Math.min(0.04,rawDt);last=now;let t=now/1000;
- step(dt,t-start);processFarQueue();
+ requestAnimationFrame(loop);
 
- // Sun shadows are expensive on mobile; refresh them often enough to look continuous
- // without re-rendering the full shadow map on every display frame.
- if(now-shadowAt>120){shadowAt=now;renderer.shadowMap.needsUpdate=true}
+ // iPhone ProMotion can request 120fps; this game deliberately targets a stable 60.
+ if(now-lastFrameAt<15.5)return;
+ lastFrameAt=now;
+
+ let rawDt=(now-last)/1000,dt=Math.min(0.04,rawDt);last=now;let t=now/1000;
+ step(dt,t-start);processFarQueue();updateShadowCasters();
+
+ // Shadows remain dynamic, but rebuilding them every 8 frames was needlessly costly.
+ const shadowInterval=IS_MOBILE?260:170;
+ if(now-shadowAt>shadowInterval){shadowAt=now;renderer.shadowMap.needsUpdate=true}
 
  renderer.render(scene,camera);
 
- // Adaptive internal resolution: preserve sharpness when there is GPU headroom,
- // back off slightly during heavy scenes instead of dropping simulation/gameplay.
+ // Prefer maintaining frame pacing over native-pixel rendering on a phone.
  perfFrames++;perfTotal+=rawDt;
- if(now-perfAt>1800){
-   const avg=perfTotal/Math.max(1,perfFrames),cap=Math.min(devicePixelRatio,1.25);
+ if(now-perfAt>1400){
+   const avg=perfTotal/Math.max(1,perfFrames),cap=Math.min(devicePixelRatio,IS_MOBILE?1.0:1.2);
    let next=renderScale;
-   if(avg>.0215)next=Math.max(.9,renderScale-.08);
-   else if(avg<.0172)next=Math.min(cap,renderScale+.04);
+   if(avg>.027)next=Math.max(.72,renderScale-.14);
+   else if(avg>.0205)next=Math.max(.72,renderScale-.08);
+   else if(avg<.0174)next=Math.min(cap,renderScale+.035);
    if(Math.abs(next-renderScale)>.01){renderScale=next;renderer.setPixelRatio(renderScale);renderer.setSize(innerWidth,innerHeight,false)}
    perfAt=now;perfFrames=0;perfTotal=0
  }
- requestAnimationFrame(loop)
 }
 requestAnimationFrame(loop);
 
