@@ -96,7 +96,7 @@ if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalS
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
-if(!player)player={x:0,z:12,yaw:0,pitch:-0.03};
+if(!player)player={x:-14.5,z:-24,yaw:Math.PI/2,pitch:-0.03};
 
 const seed=world.seed;
 const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
@@ -110,7 +110,15 @@ function smooth(t){return t*t*(3-2*t)}
 function noise(x,z,s=0){let X=Math.floor(x),Z=Math.floor(z),fx=x-X,fz=z-Z,a=hash(X,Z,s),b=hash(X+1,Z,s),c=hash(X,Z+1,s),d=hash(X+1,Z+1,s),u=smooth(fx),v=smooth(fz);return T.MathUtils.lerp(T.MathUtils.lerp(a,b,u),T.MathUtils.lerp(c,d,u),v)}
 function fbm(x,z,s=0){let a=0.5,f=1,v=0;for(let i=0;i<5;i++){v+=a*noise(x*f,z*f,s+i*29);a*=0.5;f*=2.02}return v}
 let moonMode=false;
-function earthH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
+function earthRawH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
+const START_PLATEAU=earthRawH(0,0);
+function earthH(x,z){
+  const raw=earthRawH(x,z),edge=Math.max(Math.abs(x),Math.abs(z));
+  if(edge<=46)return START_PLATEAU;
+  if(edge>=48)return raw;
+  let t=smooth((edge-46)/2);
+  return T.MathUtils.lerp(START_PLATEAU,raw,t)
+}
 function moonH(x,z){
  let broad=(fbm(x*0.006,z*0.006,901)-0.5)*7,
      craters=(fbm(x*0.021,z*0.021,902)-0.5)*2.8,
@@ -122,7 +130,7 @@ function biome(x,z){let h=H(x,z),m=fbm(x*0.002,z*0.002,50),t=fbm(x*0.0015,z*0.00
 const regionA=['Ash','Raven','Moon','Fox','Elder','Black','Silver','Storm','Moss','Frost','Hollow','Red'],regionB=['Reach','Vale','Moor','Wood','Fell','Hollow','Watch','Ridge','Wilds','Basin','March','Field'];
 function regionName(cx,cz){return regionA[Math.floor(hash(cx,cz,701)*regionA.length)]+' '+regionB[Math.floor(hash(cx,cz,702)*regionB.length)]}
 function slopeAt(x,z){return Math.hypot(H(x+0.8,z)-H(x-0.8,z),H(x,z+0.8)-H(x,z-0.8))}
-function inStartClearZone(x,z){return (Math.abs(x-24)<15&&Math.abs(z)<47)||Math.hypot(x+27,z+18)<10||Math.hypot(x+16,z-4)<7}
+function inStartClearZone(x,z){return Math.abs(x)<46&&Math.abs(z)<46}
 
 const biomeColor={alpine:0x858882,highland:0x6e7868,pine:0x385942,forest:0x476f48,meadow:0x7f9b64,woodland:0x617e5a};
 const mats={
@@ -297,15 +305,110 @@ function makeJet(x,z){
  let glass=new T.Mesh(new T.SphereGeometry(0.55,10,7),mats.glass);glass.scale.set(0.8,0.45,1.4);glass.position.set(0,1.65,1.7);g.add(glass);
  g.position.set(x,H(x,z)+0.25,z);scene.add(g);vehicles.push({type:'Jet',kind:'jet',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false});g.rotation.y=Math.PI;return g;
 }
+const startColliders=[];
+function startBox(parent,x,y,z,w,h,d,mat,collide=false){
+ let m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);
+ m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);
+ if(collide)startColliders.push({x,z,hx:w/2,hz:d/2});
+ return m
+}
+function makeWelcomeScreen(parent,x,y,z){
+ const cv=document.createElement('canvas');cv.width=512;cv.height=256;
+ const ctx=cv.getContext('2d');
+ ctx.fillStyle='#061014';ctx.fillRect(0,0,512,256);
+ ctx.strokeStyle='#76f7ff';ctx.lineWidth=8;ctx.strokeRect(8,8,496,240);
+ ctx.fillStyle='#9ffcff';ctx.textAlign='center';ctx.font='bold 35px Arial';
+ ctx.fillText('WELCOME TO THE GAME',256,92);
+ ctx.font='bold 29px Arial';ctx.fillText('GO EXPLORE!',256,150);
+ ctx.font='18px Arial';ctx.fillStyle='#c8ffff';ctx.fillText('AIRFIELD // BASE ONLINE',256,202);
+ const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;
+ const mat=new T.MeshStandardMaterial({map:tex,emissive:0x103c42,emissiveIntensity:1.4,roughness:.28});
+ const scr=new T.Mesh(new T.PlaneGeometry(5.4,2.7),mat);
+ scr.position.set(x,y,z);scr.rotation.y=Math.PI/2;parent.add(scr);
+ const glow=new T.PointLight(0x72efff,1.6,8);glow.position.set(x+1,y,z);parent.add(glow);
+ return scr
+}
 function runwayStrip(){
- let g=new T.Group(),verts=[],inds=[],N=24,x0=24,w=8,z0=-46,z1=46;
- for(let i=0;i<=N;i++){let z=T.MathUtils.lerp(z0,z1,i/N);for(const s of[-1,1]){let x=x0+s*w;verts.push(x,H(x,z)+0.06,z)}}
- for(let i=0;i<N;i++){let a=i*2,b=a+1,c=a+2,d=a+3;inds.push(a,c,b,b,c,d)}
- let geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(verts,3));geo.setIndex(inds);geo.computeVertexNormals();let r=new T.Mesh(geo,mats.runway);r.receiveShadow=true;g.add(r);
- for(let i=0;i<10;i++){let z=T.MathUtils.lerp(-40,40,i/9),m=new T.Mesh(new T.BoxGeometry(0.35,0.03,4.3),mats.stripe);m.position.set(24,H(24,z)+0.1,z);g.add(m)}
- for(const side of[-1,1])for(let i=0;i<18;i++){let z=T.MathUtils.lerp(-44,44,i/17),lamp=new T.Mesh(new T.SphereGeometry(0.08,5,4),new T.MeshBasicMaterial({color:0xffefaa}));lamp.position.set(24+side*8.4,H(24+side*8.4,z)+0.18,z);g.add(lamp)}
- let pad=new T.Mesh(new T.CircleGeometry(8,24),mats.runway);pad.rotation.x=-Math.PI/2;pad.position.set(-27,H(-27,-18)+0.05,-18);g.add(pad);
- scene.add(g);makeBuggy(-16,-4);makeHeli(-27,-18);makeJet(24,-20);return g;
+ let g=new T.Group(),y=START_PLATEAU;
+ const concrete=new T.MeshStandardMaterial({color:0x8e9392,roughness:.96});
+ const hangarMat=new T.MeshStandardMaterial({color:0x4b5559,roughness:.72,metalness:.22});
+ const innerMat=new T.MeshStandardMaterial({color:0x252d30,roughness:.9});
+ const yellow=new T.MeshBasicMaterial({color:0xe9c747});
+ const white=new T.MeshBasicMaterial({color:0xf2f0dd});
+ const blue=new T.MeshBasicMaterial({color:0x86ddff});
+
+ // Full-width, level runway with thresholds, centreline, edge lights and taxiway.
+ startBox(g,24,y+.055,0,18,.11,92,mats.runway,false);
+ for(let z=-37;z<=37;z+=9)startBox(g,24,y+.125,z,.38,.03,4.8,white,false);
+ for(const z of[-43,43])for(let x=18;x<=30;x+=2.4)startBox(g,x,y+.13,z,.7,.035,5.2,white,false);
+ for(const side of[-1,1])for(let z=-43;z<=43;z+=5){
+   let bulb=new T.Mesh(new T.SphereGeometry(.105,6,4),new T.MeshBasicMaterial({color:side<0?0x82caff:0xfff2bd}));
+   bulb.position.set(24+side*9.15,y+.22,z);g.add(bulb)
+ }
+ startBox(g,8,y+.065,-24,24,.13,8,mats.runway,false);
+ for(let x=-2;x<=19;x+=4)startBox(g,x,y+.135,-24,1.7,.035,.22,yellow,false);
+
+ // Main aircraft hangar. East/front side is fully open onto taxiway.
+ const hx=-3,hz=-24,hw=30,hd=28,hh=9;
+ startBox(g,hx,y+.12,hz,hw,.24,hd,concrete,false);
+ startBox(g,hx,y+hh,hz,hw,.42,hd,hangarMat,false);
+ startBox(g,hx-hw/2+.25,y+hh/2,hz,.5,hh,hd,hangarMat,true);
+ startBox(g,hx,y+hh/2,hz-hd/2+.25,hw,hh,.5,hangarMat,true);
+ startBox(g,hx,y+hh/2,hz+hd/2-.25,hw,hh,.5,hangarMat,true);
+ // front corner columns frame the open aircraft entrance
+ startBox(g,hx+hw/2-.28,y+hh/2,hz-hd/2+2,.56,hh,4,hangarMat,true);
+ startBox(g,hx+hw/2-.28,y+hh/2,hz+hd/2-2,.56,hh,4,hangarMat,true);
+
+ // Starter briefing room built inside the rear of the hangar.
+ const wallX=-10.2,roomWest=hx-hw/2+.5;
+ startBox(g,wallX,y+3.1,hz-8.0,.42,6.2,8.0,innerMat,true);
+ startBox(g,wallX,y+3.1,hz+8.0,.42,6.2,8.0,innerMat,true);
+ startBox(g,wallX,y+5.25,hz,.42,1.9,8.0,innerMat,true);
+ // visibly open sliding door beside the doorway
+ startBox(g,wallX-.18,y+2.0,hz+5.7,.16,4.0,3.2,new T.MeshStandardMaterial({color:0x394449,metalness:.45,roughness:.5}),false);
+ // desk and small seating in start room
+ startBox(g,-14.2,y+.55,-29.2,4.8,1.1,1.1,innerMat,true);
+ startBox(g,-14.8,y+.45,-20.1,2.4,.9,1.2,innerMat,true);
+ startBox(g,-12.5,y+.45,-20.1,1.0,.9,1.0,innerMat,true);
+ makeWelcomeScreen(g,-17.68,y+3.2,-24);
+
+ // overhead hangar lighting
+ for(const z of[-33,-27,-21,-15]){
+   const strip=new T.Mesh(new T.BoxGeometry(11,.08,.22),new T.MeshBasicMaterial({color:0xcdefff}));
+   strip.position.set(-2.5,y+8.55,z);g.add(strip)
+ }
+
+ // Dedicated helipad.
+ const pad=new T.Mesh(new T.CircleGeometry(8.5,32),mats.runway);
+ pad.rotation.x=-Math.PI/2;pad.position.set(-28,y+.075,-3);g.add(pad);
+ const ring=new T.Mesh(new T.RingGeometry(5.2,5.65,32),white);ring.rotation.x=-Math.PI/2;ring.position.set(-28,y+.13,-3);g.add(ring);
+ startBox(g,-28,y+.14,-3,.5,.035,7.4,white,false);
+ startBox(g,-28,y+.14,-3,5.0,.035,.5,white,false);
+
+ // Car garage, open toward the airfield.
+ const gx=-29,gz=24,gw=15,gd=13,gh=5.5;
+ startBox(g,gx,y+.1,gz,gw,.2,gd,concrete,false);
+ startBox(g,gx,y+gh,gz,gw,.35,gd,hangarMat,false);
+ startBox(g,gx-gw/2+.25,y+gh/2,gz,.5,gh,gd,hangarMat,true);
+ startBox(g,gx,y+gh/2,gz-gd/2+.25,gw,gh,.5,hangarMat,true);
+ startBox(g,gx,y+gh/2,gz+gd/2-.25,gw,gh,.5,hangarMat,true);
+ startBox(g,gx+gw/2-.25,y+gh/2,gz-gd/2+1.6,.5,gh,3.2,hangarMat,true);
+ startBox(g,gx+gw/2-.25,y+gh/2,gz+gd/2-1.6,.5,gh,3.2,hangarMat,true);
+ startBox(g,-18.5,y+.06,24,7,.12,8,mats.runway,false);
+
+ // Base floodlights and signage.
+ for(const [x,z] of[[-18,-39],[-18,-9],[15,-38],[15,-10],[-36,-11],[-20,7],[-37,17],[-20,31]]){
+   startBox(g,x,y+2.3,z,.16,4.6,.16,innerMat,false);
+   let l=new T.PointLight(0xe5f5ff,1.2,28);l.position.set(x,y+4.6,z);g.add(l)
+ }
+ const sign=startBox(g,-2,y+7.15,-38.25,13,1.15,.18,innerMat,false);
+ const signGlow=new T.PointLight(0x88dfff,.8,9);signGlow.position.set(-2,y+7,-37.4);g.add(signGlow);
+
+ scene.add(g);
+ makeJet(1,-24);vehicles[vehicles.length-1].yaw=Math.PI/2;vehicles[vehicles.length-1].group.rotation.y=Math.PI/2;
+ makeHeli(-28,-3);
+ makeBuggy(-29,24);vehicles[vehicles.length-1].yaw=Math.PI/2;vehicles[vehicles.length-1].group.rotation.y=Math.PI/2;
+ return g;
 }
 const startBase=runwayStrip();
 
@@ -610,7 +713,7 @@ function rebuildColliders(nearSet){
    }
 }
 function blocked(x,z,radius=0.6){
- const staticCols=moonMode?moonColliders:[...colliders,...cityColliders];
+ const staticCols=moonMode?moonColliders:[...colliders,...cityColliders,...startColliders];
  for(const c of staticCols){
    if(c.r!=null){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}
    else if(Math.abs(x-c.x)<c.hx+radius&&Math.abs(z-c.z)<c.hz+radius)return true
