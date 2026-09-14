@@ -119,11 +119,21 @@ function earthH(x,z){
   let t=smooth((edge-46)/2);
   return T.MathUtils.lerp(START_PLATEAU,raw,t)
 }
-function moonH(x,z){
+function moonRawH(x,z){
  let broad=(fbm(x*0.006,z*0.006,901)-0.5)*7,
      craters=(fbm(x*0.021,z*0.021,902)-0.5)*2.8,
      fine=(fbm(x*0.065,z*0.065,903)-0.5)*0.65;
  return broad+craters+fine;
+}
+const MOON_BASE_LEVEL=moonRawH(0,18);
+function moonH(x,z){
+ let raw=moonRawH(x,z),
+     dx=Math.max(0,Math.abs(x)-32),
+     dz=Math.max(0,Math.abs(z-18)-34),
+     edge=Math.max(dx,dz);
+ if(edge<=0)return MOON_BASE_LEVEL;
+ if(edge>=12)return raw;
+ return T.MathUtils.lerp(MOON_BASE_LEVEL,raw,smooth(edge/12))
 }
 function H(x,z){return moonMode?moonH(x,z):earthH(x,z)}
 function biome(x,z){let h=H(x,z),m=fbm(x*0.002,z*0.002,50),t=fbm(x*0.0015,z*0.0015,60)-h*0.005;if(h>24)return'alpine';if(h>14)return'highland';if(t<0.4)return'pine';if(m>0.62)return'forest';if(m<0.36)return'meadow';return'woodland'}
@@ -484,7 +494,7 @@ function furnishRoom(g,cx,cz,w,d,type,y){
  }
 }
 function cityBuilding(parent,cx,cz,w,d,h,mat,type,label){
- let y=H(cx,cz),wall=.38,door=2.4,frontZ=cz-d/2;
+ let y=H(cx,cz),wall=.38,door=Math.min(4.4,w*.36),frontZ=cz-d/2;
  cityBox(parent,cx,y+.08,cz,w,.16,d,cityM.floor,false);
  cityBox(parent,cx,y+h,cz,w,.28,d,cityM.dark,false);
  cityBox(parent,cx-w/2+wall/2,y+h/2,cz,wall,h,d,mat,true);
@@ -493,7 +503,12 @@ function cityBuilding(parent,cx,cz,w,d,h,mat,type,label){
  let side=(w-door)/2;
  cityBox(parent,cx-(door/2+side/2),y+h/2,frontZ+wall/2,side,h,wall,mat,true);
  cityBox(parent,cx+(door/2+side/2),y+h/2,frontZ+wall/2,side,h,wall,mat,true);
- cityBox(parent,cx,y+h-.42,frontZ+wall/2,door,.84,wall,mat,true);
+ cityBox(parent,cx,y+h-.38,frontZ+wall/2,door,.76,wall,mat,true);
+
+ // Wide, genuinely walkable entrance with a shallow porch/ramp and interior light.
+ let porch=new T.Mesh(new T.BoxGeometry(door*.88,.12,2.4),cityM.concrete);
+ porch.position.set(cx,y+.06,frontZ-1.05);parent.add(porch);
+ let entryLight=new T.PointLight(0xffe0aa,1.1,8);entryLight.position.set(cx,y+2.7,frontZ+.6);parent.add(entryLight);
 
  for(const sx of[-.28,.28]){
    let win=new T.Mesh(new T.BoxGeometry(w*.22,1.35,.06),cityM.glass);
@@ -615,9 +630,20 @@ function makeMoonWorld(){
  moonBox(g,15,by+4.3,18,.55,8.6,22,cityM.cream,true);
  moonBox(g,0,by+4.3,29,30,8.6,.55,cityM.cream,true);
  moonBox(g,0,by+8.6,18,30,.45,22,cityM.dark,false);
- moonBox(g,-10.2,by+4.3,7.1,9.2,8.6,.55,cityM.cream,true);
- moonBox(g,10.2,by+4.3,7.1,9.2,8.6,.55,cityM.cream,true);
- moonBox(g,0,by+7.4,7.1,11.2,2.4,.55,cityM.cream,true);
+ moonBox(g,-11.1,by+4.3,7.1,7.8,8.6,.55,cityM.cream,true);
+ moonBox(g,11.1,by+4.3,7.1,7.8,8.6,.55,cityM.cream,true);
+ moonBox(g,0,by+7.6,7.1,14.4,2.0,.55,cityM.cream,true);
+
+ // Clearly open main entrance with a wide landing ramp, door frame and guide lights.
+ moonBox(g,0,by+.055,4.2,11.5,.11,6.0,cityM.concrete,false);
+ for(const x of[-6.1,6.1]){
+   moonBox(g,x,by+3.0,7.0,.28,6.0,.55,cityM.dark,false);
+   let l=new T.PointLight(0x8ffcff,1.6,14);l.position.set(x,by+3.8,6.3);g.add(l)
+ }
+ for(const x of[-4,-2,0,2,4]){
+   let guide=new T.Mesh(new T.BoxGeometry(.55,.035,1.6),new T.MeshBasicMaterial({color:0x7df8ff}));
+   guide.position.set(x,by+.13,3.4);g.add(guide)
+ }
 
  // Interior control room, bunks, storage and mining lab.
  moonBox(g,-8,by+.65,20,7,1.1,2.2,cityM.blue,true);
@@ -712,14 +738,14 @@ function rebuildColliders(nearSet){
    if(c.d.mark==='tower')colliders.push({x:c.cx*CH,z:c.cz*CH,r:2.2});
    }
 }
-function blocked(x,z,radius=0.6){
+function blocked(x,z,radius=0.6,ignoreVehicle=null){
  const staticCols=moonMode?moonColliders:[...colliders,...cityColliders,...startColliders];
  for(const c of staticCols){
    if(c.r!=null){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}
    else if(Math.abs(x-c.x)<c.hx+radius&&Math.abs(z-c.z)<c.hz+radius)return true
  }
  for(const v of vehicles){
-   if(v===activeVehicle)continue;
+   if(v===activeVehicle||v===ignoreVehicle)continue;
    if(moonMode?(v.realm!=='moon'):(v.realm==='moon'))continue;
    let dx=x-v.x,dz=z-v.z,rr=(v.kind==='mek'?2.7:v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5)+radius;
    if(dx*dx+dz*dz<rr*rr)return true
@@ -890,6 +916,19 @@ function activateUfo(v){
  vehicles.push(craft);
  return craft
 }
+function findSafeExit(v){
+ const baseR=v.kind==='mek'?5.2:v.kind==='jet'?5.0:v.kind==='heli'?4.2:v.kind==='ufo'?5.5:3.2;
+ const angles=[Math.PI/2,-Math.PI/2,Math.PI,0,Math.PI*.25,-Math.PI*.25,Math.PI*.75,-Math.PI*.75];
+ for(const mul of[1,1.45,2]){
+   for(const a of angles){
+     const ang=v.yaw+a,r=baseR*mul,
+           x=v.x+Math.sin(ang)*r,
+           z=v.z+Math.cos(ang)*r;
+     if(!blocked(x,z,.6,v)&&Math.abs(H(x,z)-H(v.x,v.z))<1.6&&slopeAt(x,z)<2.5)return{x,z}
+   }
+ }
+ return{x:v.x+Math.sin(v.yaw+Math.PI/2)*baseR*2.2,z:v.z+Math.cos(v.yaw+Math.PI/2)*baseR*2.2}
+}
 function refreshUse(){
  let b=$('use'),fc=$('flightControls'),mine=$('mine');
  if(activeVehicle){
@@ -911,8 +950,11 @@ $('use').onclick=()=>{
    let v=activeVehicle;
    if(v.kind==='ufo'&&v.alt>8){toast('Land the UFO before exiting');return}
    if(v.kind==='mek'&&v.alt>1.2){toast('Land the MEK before exiting');return}
+   const exit=findSafeExit(v);
    activeVehicle=null;$('flightControls').classList.add('hidden');$('mine').classList.add('hidden');
-   player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;
+   flightThrottle=0;move.x=0;move.y=0;look.x=0;look.y=0;
+   player.x=exit.x;player.z=exit.z;player.yaw=v.yaw;
+   camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
    toast('Exited '+v.type);refreshUse();return
  }
  let v=nearestVehicle();if(!v)return;
