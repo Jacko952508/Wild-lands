@@ -437,10 +437,22 @@ function addTrail(group,cx,cz,d){
 function anomalyModel(type,cx,cz){
  let g=new T.Group(),wx=cx*CH+(hash(cx,cz,141)-0.5)*42,wz=cz*CH+(hash(cx,cz,142)-0.5)*42;
  if(type==='ufo'){
-   let disc=new T.Mesh(new T.CylinderGeometry(3.4,5.2,1.1,20),mats.ufo);disc.scale.y=0.65;g.add(disc);
-   let dome=new T.Mesh(new T.SphereGeometry(2.0,14,8),mats.glass);dome.position.y=0.7;dome.scale.y=0.55;g.add(dome);
-   for(let i=0;i<8;i++){let a=i/8*Math.PI*2,l=new T.PointLight(0x8fffe8,0.45,7);l.position.set(Math.cos(a)*3.8,-0.2,Math.sin(a)*3.8);l.userData.baseIntensity=.45;l.userData.owner=g;l.userData.maxDistance=55;g.add(l);managedLights.push(l)}
-   addVehicleLights(g,4.7,.25,1.2,0xc7ffff,5.8,65);
+   const alloy=new T.MeshStandardMaterial({color:0xaab7bc,roughness:.2,metalness:.9}),
+         darkAlloy=new T.MeshStandardMaterial({color:0x26333a,roughness:.26,metalness:.82}),
+         cyan=new T.MeshStandardMaterial({color:0x80ffff,emissive:0x2adce8,emissiveIntensity:1.5,roughness:.18,metalness:.18});
+   const lower=new T.Mesh(new T.CylinderGeometry(3.3,5.35,.9,32),alloy);lower.scale.y=.72;lower.position.y=-.15;g.add(lower);
+   const upper=new T.Mesh(new T.CylinderGeometry(4.15,3.15,.65,32),darkAlloy);upper.position.y=.45;g.add(upper);
+   const dome=new T.Mesh(new T.SphereGeometry(2.15,24,12),new T.MeshPhysicalMaterial({color:0x6fa8b5,transparent:true,opacity:.48,roughness:.04,metalness:.1}));dome.position.y=1.05;dome.scale.y=.56;g.add(dome);
+   const ring=new T.Mesh(new T.TorusGeometry(4.05,.16,10,32),cyan);ring.rotation.x=Math.PI/2;ring.position.y=.02;g.add(ring);
+   const underside=new T.Mesh(new T.CylinderGeometry(2.2,3.0,.35,28),cyan);underside.position.y=-.72;g.add(underside);
+   const lightRing=new T.Group();g.add(lightRing);
+   for(let i=0;i<10;i++){
+     let a=i/10*Math.PI*2,bulb=new T.Mesh(new T.SphereGeometry(.11,7,5),new T.MeshBasicMaterial({color:0x9fffff}));
+     bulb.position.set(Math.cos(a)*4.2,-.18,Math.sin(a)*4.2);lightRing.add(bulb);
+     if(i%2===0){let l=new T.PointLight(0x8fffe8,0.4,8);l.position.copy(bulb.position);l.userData.baseIntensity=.4;l.userData.owner=g;l.userData.maxDistance=50;g.add(l);managedLights.push(l)}
+   }
+   addVehicleLights(g,4.8,.2,1.25,0xc7ffff,5.8,66);
+   g.userData.ufoRing=lightRing;g.userData.ufoGlow=underside;
    g.position.set(wx,H(wx,wz)+11+hash(cx,cz,143)*7,wz);g.userData.float=true;g.userData.baseY=g.position.y;g.userData.phase=hash(cx,cz,144)*6.28;
  }else if(type==='beast'){
    let body=new T.Mesh(new T.SphereGeometry(1,10,7),mats.strange);body.scale.set(2.0,0.9,0.8);body.position.y=1.3;g.add(body);
@@ -474,40 +486,215 @@ function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,ra
 }
 function wheel(r=.42,wid=.28){let w=new T.Mesh(new T.CylinderGeometry(r,r,wid,14),new T.MeshStandardMaterial({color:0x181a1c,roughness:.96,metalness:.08}));w.rotation.z=Math.PI/2;return w}
 function makeBuggy(x,z){
- let g=new T.Group(),paint=new T.MeshStandardMaterial({color:0x8d2f29,roughness:.42,metalness:.28}),trim=new T.MeshStandardMaterial({color:0x202326,roughness:.75,metalness:.35});
- let chassis=new T.Mesh(new T.BoxGeometry(2.25,.38,3.55),paint);chassis.position.y=.78;g.add(chassis);
- let hood=new T.Mesh(new T.BoxGeometry(1.75,.42,1.15),paint);hood.position.set(0,1.02,1.05);hood.rotation.x=-.08;g.add(hood);
- let cabin=new T.Mesh(new T.BoxGeometry(1.7,.92,1.5),trim);cabin.position.set(0,1.42,-.3);g.add(cabin);
- let glass=new T.Mesh(new T.BoxGeometry(1.48,.62,.08),mats.glass);glass.position.set(0,1.55,.48);glass.rotation.x=-.2;g.add(glass);
- let bumper=new T.Mesh(new T.BoxGeometry(2.15,.22,.22),trim);bumper.position.set(0,.62,1.88);g.add(bumper);
- for(const sx of[-1.13,1.13])for(const sz of[-1.16,1.18]){let w=wheel(.49,.34);w.position.set(sx,.52,sz);g.add(w)}
- addVehicleLights(g,1.9,1.02,.72,0xf4f7ff,4.6,48);
- g.position.set(x,H(x,z),z);scene.add(g);vehicles.push({type:'Dune Buggy',kind:'buggy',group:g,x,z,yaw:0,speed:0,alt:0});return g;
+ const g=new T.Group(),paint=new T.MeshStandardMaterial({color:0xc94f22,roughness:.34,metalness:.38}),
+       dark=new T.MeshStandardMaterial({color:0x171a1c,roughness:.72,metalness:.48}),
+       steel=new T.MeshStandardMaterial({color:0x687077,roughness:.34,metalness:.78}),
+       seatMat=new T.MeshStandardMaterial({color:0x242220,roughness:.92}),
+       redGlow=new T.MeshBasicMaterial({color:0xff442b});
+ const lower=new T.Mesh(new T.BoxGeometry(2.35,.32,3.65),dark);lower.position.y=.68;g.add(lower);
+ const body=new T.Mesh(new T.BoxGeometry(2.05,.42,2.85),paint);body.position.set(0,.92,.1);body.scale.set(.96,1,1);g.add(body);
+ const hood=new T.Mesh(new T.BoxGeometry(1.78,.34,1.28),paint);hood.position.set(0,1.14,1.18);hood.rotation.x=-.12;g.add(hood);
+ const nose=new T.Mesh(new T.BoxGeometry(1.45,.26,.46),dark);nose.position.set(0,.93,1.93);g.add(nose);
+ const rearDeck=new T.Mesh(new T.BoxGeometry(1.8,.32,.9),dark);rearDeck.position.set(0,1.1,-1.42);g.add(rearDeck);
+
+ // Open cockpit: seats, steering wheel and windscreen.
+ for(const sx of[-.43,.43]){const seat=new T.Mesh(new T.BoxGeometry(.58,.7,.65),seatMat);seat.position.set(sx,1.28,-.38);seat.rotation.x=-.12;g.add(seat)}
+ const dash=new T.Mesh(new T.BoxGeometry(1.42,.24,.3),dark);dash.position.set(0,1.43,.45);dash.rotation.x=-.16;g.add(dash);
+ const steer=new T.Mesh(new T.TorusGeometry(.22,.035,7,14),steel);steer.position.set(-.43,1.52,.55);steer.rotation.x=Math.PI/2;g.add(steer);
+ const wind=new T.Mesh(new T.BoxGeometry(1.55,.56,.055),mats.glass);wind.position.set(0,1.66,.62);wind.rotation.x=-.28;g.add(wind);
+
+ // Tubular roll cage and exposed suspension.
+ const cageMat=steel;
+ for(const sx of[-.83,.83]){
+   const a=new T.Mesh(new T.CylinderGeometry(.045,.045,1.55,7),cageMat);a.position.set(sx,1.65,-.63);a.rotation.x=-.12;g.add(a);
+   const b=new T.Mesh(new T.CylinderGeometry(.045,.045,1.52,7),cageMat);b.position.set(sx,1.65,.33);b.rotation.x=.3;g.add(b)
+ }
+ const roofBar=new T.Mesh(new T.BoxGeometry(1.78,.08,1.15),cageMat);roofBar.position.set(0,2.28,-.15);g.add(roofBar);
+ const wheels=[];
+ for(const sx of[-1.18,1.18])for(const sz of[-1.24,1.25]){
+   const hub=new T.Group(),w=wheel(.52,.36);hub.add(w);hub.position.set(sx,.55,sz);g.add(hub);wheels.push(hub);
+   const arm=new T.Mesh(new T.CylinderGeometry(.035,.045,.62,6),steel);arm.rotation.z=Math.PI/2;arm.position.set(sx*.55,.72,sz);g.add(arm)
+ }
+ const bumper=new T.Mesh(new T.BoxGeometry(2.22,.16,.18),steel);bumper.position.set(0,.59,2.0);g.add(bumper);
+ const exhaust=new T.Mesh(new T.CylinderGeometry(.08,.11,.75,8),steel);exhaust.rotation.x=Math.PI/2;exhaust.position.set(.62,.95,-1.95);g.add(exhaust);
+ for(const sx of[-.67,.67]){const tail=new T.Mesh(new T.BoxGeometry(.28,.18,.05),redGlow);tail.position.set(sx,1.05,-1.9);g.add(tail)}
+ addVehicleLights(g,2.02,1.12,.72,0xf8fbff,4.8,52);
+ g.position.set(x,H(x,z),z);scene.add(g);
+ const v={type:'Dune Buggy',kind:'buggy',group:g,x,z,yaw:0,speed:0,alt:0,wheels,steer,exhaustLocal:new T.Vector3(.62,.95,-2.25),effectClock:0,trackClock:0,lastY:H(x,z)};
+ vehicles.push(v);return g;
 }
 function makeHeli(x,z){
- let g=new T.Group(),skin=new T.MeshStandardMaterial({color:0x59666b,roughness:.38,metalness:.48});
- let body=new T.Mesh(new T.SphereGeometry(1,20,12),skin);body.scale.set(1.45,1.0,2.15);body.position.y=1.78;g.add(body);
- let nose=new T.Mesh(new T.SphereGeometry(.95,18,10),mats.glass);nose.scale.set(1.05,.78,1.18);nose.position.set(0,1.9,1.45);g.add(nose);
- let tail=new T.Mesh(new T.CylinderGeometry(.16,.34,4.8,10),skin);tail.rotation.x=Math.PI/2;tail.position.set(0,1.8,-3.15);g.add(tail);
- let fin=new T.Mesh(new T.BoxGeometry(.18,1.5,1.25),mats.red);fin.position.set(0,2.28,-5.35);g.add(fin);
- let rotor=new T.Mesh(new T.BoxGeometry(8.8,.07,.16),mats.dark);rotor.position.y=3.25;g.add(rotor);rotor.name='rotor';
- let mast=new T.Mesh(new T.CylinderGeometry(.07,.09,.55,8),mats.dark);mast.position.y=3.0;g.add(mast);
- for(const sx of[-.95,.95]){let skid=new T.Mesh(new T.CylinderGeometry(.06,.06,4.0,8),mats.dark);skid.rotation.z=Math.PI/2;skid.position.set(sx,.46,0);g.add(skid)}
- addVehicleLights(g,2.25,1.72,.68,0xf2fbff,5.2,60);
- g.position.set(x,H(x,z),z);scene.add(g);vehicles.push({type:'Helicopter',kind:'heli',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0});return g;
+ const g=new T.Group(),skin=new T.MeshStandardMaterial({color:0x344d43,roughness:.36,metalness:.46}),
+       accent=new T.MeshStandardMaterial({color:0xe06a2f,roughness:.42,metalness:.32}),
+       dark=new T.MeshStandardMaterial({color:0x15191b,roughness:.66,metalness:.6}),
+       steel=new T.MeshStandardMaterial({color:0x606970,roughness:.38,metalness:.82});
+ const body=new T.Mesh(new T.SphereGeometry(1,24,14),skin);body.scale.set(1.5,1.03,2.2);body.position.y=1.82;g.add(body);
+ const belly=new T.Mesh(new T.BoxGeometry(2.1,.42,2.9),dark);belly.position.set(0,.98,.05);g.add(belly);
+ const canopy=new T.Mesh(new T.SphereGeometry(1,22,12),mats.glass);canopy.scale.set(1.12,.78,1.28);canopy.position.set(0,1.95,1.47);g.add(canopy);
+ const brow=new T.Mesh(new T.BoxGeometry(2.0,.18,.55),skin);brow.position.set(0,2.48,1.28);brow.rotation.x=-.12;g.add(brow);
+ for(const sx of[-1.42,1.42]){const door=new T.Mesh(new T.BoxGeometry(.07,1.15,1.45),skin);door.position.set(sx,1.65,-.12);g.add(door)}
+ const tail=new T.Mesh(new T.CylinderGeometry(.14,.38,5.0,12),skin);tail.rotation.x=Math.PI/2;tail.position.set(0,1.88,-3.28);g.add(tail);
+ const boomStripe=new T.Mesh(new T.BoxGeometry(.45,.15,2.8),accent);boomStripe.position.set(0,1.86,-3.0);g.add(boomStripe);
+ const fin=new T.Mesh(new T.BoxGeometry(.16,1.75,1.35),accent);fin.position.set(0,2.42,-5.58);fin.rotation.x=-.08;g.add(fin);
+ const rotorHub=new T.Group();rotorHub.position.y=3.28;g.add(rotorHub);
+ const rotorA=new T.Mesh(new T.BoxGeometry(9.4,.055,.18),dark),rotorB=new T.Mesh(new T.BoxGeometry(.18,.055,9.4),dark);rotorHub.add(rotorA,rotorB);
+ const mast=new T.Mesh(new T.CylinderGeometry(.075,.1,.58,8),steel);mast.position.y=3.0;g.add(mast);
+ const tailRotor=new T.Group();tailRotor.position.set(.12,2.25,-5.55);tailRotor.rotation.z=Math.PI/2;g.add(tailRotor);
+ const tr1=new T.Mesh(new T.BoxGeometry(.08,2.0,.12),dark),tr2=new T.Mesh(new T.BoxGeometry(2.0,.08,.12),dark);tailRotor.add(tr1,tr2);
+ for(const sx of[-.95,.95]){
+   const skid=new T.Mesh(new T.CylinderGeometry(.065,.065,4.25,8),steel);skid.rotation.x=Math.PI/2;skid.position.set(sx,.42,0);g.add(skid);
+   for(const z of[-1.15,1.15]){const strut=new T.Mesh(new T.CylinderGeometry(.04,.045,.75,7),steel);strut.position.set(sx,.74,z);strut.rotation.z=sx>0?-.35:.35;g.add(strut)}
+ }
+ const intakeL=new T.Mesh(new T.BoxGeometry(.45,.38,.9),dark),intakeR=intakeL.clone();intakeL.position.set(-.65,2.55,-.7);intakeR.position.set(.65,2.55,-.7);g.add(intakeL,intakeR);
+ const exhaustL=new T.Mesh(new T.CylinderGeometry(.1,.14,.75,8),steel),exhaustR=exhaustL.clone();exhaustL.rotation.x=exhaustR.rotation.x=Math.PI/2;exhaustL.position.set(-.5,2.25,-2.05);exhaustR.position.set(.5,2.25,-2.05);g.add(exhaustL,exhaustR);
+ addVehicleLights(g,2.4,1.68,.72,0xf2fbff,5.5,64);
+ g.position.set(x,H(x,z),z);scene.add(g);
+ const v={type:'Helicopter',kind:'heli',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0,rotorHub,tailRotor,exhaustLocals:[new T.Vector3(-.5,2.25,-2.45),new T.Vector3(.5,2.25,-2.45)],effectClock:0};
+ vehicles.push(v);return g;
 }
 function makeJet(x,z){
- let g=new T.Group(),skin=new T.MeshStandardMaterial({color:0x8f999f,roughness:.3,metalness:.62});
- let fuse=new T.Mesh(new T.CylinderGeometry(.48,.72,7.6,18),skin);fuse.rotation.x=Math.PI/2;fuse.position.y=1.18;g.add(fuse);
- let nose=new T.Mesh(new T.ConeGeometry(.5,2.55,18),skin);nose.rotation.x=Math.PI/2;nose.position.set(0,1.18,5.0);g.add(nose);
- let wingGeo=new T.BufferGeometry();wingGeo.setAttribute('position',new T.Float32BufferAttribute([-4.6,0,1.0,4.6,0,1.0,2.0,0,-2.0,-2.0,0,-2.0],3));wingGeo.setIndex([0,1,2,0,2,3]);wingGeo.computeVertexNormals();
- let wing=new T.Mesh(wingGeo,skin);wing.position.y=1.12;g.add(wing);
- let tail=new T.Mesh(new T.BoxGeometry(3.4,.12,1.05),skin);tail.position.set(0,1.55,-3.05);g.add(tail);
- let fin=new T.Mesh(new T.BoxGeometry(.14,1.75,1.35),mats.red);fin.position.set(0,2.05,-3.25);fin.rotation.x=-.12;g.add(fin);
- let glass=new T.Mesh(new T.SphereGeometry(.6,16,10),mats.glass);glass.scale.set(.8,.5,1.45);glass.position.set(0,1.72,1.95);g.add(glass);
- let intakeL=new T.Mesh(new T.BoxGeometry(.65,.65,1.4),mats.dark),intakeR=intakeL.clone();intakeL.position.set(-.7,.95,-.2);intakeR.position.set(.7,.95,-.2);g.add(intakeL,intakeR);
- addVehicleLights(g,5.35,1.18,.36,0xffffff,6.2,80);
- g.position.set(x,H(x,z)+.25,z);scene.add(g);vehicles.push({type:'Jet',kind:'jet',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false});g.rotation.y=Math.PI;return g;
+ const g=new T.Group(),skin=new T.MeshStandardMaterial({color:0xc7ced2,roughness:.24,metalness:.72}),
+       dark=new T.MeshStandardMaterial({color:0x252b31,roughness:.38,metalness:.72}),
+       accent=new T.MeshStandardMaterial({color:0x394b62,roughness:.3,metalness:.62}),
+       steel=new T.MeshStandardMaterial({color:0x69737a,roughness:.28,metalness:.88});
+ const fuse=new T.Mesh(new T.CylinderGeometry(.5,.74,8.4,24),skin);fuse.rotation.x=Math.PI/2;fuse.position.y=1.42;g.add(fuse);
+ const nose=new T.Mesh(new T.ConeGeometry(.52,3.25,24),skin);nose.rotation.x=Math.PI/2;nose.position.set(0,1.42,5.8);g.add(nose);
+ const chineL=new T.Mesh(new T.BoxGeometry(.38,.16,4.1),accent),chineR=chineL.clone();chineL.position.set(-.58,1.32,2.15);chineR.position.set(.58,1.32,2.15);g.add(chineL,chineR);
+ const wingGeo=new T.BufferGeometry();wingGeo.setAttribute('position',new T.Float32BufferAttribute([-5.2,0,1.25,5.2,0,1.25,2.15,0,-2.35,-2.15,0,-2.35],3));wingGeo.setIndex([0,1,2,0,2,3]);wingGeo.computeVertexNormals();
+ const wing=new T.Mesh(wingGeo,skin);wing.position.y=1.34;g.add(wing);
+ const wingUnder=wing.clone();wingUnder.material=accent;wingUnder.position.y=1.25;wingUnder.scale.set(.96,1,.96);g.add(wingUnder);
+ const tailPlane=new T.Mesh(new T.BoxGeometry(3.7,.12,1.25),skin);tailPlane.position.set(0,1.55,-3.6);g.add(tailPlane);
+ const fin=new T.Mesh(new T.BoxGeometry(.16,2.0,1.5),accent);fin.position.set(0,2.35,-3.75);fin.rotation.x=-.14;g.add(fin);
+ const glass=new T.Mesh(new T.SphereGeometry(.72,20,12),new T.MeshPhysicalMaterial({color:0x476a7a,transparent:true,opacity:.66,roughness:.08,metalness:.12}));glass.scale.set(.78,.48,1.55);glass.position.set(0,1.96,2.1);g.add(glass);
+ for(const sx of[-.82,.82]){
+   const intake=new T.Mesh(new T.BoxGeometry(.7,.72,1.8),dark);intake.position.set(sx,1.04,-.15);intake.rotation.x=.04;g.add(intake);
+   const nacelle=new T.Mesh(new T.CylinderGeometry(.34,.42,2.6,16),dark);nacelle.rotation.x=Math.PI/2;nacelle.position.set(sx,1.18,-2.5);g.add(nacelle)
+ }
+ const nozzleMat=new T.MeshStandardMaterial({color:0x3c4043,roughness:.25,metalness:.95});
+ const boostMat=new T.MeshBasicMaterial({color:0x7fcfff,transparent:true,opacity:.45,depthWrite:false});
+ const boostCoreMat=new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:.75,depthWrite:false});
+ const afterburners=[];
+ for(const sx of[-.82,.82]){
+   const noz=new T.Mesh(new T.CylinderGeometry(.36,.48,.72,18),nozzleMat);noz.rotation.x=Math.PI/2;noz.position.set(sx,1.18,-4.15);g.add(noz);
+   const flame=new T.Mesh(new T.ConeGeometry(.42,2.6,16,1,true),boostMat);flame.rotation.x=-Math.PI/2;flame.position.set(sx,1.18,-5.45);flame.scale.set(1,1,.01);g.add(flame);
+   const core=new T.Mesh(new T.ConeGeometry(.21,1.65,12,1,true),boostCoreMat);core.rotation.x=-Math.PI/2;core.position.set(sx,1.18,-4.9);core.scale.set(1,1,.01);g.add(core);
+   afterburners.push({flame,core})
+ }
+ // Retracted-looking but visible landing gear and wheels on ground.
+ const gear=[];
+ for(const q of[[0,.35,2.65],[-1.05,.35,-1.7],[1.05,.35,-1.7]]){
+   const strut=new T.Mesh(new T.CylinderGeometry(.045,.055,.8,8),steel);strut.position.set(q[0],.78,q[2]);g.add(strut);
+   const w=wheel(.24,.16);w.position.set(q[0],q[1],q[2]);g.add(w);gear.push(w)
+ }
+ for(const sx of[-4.2,4.2]){const nav=new T.Mesh(new T.SphereGeometry(.08,6,5),new T.MeshBasicMaterial({color:sx<0?0xff3d3d:0x5dff7d}));nav.position.set(sx,1.34,.45);g.add(nav)}
+ addVehicleLights(g,6.1,1.42,.36,0xffffff,6.5,85);
+ g.position.set(x,H(x,z)+.28,z);scene.add(g);
+ const v={type:'Jet',kind:'jet',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,afterburners,gear,effectClock:0,trackClock:0};
+ vehicles.push(v);g.rotation.y=Math.PI;return g;
+}
+// Shared vehicle FX pools: fixed-size, reused, mobile-safe.
+const vehicleFxGroup=new T.Group();scene.add(vehicleFxGroup);
+const fxGeo=new T.SphereGeometry(1,6,4),trackGeo=new T.PlaneGeometry(1,1);
+const particlePool=[],trackPool=[];
+for(let i=0;i<(IS_MOBILE?34:56);i++){
+ const m=new T.Mesh(fxGeo,new T.MeshBasicMaterial({color:0x999999,transparent:true,opacity:0,depthWrite:false}));
+ m.visible=false;m.userData.life=0;vehicleFxGroup.add(m);particlePool.push(m)
+}
+for(let i=0;i<(IS_MOBILE?32:56);i++){
+ const m=new T.Mesh(trackGeo,new T.MeshBasicMaterial({color:0x26311f,transparent:true,opacity:0,depthWrite:false,side:T.DoubleSide}));
+ m.rotation.x=-Math.PI/2;m.visible=false;m.userData.life=0;vehicleFxGroup.add(m);trackPool.push(m)
+}
+let particleCursor=0,trackCursor=0;
+function spawnVehicleParticle(pos,color=0x8b8b82,size=.35,life=.9,vy=.7,spread=.25){
+ const m=particlePool[particleCursor++%particlePool.length];
+ m.visible=true;m.position.copy(pos);m.position.x+=(Math.random()-.5)*spread;m.position.z+=(Math.random()-.5)*spread;
+ m.scale.setScalar(size*(.7+Math.random()*.5));m.material.color.setHex(color);m.material.opacity=.34;m.userData.life=life;m.userData.maxLife=life;m.userData.vy=vy;m.userData.vx=(Math.random()-.5)*.22;m.userData.vz=(Math.random()-.5)*.22
+}
+function spawnVehicleTrack(x,z,y,yaw,moon=false,width=.42,length=1.2){
+ const m=trackPool[trackCursor++%trackPool.length];
+ m.visible=true;m.position.set(x,y+.025,z);m.rotation.set(-Math.PI/2,0,-yaw);m.scale.set(width,length,1);
+ m.material.color.setHex(moon?0x6d6c68:0x23311f);m.material.opacity=moon?.24:.2;m.userData.life=moon?11:7;m.userData.maxLife=m.userData.life
+}
+function updateVehicleFx(dt){
+ for(const m of particlePool)if(m.visible){
+   m.userData.life-=dt;if(m.userData.life<=0){m.visible=false;continue}
+   m.position.x+=m.userData.vx*dt;m.position.z+=m.userData.vz*dt;m.position.y+=m.userData.vy*dt;
+   m.scale.multiplyScalar(1+dt*.65);m.material.opacity=.34*(m.userData.life/m.userData.maxLife)
+ }
+ for(const m of trackPool)if(m.visible){
+   m.userData.life-=dt;if(m.userData.life<=0){m.visible=false;continue}
+   m.material.opacity=.22*Math.min(1,m.userData.life/1.8)
+ }
+}
+const vehicleTmp=new T.Vector3();
+function localWorld(v,local){
+ vehicleTmp.copy(local);v.group.localToWorld(vehicleTmp);return vehicleTmp
+}
+function updateVehicleVisuals(dt,t){
+ updateVehicleFx(dt);
+ for(const v of vehicles){
+   const visible=v.group.visible!==false,spd=Math.abs(v.speed||0),moving=spd>.35;
+   if(!visible)continue;
+   if(v.wheels){
+     const spin=(v.speed||0)*dt*2.05;
+     v.wheels.forEach((w,i)=>{w.rotation.x+=spin;if((v.kind==='buggy'||v.kind==='moonbuggy')&&(i%2===1))w.rotation.y=T.MathUtils.lerp(w.rotation.y,move.x*.22,dt*7)});
+   }
+   if(v.steer)v.steer.rotation.z=T.MathUtils.lerp(v.steer.rotation.z,-move.x*.65,dt*8);
+   if(v.kind==='buggy'){
+     const targetRoll=T.MathUtils.clamp((H(v.x+.7,v.z)-H(v.x-.7,v.z))*.12,-.08,.08);
+     v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,targetRoll,dt*5);
+     if(moving&&v===activeVehicle){
+       v.effectClock=(v.effectClock||0)-dt;v.trackClock=(v.trackClock||0)-dt;
+       if(v.effectClock<=0){v.effectClock=IS_MOBILE?.11:.07;const p=localWorld(v,v.exhaustLocal);spawnVehicleParticle(p,0x7d7d76,.18+.02*spd,.72,.45,.18)}
+       if(v.trackClock<=0&&spd>2){v.trackClock=.18;for(const sx of[-1.08,1.08]){const p=localWorld(v,new T.Vector3(sx,.04,-1.2));spawnVehicleTrack(p.x,p.z,H(p.x,p.z),v.yaw,false,.34,.9)}}
+     }
+   }else if(v.kind==='moonbuggy'){
+     if(moving&&v===activeVehicle){
+       v.effectClock=(v.effectClock||0)-dt;v.trackClock=(v.trackClock||0)-dt;
+       if(v.effectClock<=0&&spd>1.2){v.effectClock=IS_MOBILE?.13:.09;for(const sx of[-1.2,1.2]){const p=localWorld(v,new T.Vector3(sx,.12,-1.35));spawnVehicleParticle(p,0xb8b6ad,.28+.015*spd,1.0,.28,.34)}}
+       if(v.trackClock<=0){v.trackClock=.2;for(const sx of[-1.26,1.26]){const p=localWorld(v,new T.Vector3(sx,.03,-1.35));spawnVehicleTrack(p.x,p.z,moonH(p.x,p.z),v.yaw,true,.38,1.0)}}
+     }
+   }else if(v.kind==='heli'){
+     const rpm=.18+flightThrottle*.82;
+     if(v.rotorHub)v.rotorHub.rotation.y+=dt*(12+rpm*46);
+     if(v.tailRotor)v.tailRotor.rotation.z+=dt*(20+rpm*68);
+     if(v===activeVehicle&&flightThrottle>.15){
+       v.effectClock=(v.effectClock||0)-dt;
+       if(v.effectClock<=0){v.effectClock=IS_MOBILE?.12:.08;for(const q of v.exhaustLocals||[]){const p=localWorld(v,q);spawnVehicleParticle(p,0x747a78,.17,1.0,.5,.16)}}
+       if((v.alt||0)<4.2&&flightThrottle>.45&&v.effectClock<.05){for(let i=0;i<2;i++){const a=Math.random()*Math.PI*2,r=1.5+Math.random()*2.2;spawnVehicleParticle(new T.Vector3(v.x+Math.cos(a)*r,H(v.x,v.z)+.1,v.z+Math.sin(a)*r),0x8f8a76,.24,.75,.18,.5)}}
+     }
+   }else if(v.kind==='jet'){
+     const speedNorm=T.MathUtils.clamp(spd/42,0,1),power=T.MathUtils.clamp(flightThrottle*.65+speedNorm*.55,0,1),air=(v.alt||0)>.7;
+     if(v.afterburners)for(const a of v.afterburners){
+       const on=Math.max(0,(power-.08)/.92),len=.08+on*(air?1.65:1.3);
+       a.flame.visible=on>.05;a.core.visible=on>.12;
+       a.flame.scale.set(.6+.55*on,len, .6+.55*on);a.core.scale.set(.55+.3*on,.45+len*.65,.55+.3*on);
+       a.flame.material.opacity=.18+.68*on;a.core.material.opacity=.25+.72*on;
+     }
+     if(v.gear)v.gear.forEach(w=>w.rotation.x+=(v.speed||0)*dt*2.8);
+     if(v===activeVehicle){
+       v.effectClock=(v.effectClock||0)-dt;v.trackClock=(v.trackClock||0)-dt;
+       if(!air&&moving&&v.trackClock<=0){v.trackClock=.13;for(const sx of[-1.05,1.05])spawnVehicleTrack(v.x+Math.cos(v.yaw)*sx,v.z-Math.sin(v.yaw)*sx,H(v.x,v.z),v.yaw,false,.22,.75)}
+       if(v.effectClock<=0&&flightThrottle<.55){v.effectClock=IS_MOBILE?.16:.1;const p=localWorld(v,new T.Vector3(0,1.15,-4.8));spawnVehicleParticle(p,0x6d6f70,.2,.65,.35,.25)}
+     }
+   }else if(v.kind==='ufo'){
+     const intensity=T.MathUtils.clamp(.35+spd/70+(v.alt||0)/220,0,1.5);
+     const ring=v.group.userData.ufoRing,glow=v.group.userData.ufoGlow;
+     if(ring)ring.rotation.y+=dt*(.35+intensity*1.4);
+     if(glow){glow.material.emissiveIntensity=1.1+intensity*1.8;glow.scale.y=.9+Math.sin(t*5)*.06}
+     if(v===activeVehicle&&spd>18){
+       v.effectClock=(v.effectClock||0)-dt;if(v.effectClock<=0){v.effectClock=IS_MOBILE?.13:.08;const p=localWorld(v,new T.Vector3(0,-1.0,-2));spawnVehicleParticle(p,0x77ffff,.28,.65,-.08,.6)}
+     }
+   }else if(v.kind==='mek'){
+     const walk=Math.sin(t*5.2*Math.max(.5,spd*.22));
+     if(v.legs){v.legs[0].rotation.x=walk*.18*Math.min(1,spd/3);v.legs[1].rotation.x=-walk*.18*Math.min(1,spd/3)}
+     if(v.arms){v.arms[0].rotation.x=-walk*.12*Math.min(1,spd/3);v.arms[1].rotation.x=walk*.12*Math.min(1,spd/3)}
+     if(v.drillPivot&&$('mine')&&!$('mine').classList.contains('hidden'))v.drillPivot.rotation.z+=dt*2.4;
+     const boost=T.MathUtils.clamp(flightThrottle*1.3+(v.alt||0)*.08,0,1);
+     if(v.boosters)for(const f of v.boosters){f.material.opacity=boost*.85;f.scale.set(1,.2+boost*1.15,1);f.visible=boost>.04}
+     if(v===activeVehicle&&boost>.2){v.effectClock=(v.effectClock||0)-dt;if(v.effectClock<=0){v.effectClock=IS_MOBILE?.14:.09;for(const sx of[-.95,.95]){const p=localWorld(v,new T.Vector3(sx,4,-3.1));spawnVehicleParticle(p,0xd7c3a0,.25,.65,.15,.2)}}}
+   }
+ }
 }
 const startColliders=[],startDoorways=[];
 function startBox(parent,x,y,z,w,h,d,mat,collide=false){
@@ -990,35 +1177,65 @@ function moonBox(parent,x,y,z,w,h,d,mat,collide=false){
  return m
 }
 function makeMoonBuggy(parent,x,z){
- let g=new T.Group(),white=new T.MeshStandardMaterial({color:0xd7d9d2,roughness:.52,metalness:.28}),frame=new T.MeshStandardMaterial({color:0x33383b,roughness:.7,metalness:.45});
- let body=new T.Mesh(new T.BoxGeometry(2.7,.48,3.9),white);body.position.y=.95;g.add(body);
- let nose=new T.Mesh(new T.BoxGeometry(2.2,.4,1.15),white);nose.position.set(0,1.15,1.25);nose.rotation.x=-.08;g.add(nose);
- let cab=new T.Mesh(new T.BoxGeometry(1.85,.82,1.55),mats.glass);cab.position.set(0,1.58,.15);g.add(cab);
- let roof=new T.Mesh(new T.BoxGeometry(2.0,.16,1.8),frame);roof.position.set(0,2.02,.08);g.add(roof);
- let rack=new T.Mesh(new T.BoxGeometry(2.15,.15,1.15),frame);rack.position.set(0,1.15,-1.5);g.add(rack);
- for(const sx of[-1.32,1.32])for(const sz of[-1.38,1.38]){let w=wheel(.55,.38);w.position.set(sx,.58,sz);g.add(w)}
- addVehicleLights(g,2.05,1.18,.78,0xdfffff,5.2,55);
+ const g=new T.Group(),white=new T.MeshStandardMaterial({color:0xe3e5df,roughness:.42,metalness:.34}),
+       frame=new T.MeshStandardMaterial({color:0x2c3236,roughness:.62,metalness:.62}),
+       hazard=new T.MeshStandardMaterial({color:0xe0aa38,roughness:.5,metalness:.28}),
+       steel=new T.MeshStandardMaterial({color:0x697177,roughness:.36,metalness:.82});
+ const lower=new T.Mesh(new T.BoxGeometry(2.75,.3,4.15),frame);lower.position.y=.72;g.add(lower);
+ const body=new T.Mesh(new T.BoxGeometry(2.5,.5,3.45),white);body.position.y=1.02;g.add(body);
+ const nose=new T.Mesh(new T.BoxGeometry(2.15,.42,1.1),white);nose.position.set(0,1.22,1.45);nose.rotation.x=-.11;g.add(nose);
+ const cab=new T.Mesh(new T.SphereGeometry(1,18,10),new T.MeshPhysicalMaterial({color:0x6f929e,transparent:true,opacity:.55,roughness:.1,metalness:.08}));cab.scale.set(1.05,.64,.92);cab.position.set(0,1.66,.38);g.add(cab);
+ const roof=new T.Mesh(new T.BoxGeometry(2.05,.14,1.55),frame);roof.position.set(0,2.15,.28);g.add(roof);
+ const rack=new T.Mesh(new T.BoxGeometry(2.2,.16,1.3),frame);rack.position.set(0,1.2,-1.55);g.add(rack);
+ for(const sx of[-.7,.7]){const crate=new T.Mesh(new T.BoxGeometry(.72,.72,.8),white);crate.position.set(sx,1.58,-1.52);g.add(crate)}
+ const mast=new T.Mesh(new T.CylinderGeometry(.035,.045,1.45,7),steel);mast.position.set(.78,2.72,-.2);g.add(mast);
+ const dish=new T.Mesh(new T.CylinderGeometry(.08,.38,.14,16),white);dish.position.set(.78,3.38,-.2);dish.rotation.x=.3;g.add(dish);
+ const wheels=[];
+ for(const sx of[-1.4,1.4])for(const sz of[-1.42,1.42]){
+   const hub=new T.Group(),w=wheel(.6,.4);hub.add(w);hub.position.set(sx,.58,sz);g.add(hub);wheels.push(hub);
+   const arm=new T.Mesh(new T.CylinderGeometry(.04,.05,.72,7),steel);arm.rotation.z=Math.PI/2;arm.position.set(sx*.57,.78,sz);g.add(arm)
+ }
+ for(const sx of[-.95,.95]){const stripe=new T.Mesh(new T.BoxGeometry(.55,.06,1.1),hazard);stripe.position.set(sx,1.29,1.2);g.add(stripe)}
+ addVehicleLights(g,2.15,1.22,.8,0xe6ffff,5.5,58);
  g.position.set(x,moonH(x,z),z);parent.add(g);
- let v={type:'Moon Buggy',kind:'moonbuggy',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0};
+ const v={type:'Moon Buggy',kind:'moonbuggy',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0,wheels,effectClock:0,trackClock:0};
  vehicles.push(v);return v
 }
 function makeMek(parent,x,z){
- let g=new T.Group(),metal=new T.MeshStandardMaterial({color:0x59656c,roughness:.4,metalness:.66}),accent=cityMat(0xb5d8d6,.36,0x183c44),joint=cityMat(0x25292c,.65);
- let pelvis=new T.Mesh(new T.BoxGeometry(3.1,1.1,2.4),joint);pelvis.position.y=3.55;g.add(pelvis);
- let torso=new T.Mesh(new T.BoxGeometry(3.9,3.0,2.9),metal);torso.position.y=5.3;torso.rotation.x=-.04;g.add(torso);
- let cockpit=new T.Mesh(new T.SphereGeometry(1,16,10),mats.glass);cockpit.scale.set(1.25,.8,.95);cockpit.position.set(0,5.85,1.58);g.add(cockpit);
+ const g=new T.Group(),metal=new T.MeshStandardMaterial({color:0x68747c,roughness:.34,metalness:.72}),
+       armor=new T.MeshStandardMaterial({color:0x4a5258,roughness:.45,metalness:.62}),
+       hazard=new T.MeshStandardMaterial({color:0xd6a52d,roughness:.45,metalness:.28}),
+       joint=new T.MeshStandardMaterial({color:0x20262a,roughness:.58,metalness:.68}),
+       glow=new T.MeshStandardMaterial({color:0x8ffcff,emissive:0x2aa9b2,emissiveIntensity:1.4,roughness:.22,metalness:.2});
+ const pelvis=new T.Mesh(new T.BoxGeometry(3.2,1.05,2.5),joint);pelvis.position.y=3.6;g.add(pelvis);
+ const torso=new T.Mesh(new T.BoxGeometry(4.2,2.8,3.0),armor);torso.position.y=5.35;torso.rotation.x=-.045;g.add(torso);
+ const chestPlate=new T.Mesh(new T.BoxGeometry(3.35,1.25,.32),metal);chestPlate.position.set(0,5.35,1.6);chestPlate.rotation.x=-.08;g.add(chestPlate);
+ const core=new T.Mesh(new T.CylinderGeometry(.38,.38,.18,18),glow);core.rotation.x=Math.PI/2;core.position.set(0,5.42,1.85);g.add(core);
+ const cockpit=new T.Mesh(new T.SphereGeometry(1,18,11),new T.MeshPhysicalMaterial({color:0x658994,transparent:true,opacity:.58,roughness:.08,metalness:.1}));cockpit.scale.set(1.3,.78,.98);cockpit.position.set(0,6.1,1.42);g.add(cockpit);
+ const legs=[],knees=[],feet=[],arms=[];
  for(const sx of[-1.15,1.15]){
-   let hip=new T.Mesh(new T.SphereGeometry(.62,10,7),joint);hip.position.set(sx,3.3,0);g.add(hip);
-   let leg=new T.Mesh(new T.BoxGeometry(.95,3.0,1.15),metal);leg.position.set(sx,1.85,0);g.add(leg);
-   let foot=new T.Mesh(new T.BoxGeometry(1.75,.62,2.4),joint);foot.position.set(sx,.34,.38);g.add(foot);
-   let shoulder=new T.Mesh(new T.SphereGeometry(.7,10,7),joint);shoulder.position.set(sx*1.9,5.5,0);g.add(shoulder);
-   let arm=new T.Mesh(new T.BoxGeometry(.78,2.7,.9),metal);arm.position.set(sx*2.05,4.2,.2);g.add(arm)
+   const hip=new T.Mesh(new T.SphereGeometry(.64,12,8),joint);hip.position.set(sx,3.35,0);g.add(hip);
+   const upper=new T.Mesh(new T.BoxGeometry(1.0,1.65,1.18),metal);upper.position.set(sx,2.55,0);g.add(upper);
+   const knee=new T.Group();knee.position.set(sx,1.72,.1);g.add(knee);knees.push(knee);
+   const cap=new T.Mesh(new T.CylinderGeometry(.36,.36,.3,12),hazard);cap.rotation.z=Math.PI/2;knee.add(cap);
+   const lower=new T.Mesh(new T.BoxGeometry(.9,1.55,1.0),armor);lower.position.set(sx,.9,.16);g.add(lower);legs.push(lower);
+   const foot=new T.Mesh(new T.BoxGeometry(1.8,.58,2.5),joint);foot.position.set(sx,.3,.52);g.add(foot);feet.push(foot);
+   const shoulder=new T.Mesh(new T.SphereGeometry(.72,12,8),joint);shoulder.position.set(sx*1.9,5.55,0);g.add(shoulder);
+   const shoulderPlate=new T.Mesh(new T.BoxGeometry(1.25,.65,1.45),hazard);shoulderPlate.position.set(sx*2.05,5.72,.05);g.add(shoulderPlate);
+   const armPivot=new T.Group();armPivot.position.set(sx*2.05,4.75,.1);g.add(armPivot);arms.push(armPivot);
+   const arm=new T.Mesh(new T.BoxGeometry(.82,2.1,.92),metal);arm.position.y=-.75;armPivot.add(arm)
  }
- let drill=new T.Mesh(new T.ConeGeometry(.62,3.1,14),accent);drill.rotation.x=Math.PI/2;drill.position.set(2.08,3.75,2.3);g.add(drill);
- for(const sx of[-.92,.92]){let jet=new T.Mesh(new T.CylinderGeometry(.3,.43,1.55,10),accent);jet.rotation.x=Math.PI/2;jet.position.set(sx,4.1,-2.15);g.add(jet)}
- addVehicleLights(g,2.3,5.25,1.35,0xdfffff,7.5,70);
+ const drillPivot=new T.Group();drillPivot.position.set(2.05,3.72,1.28);g.add(drillPivot);
+ const drill=new T.Mesh(new T.ConeGeometry(.7,3.3,16),hazard);drill.rotation.x=Math.PI/2;drill.position.z=1.72;drillPivot.add(drill);
+ const boosters=[];
+ for(const sx of[-.95,.95]){
+   const pack=new T.Mesh(new T.BoxGeometry(.75,1.4,.9),armor);pack.position.set(sx,4.45,-1.9);g.add(pack);
+   const nozzle=new T.Mesh(new T.CylinderGeometry(.28,.42,.78,12),joint);nozzle.rotation.x=Math.PI/2;nozzle.position.set(sx,4.0,-2.55);g.add(nozzle);
+   const flame=new T.Mesh(new T.ConeGeometry(.34,1.7,12,1,true),new T.MeshBasicMaterial({color:0xffc15f,transparent:true,opacity:0,depthWrite:false}));flame.rotation.x=-Math.PI/2;flame.position.set(sx,4.0,-3.35);g.add(flame);boosters.push(flame)
+ }
+ addVehicleLights(g,2.35,5.35,1.4,0xdfffff,7.8,72);
  g.position.set(x,moonH(x,z),z);parent.add(g);
- let v={type:'MEK Miner',kind:'mek',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0};
+ const v={type:'MEK Miner',kind:'mek',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0,legs,knees,feet,arms,drillPivot,boosters,effectClock:0};
  vehicles.push(v);return v
 }
 function makeMoonWorld(){
@@ -2168,7 +2385,7 @@ function nearestThreat(){
 }
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
- player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();
+ player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);
  if(audioCtx&&ambientOsc&&ambientGain){
    const target=moonMode?62:worldCtl.weather==='storm'?42:worldCtl.weather==='rain'?48:52;
    ambientOsc.frequency.setTargetAtTime(target,audioCtx.currentTime,.8);
