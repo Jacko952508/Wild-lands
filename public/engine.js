@@ -801,7 +801,7 @@ function step(dt,t){
      let space=v.worldY-H(v.x,v.z)>160;
      v.inSpace=space;
 
-     let pitchInput=-move.y,
+     let pitchInput=move.y,
          rollInput=move.x,
          targetPitch=pitchInput*(space?0.52:0.38),
          targetRoll=-rollInput*(space?0.58:0.42);
@@ -832,7 +832,7 @@ function step(dt,t){
      v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
    }else{
      let onGround=v.alt<0.12,
-         pitchInput=-move.y,
+         pitchInput=move.y,
          rollInput=move.x,
          targetPitch=pitchInput*0.42,
          targetRoll=-rollInput*0.58;
