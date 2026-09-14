@@ -513,7 +513,7 @@ function step(dt,t){
      if(v.alt>1||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.1)){v.x=nx;v.z=nz}else v.speed*=0.35;
      let liftReady=v.speed>6;v.alt=T.MathUtils.clamp(v.alt+(liftReady?climbInput*dt*(sprinting?14:10):Math.min(0,climbInput)*dt*5),0,65);
      if(v.alt<0.15)v.alt=0;
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,-climbInput*0.16,Math.min(1,dt*3));v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.08,Math.min(1,dt*2));
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,climbInput*0.16,Math.min(1,dt*3));v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.08,Math.min(1,dt*2));
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=H(v.x,v.z)+(v.alt||0),back=v.kind==='jet'?9:v.kind==='heli'?7:5.5,up=v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5;
@@ -547,7 +547,7 @@ function loop(now){let dt=Math.min(0.04,(now-last)/1000);last=now;let t=now/1000
 requestAnimationFrame(loop);
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-document.oncontextmenu=e=>e.preventDefault();
+document.oncontextmenu=e=>e.preventDefault();document.addEventListener('selectstart',e=>e.preventDefault(),{passive:false});document.addEventListener('dragstart',e=>e.preventDefault(),{passive:false});document.addEventListener('gesturestart',e=>e.preventDefault(),{passive:false});
 
 window.__world={
  state:()=>({near:[...chunks.values()].filter(c=>c.mode==='near').length,far:[...chunks.values()].filter(c=>c.mode==='far').length,cached:chunks.size,animals:animalAgents.length,explored:Object.keys(world.explored).length,pos:{x:player.x,z:player.z},seed}),

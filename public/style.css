@@ -1,4 +1,4 @@
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}button,.pad,#flightControls,#worldPanel{touch-action:none}input[type=range]{touch-action:pan-x}
 html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#08100c;font-family:system-ui,-apple-system,sans-serif;color:#fff}
 button{font:inherit}
 #game{position:fixed;inset:0;width:100%;height:100%;touch-action:none}
