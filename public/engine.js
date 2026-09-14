@@ -40,7 +40,7 @@ try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
 if(!player)player={x:0,z:12,yaw:0,pitch:-0.03};
 
 const seed=world.seed;
-const chunks=new Map(),colliders=[],animalAgents=[];
+const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
 let currentChunk='',saveTimer=0,lastSyncX=1e9,lastSyncZ=1e9;
 let mapView={cx:0,cz:0},mapSelected=null;
 
@@ -205,6 +205,18 @@ function rebuildColliders(nearSet){
 }
 function blocked(x,z){for(const c of colliders){let dx=x-c.x,dz=z-c.z,rr=c.r+0.6;if(dx*dx+dz*dz<rr*rr)return true}return false}
 
+function queueFar(cx,cz){
+ let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
+ farPending.add(k);farQueue.push({cx,cz,k});
+}
+function processFarQueue(){
+ if(!farQueue.length)return;
+ let cc=chunkOf(player.x,player.z),job=farQueue.shift();farPending.delete(job.k);
+ if(chunks.has(job.k))return;
+ let dx=Math.abs(job.cx-cc.cx),dz=Math.abs(job.cz-cc.cz),dist=Math.max(dx,dz);
+ if(dist<=NEAR||dist>FAR)return;
+ let c=createChunk(job.cx,job.cz);setMode(c,'far');
+}
 function sync(force=false){
  let cc=chunkOf(player.x,player.z);
  if(!force&&cc.cx===lastSyncX&&cc.cz===lastSyncZ)return;
@@ -213,8 +225,12 @@ function sync(force=false){
 
  for(let dz=-FAR;dz<=FAR;dz++)for(let dx=-FAR;dx<=FAR;dx++){
    let cx=cc.cx+dx,cz=cc.cz+dz,k=key(cx,cz),dist=Math.max(Math.abs(dx),Math.abs(dz));
-   keepSet.add(k);let c=chunks.get(k)||createChunk(cx,cz);
-   if(dist<=NEAR){nearSet.add(k);setMode(c,'near')}else setMode(c,'far');
+   keepSet.add(k);
+   if(dist<=NEAR){
+     nearSet.add(k);let c=chunks.get(k)||createChunk(cx,cz);setMode(c,'near');
+   }else{
+     let c=chunks.get(k);if(c)setMode(c,'far');else queueFar(cx,cz);
+   }
  }
 
  for(const [k,c] of chunks){
@@ -336,7 +352,7 @@ function step(dt,t){
 sync(true);
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
 let last=performance.now(),start=performance.now()/1000;
-function loop(now){let dt=Math.min(0.04,(now-last)/1000);last=now;let t=now/1000;step(dt,t-start);renderer.render(scene,camera);requestAnimationFrame(loop)}
+function loop(now){let dt=Math.min(0.04,(now-last)/1000);last=now;let t=now/1000;step(dt,t-start);processFarQueue();renderer.render(scene,camera);requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
 
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
