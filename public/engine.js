@@ -425,7 +425,7 @@ function updateAnomalies(dt,t){
  }
 }
 
-let move={x:0,y:0},look={x:0,y:0},sprinting=false,climbInput=0;
+let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0;
 let worldCtl={weather:'clear',autoTime:true,time:12};
 function bindPad(el,v){
  let id=null,start={x:0,y:0},stick=el.querySelector('i');
@@ -497,19 +497,27 @@ $('use').onclick=()=>{
  if(activeVehicle){
    let v=activeVehicle;
    if(v.kind==='ufo'&&v.alt>8){toast('Land the UFO before exiting');return}
-   activeVehicle=null;climbInput=0;$('flightControls').classList.add('hidden');
+   activeVehicle=null;$('flightControls').classList.add('hidden');
    player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;
    toast('Exited '+v.type);refreshUse();return
  }
  let v=nearestVehicle();if(!v)return;
  if(v.kind==='ufoCandidate')v=activateUfo(v);
  activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;
- if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo')$('flightControls').classList.remove('hidden');
- else $('flightControls').classList.add('hidden');
+ if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo'){
+   $('flightControls').classList.remove('hidden');
+   syncEngineUI();
+ }else $('flightControls').classList.add('hidden');
  toast(v.type+' controls active');refreshUse();
 };
-function bindHold(id,value){let b=$(id),stop=()=>{if(climbInput===value)climbInput=0};b.addEventListener('pointerdown',()=>climbInput=value);['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,stop))}
-bindHold('ascend',1);bindHold('descend',-1);
+$('engineSlider').addEventListener('input',e=>{
+ flightThrottle=T.MathUtils.clamp(+e.target.value/100,0,1);
+ $('engineValue').textContent=Math.round(flightThrottle*100)+'%';
+});
+function syncEngineUI(){
+ $('engineSlider').value=Math.round(flightThrottle*100);
+ $('engineValue').textContent=Math.round(flightThrottle*100)+'%';
+}
 $('worldctl').onclick=()=>{$('worldPanel').classList.toggle('hidden')};$('worldClose').onclick=()=>$('worldPanel').classList.add('hidden');
 $('timeSlider').addEventListener('input',e=>{worldCtl.time=+e.target.value;worldCtl.autoTime=false;$('autoTime').textContent='AUTO TIME: OFF'});
 $('autoTime').onclick=()=>{worldCtl.autoTime=!worldCtl.autoTime;$('autoTime').textContent='AUTO TIME: '+(worldCtl.autoTime?'ON':'OFF')};
@@ -615,44 +623,61 @@ function step(dt,t){
      if(!blocked(nx,nz,1.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<0.95&&slopeAt(nx,nz)<2.1){v.x=nx;v.z=nz}else v.speed*=0.25;
      v.alt=0;v.group.position.set(v.x,H(v.x,v.z),v.z);v.group.rotation.y=v.yaw;
    }else if(v.kind==='heli'){
-     v.yaw-=look.x*dt*(v.alt>0.5?1.45:0.9);
-     let speed=(sprinting?14:8),fw=f*speed,strafe=side*speed*0.68;
-     let airborne=v.alt>0.15||climbInput>0;
-     if(airborne){
+     let pitchInput=move.y,rollInput=move.x;
+     v.yaw+=(-v.roll)*dt*0.9;
+     v.yaw-=look.x*dt*0.55;
+
+     let targetPitch=pitchInput*0.24,
+         targetRoll=-rollInput*0.32;
+     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*3.4));
+     v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.6));
+
+     let collective=(flightThrottle-0.5)*2,
+         lift=collective*8.5;
+     v.vy+=(lift-v.vy*1.45)*dt;
+     if(flightThrottle<0.03&&v.alt<0.1)v.vy=0;
+
+     let drive=Math.max(0.15,flightThrottle)*18,
+         fw=-Math.sin(v.pitch)*drive,
+         strafe=-Math.sin(v.roll)*drive;
+     if(v.alt>0.12||flightThrottle>0.52){
        v.x+=(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt;
        v.z+=(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
-     }else{
-       let nx=v.x+(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt,nz=v.z+(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
-       if(!blocked(nx,nz,1.6)&&Math.abs(H(nx,nz)-H(v.x,v.z))<0.55){v.x=nx;v.z=nz}
      }
-     v.vy+=(climbInput*(sprinting?9:6)-v.vy*1.65)*dt;
-     if(!climbInput)v.vy*=Math.max(0,1-dt*1.1);
-     v.alt=T.MathUtils.clamp(v.alt+v.vy*dt,0,42);
+
+     v.alt=T.MathUtils.clamp(v.alt+v.vy*dt,0,55);
      if(v.alt<=0.02){v.alt=0;v.vy=Math.max(0,v.vy)}
-     let targetPitch=f*0.14,targetRoll=-side*0.18;
-     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*3.6));
-     v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.8));
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
-     let rotor=v.group.getObjectByName('rotor');if(rotor)rotor.rotation.y+=dt*(v.alt>0||Math.abs(f)+Math.abs(side)+Math.abs(climbInput)>0?24:10);
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
+     v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+
+     let rotor=v.group.getObjectByName('rotor');
+     if(rotor)rotor.rotation.y+=dt*(10+flightThrottle*30);
    }else if(v.kind==='ufo'){
      let ground=H(v.x,v.z)+1.8;
      if(v.worldY==null)v.worldY=ground+Math.max(0,v.alt||0);
      let space=v.worldY-H(v.x,v.z)>160;
      v.inSpace=space;
-     let turn=side-look.x*0.72;
-     v.yaw+=turn*dt*(space?1.3:0.95);
 
-     let targetSpeed=f*(space?(sprinting?165:95):(sprinting?42:24));
-     v.speed=T.MathUtils.lerp(v.speed,targetSpeed,Math.min(1,dt*(space?1.25:2.2)));
+     let pitchInput=move.y,
+         rollInput=move.x,
+         targetPitch=pitchInput*(space?0.52:0.38),
+         targetRoll=-rollInput*(space?0.58:0.42);
+     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*3.2));
+     v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.4));
+     v.yaw+=(-v.roll)*dt*(space?1.25:0.8);
 
-     let strafe=side*(space?(sprinting?105:62):(sprinting?26:15));
-     v.x+=(Math.sin(v.yaw)*v.speed+Math.cos(v.yaw)*strafe)*dt;
-     v.z+=(Math.cos(v.yaw)*v.speed-Math.sin(v.yaw)*strafe)*dt;
+     let maxSpeed=space?170:48,
+         targetSpeed=flightThrottle*maxSpeed;
+     v.speed=T.MathUtils.lerp(v.speed,targetSpeed,Math.min(1,dt*(space?1.35:2.1)));
 
-     let verticalAccel=space?(sprinting?190:125):(sprinting?72:46);
-     v.vy+=climbInput*verticalAccel*dt;
-     v.vy*=Math.max(0,1-dt*(space?0.32:0.85));
-     if(!climbInput&&Math.abs(v.vy)<0.03)v.vy=0;
+     let horizontal=Math.cos(v.pitch)*v.speed;
+     v.x+=Math.sin(v.yaw)*horizontal*dt;
+     v.z+=Math.cos(v.yaw)*horizontal*dt;
+
+     let collective=(flightThrottle-0.5)*2,
+         directedLift=Math.sin(v.pitch)*v.speed*(space?1.0:0.7),
+         liftAccel=space?70:26;
+     v.vy+=(collective*liftAccel+directedLift-v.vy*(space?0.28:0.8))*dt;
 
      v.worldY+=v.vy*dt;
      ground=H(v.x,v.z)+1.8;
@@ -660,68 +685,79 @@ function step(dt,t){
      v.worldY=Math.min(v.worldY,3400);
      v.alt=Math.max(0,v.worldY-H(v.x,v.z));
 
-     v.pitch=T.MathUtils.lerp(v.pitch,f*0.20,Math.min(1,dt*3.1));
-     v.roll=T.MathUtils.lerp(v.roll,-side*0.28,Math.min(1,dt*3.4));
-
      v.group.position.set(v.x,v.worldY,v.z);
      v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
-     v.group.rotation.y+=dt*(space?0.18:0.08);
    }else{
-     let onGround=v.alt<0.12;
-     let turnInput=side-look.x*0.65;
-     if(onGround)v.yaw+=turnInput*dt*0.55;
-     else{
-       v.roll=T.MathUtils.lerp(v.roll,-turnInput*0.42,Math.min(1,dt*2.4));
-       v.yaw+=turnInput*dt*(0.35+Math.min(0.55,Math.abs(v.roll)*1.3));
-     }
+     let onGround=v.alt<0.12,
+         pitchInput=move.y,
+         rollInput=move.x,
+         targetPitch=pitchInput*0.42,
+         targetRoll=-rollInput*0.58;
 
-     if(f>0.05){
-       let target=f*(sprinting?34:24);v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.4));
-     }else if(f<-.15){
-       v.speed=T.MathUtils.lerp(v.speed,onGround?-5:Math.max(5,v.speed-6),Math.min(1,dt*1.7));
+     if(onGround){
+       targetPitch=Math.max(-0.08,targetPitch);
+       v.roll=T.MathUtils.lerp(v.roll,targetRoll*0.35,Math.min(1,dt*3.2));
+       v.yaw+=rollInput*dt*0.52;
      }else{
-       v.speed*=Math.max(0,onGround?1-dt*0.45:1-dt*0.055);
+       v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.0));
+       v.yaw+=(-v.roll)*dt*(0.78+Math.min(0.5,v.speed/45));
      }
+     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*2.8));
 
-     if(climbInput!==0)v.pitch=T.MathUtils.clamp(v.pitch+climbInput*dt*0.48,-0.28,0.34);
-     else v.pitch=T.MathUtils.lerp(v.pitch,0,Math.min(1,dt*0.28));
+     let maxSpeed=38,
+         idle=onGround?0:5.5,
+         targetSpeed=idle+flightThrottle*(maxSpeed-idle);
+     v.speed=T.MathUtils.lerp(v.speed,targetSpeed,Math.min(1,dt*(onGround?1.6:0.8)));
 
-     let stallSpeed=7.0;
+     let stallSpeed=8.2;
      v.stalled=v.alt>0.6&&v.speed<stallSpeed;
      if(v.stalled){
-       v.pitch=T.MathUtils.lerp(v.pitch,-0.14,Math.min(1,dt*0.8));
-       v.vy=Math.max(v.vy-dt*5.5,-7);
+       v.pitch=T.MathUtils.lerp(v.pitch,-0.18,Math.min(1,dt*0.85));
+       v.vy=Math.max(v.vy-dt*6.2,-8.5);
      }else if(v.speed>=stallSpeed){
-       let desiredVy=Math.sin(v.pitch)*v.speed*0.92;
-       v.vy=T.MathUtils.lerp(v.vy,desiredVy,Math.min(1,dt*1.8));
+       let desiredVy=Math.sin(v.pitch)*v.speed*0.98;
+       v.vy=T.MathUtils.lerp(v.vy,desiredVy,Math.min(1,dt*2.0));
      }else if(onGround){
        v.vy=0;
      }
 
-     let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
-     if(v.alt>0.2||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.0)){v.x=nx;v.z=nz}else v.speed*=0.35;
+     let horizontal=Math.cos(v.pitch)*v.speed,
+         nx=v.x+Math.sin(v.yaw)*horizontal*dt,
+         nz=v.z+Math.cos(v.yaw)*horizontal*dt;
+     if(v.alt>0.2||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.0)){
+       v.x=nx;v.z=nz
+     }else v.speed*=0.35;
 
-     if(v.alt<=0.15&&v.speed>stallSpeed&&v.pitch>0.07){v.airborne=true;v.alt=0.16}
+     if(v.alt<=0.15&&v.speed>stallSpeed&&v.pitch>0.075){
+       v.airborne=true;v.alt=0.16
+     }
      if(v.airborne||v.alt>0.15)v.alt+=v.vy*dt;
 
      if(v.alt<=0){
-       let hard=v.vy<-4.2;v.alt=0;v.vy=0;v.airborne=false;v.stalled=false;
+       let hard=v.vy<-4.2;
+       v.alt=0;v.vy=0;v.airborne=false;v.stalled=false;
        if(hard){v.speed*=0.42;toast('Hard landing')}
        v.pitch=T.MathUtils.lerp(v.pitch,0,Math.min(1,dt*3));
        v.roll=T.MathUtils.lerp(v.roll,0,Math.min(1,dt*3));
-     }else{
-       v.airborne=true;
-       if(Math.abs(turnInput)<0.08)v.roll=T.MathUtils.lerp(v.roll,0,Math.min(1,dt*0.9));
-     }
-     v.alt=T.MathUtils.clamp(v.alt,0,80);
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+     }else v.airborne=true;
+
+     v.alt=T.MathUtils.clamp(v.alt,0,95);
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
+     v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
        back=v.kind==='ufo'?11:v.kind==='jet'?9:v.kind==='heli'?7:5.5,
-       up=v.kind==='ufo'?5:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5;
-   let cam=new T.Vector3(v.x-Math.sin(v.yaw)*back,h+up,v.z-Math.cos(v.yaw)*back);
-   camera.position.lerp(cam,0.16);camera.lookAt(v.x,h+1.1,v.z);
+       up=v.kind==='ufo'?5:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
+       camYaw=v.yaw-look.x*0.9,
+       camLift=look.y*4.2;
+   let cam=new T.Vector3(
+     v.x-Math.sin(camYaw)*back,
+     h+up+camLift,
+     v.z-Math.cos(camYaw)*back
+   );
+   camera.position.lerp(cam,0.16);
+   camera.lookAt(v.x,h+1.1-look.y*1.5,v.z);
  }else{
    player.yaw-=look.x*dt*2.45;
    let f=-move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
@@ -774,6 +810,6 @@ window.__world={
  setMove:(x,y)=>{move.x=x;move.y=y},setLook:(x,y)=>{look.x=x;look.y=y},
  enterNearest:()=>{let v=nearestVehicle();if(v){activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;refreshUse();return v.type}return null},
  findAnomaly:(r=12)=>{let c=chunkOf(player.x,player.z);for(let z=c.cz-r;z<=c.cz+r;z++)for(let x=c.cx-r;x<=c.cx+r;x++){let d=descriptor(x,z);if(d.anomaly)return{x,z,type:d.anomaly}}return null},
- setWeather:w=>{worldCtl.weather=w},setTime:h=>{worldCtl.autoTime=false;worldCtl.time=T.MathUtils.clamp(h,0,24);$('timeSlider').value=worldCtl.time},setClimb:v=>{climbInput=T.MathUtils.clamp(v,-1,1)}
+ setWeather:w=>{worldCtl.weather=w},setTime:h=>{worldCtl.autoTime=false;worldCtl.time=T.MathUtils.clamp(h,0,24);$('timeSlider').value=worldCtl.time},setThrottle:v=>{flightThrottle=T.MathUtils.clamp(v,0,1);syncEngineUI()}
 };
 })();
