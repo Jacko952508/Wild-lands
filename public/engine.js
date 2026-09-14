@@ -94,7 +94,7 @@ const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.ui=world.ui||{lookSensitivity:1,hudScale:1};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.ui=world.ui||{lookSensitivity:1,hudScale:1};
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -607,12 +607,15 @@ function townText(parent,text,x,y,z,w=7,h=1.15){
  const m=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:tex,transparent:false}));
  m.position.set(x,y,z);parent.add(m);return m
 }
-function makeHuman(parent,x,z,shirt=0x546f8a,role='Resident'){
+function makeHuman(parent,x,z,shirt=0x546f8a,role='Resident',name=role){
  const g=new T.Group(),skin=cityMat(0xc99872,.8),cloth=cityMat(shirt,.82),pants=cityMat(0x2f3438,.9);
  const body=new T.Mesh(new T.CylinderGeometry(.38,.46,1.35,8),cloth);body.position.y=1.55;g.add(body);
  const head=new T.Mesh(new T.SphereGeometry(.34,10,8),skin);head.position.y=2.55;g.add(head);
+ const hair=new T.Mesh(new T.SphereGeometry(.355,9,6,0,Math.PI*2,0,Math.PI*.48),cityMat(0x3d2c22,.9));hair.position.y=2.68;g.add(hair);
  for(const sx of[-.2,.2]){let leg=new T.Mesh(new T.CylinderGeometry(.11,.13,.85,7),pants);leg.position.set(sx,.55,0);g.add(leg)}
- g.position.set(x,H(x,z),z);g.userData.role=role;parent.add(g);townHumans.push(g);return g
+ g.position.set(x,H(x,z),z);g.userData.role=role;g.userData.name=name;parent.add(g);townHumans.push(g);
+ if(role!=='Shopkeeper'&&role!=='Mechanic')addTownInteraction('talk',x,z,'TALK TO '+name.toUpperCase(),{name,role});
+ return g
 }
 function addTownInteraction(type,x,z,label,data={}){townInteractions.push({type,x,z,label,...data})}
 function townShell(parent,cx,cz,w,d,h,mat,label,doorSide='south'){
@@ -668,14 +671,14 @@ function makeCity(){
  cityBox(g,-106,s.y+.65,-16,6,1.3,1.2,cityM.dark,true);
  cityBox(g,-95,s.y+1.0,-16,1.2,2.0,6.8,cityM.wood,true);
  cityBox(g,-91.8,s.y+1.0,-16,1.2,2.0,6.8,cityM.wood,true);
- makeHuman(g,-106,-18,0x315c39,'Shopkeeper');
- addTownInteraction('shop',-106,-18,'TRADE WITH SHOPKEEPER');
+ makeHuman(g,-106,-18,0x315c39,'Shopkeeper','Mara');
+ addTownInteraction('shop',-106,-18,'TRADE WITH MARA');
 
  // Arcade with several working machines and open central aisle.
  s=townShell(g,-129,-20,22,20,6.2,cityM.blue,'NEON ARCADE');
  for(const [x,z,n] of[[-135,-17,'STAR RUNNER'],[-132,-17,'MOON RAID'],[-126,-17,'WILDLANDS GT'],[-123,-17,'ASTRO DROP'],[-120,-17,'TANK DUEL']])arcadeMachine(g,x,z,Math.PI,n);
  cityBox(g,-129,s.y+.55,-26,8,1.1,1.1,cityM.dark,true);
- makeHuman(g,-130,-24,0x7a4c8e,'Arcade Attendant');
+ makeHuman(g,-130,-24,0x7a4c8e,'Arcade Attendant','Eli');
 
  // Cafe with tables spaced around a clear entrance.
  s=townShell(g,-158,-20,20,20,6,cityM.plaster,'CAFE');
@@ -684,24 +687,24 @@ function makeCity(){
    cityBox(g,x,s.y+.4,z,1.5,.8,1.5,cityM.wood,true);
    cityBox(g,x+1,s.y+.35,z,.45,.7,.45,cityM.dark,true)
  }
- makeHuman(g,-160,-17,0x8c3e36,'Barista');
+ makeHuman(g,-160,-17,0x8c3e36,'Barista','Nia');
 
  // Tool workshop. The human is interactive through the main shop economy too.
  s=townShell(g,-101,34,20,20,6.2,cityM.plaster,'WORKSHOP','north');
  cityBox(g,-106,s.y+1.0,31,1.2,2,7,cityM.wood,true);
  cityBox(g,-95,s.y+1.0,31,1.2,2,7,cityM.wood,true);
  cityBox(g,-101,s.y+.72,28,7,1.44,1.1,cityM.dark,true);
- makeHuman(g,-101,30,0x6e543c,'Mechanic');
- addTownInteraction('shop',-101,30,'BROWSE TOOLS');
+ makeHuman(g,-101,30,0x6e543c,'Mechanic','Cole');
+ addTownInteraction('shop',-101,30,'BROWSE COLE\'S TOOLS');
 
  // Clinic, residence and community hall are enterable and furnished.
  s=townShell(g,-130,34,22,20,6.1,cityM.brick,'CLINIC','north');
  for(const x of[-135,-126])cityBox(g,x,s.y+.42,31,3,.84,5,cityM.cream,true);
- makeHuman(g,-130,30,0x496579,'Medic');
+ makeHuman(g,-130,30,0x496579,'Medic','Dr. Vale');
 
  s=townShell(g,-160,34,22,20,6.3,cityM.cream,'COMMUNITY HALL','north');
  for(const x of[-166,-160,-154])cityBox(g,x,s.y+.42,31,3.5,.84,1.2,cityM.wood,true);
- makeHuman(g,-160,29,0x725d45,'Resident');
+ makeHuman(g,-160,29,0x725d45,'Caretaker','June');
 
  // Central square with fountain, trees and interactive benches.
  let py=H(-126,53);
@@ -715,15 +718,68 @@ function makeCity(){
    let crown=new T.Mesh(new T.IcosahedronGeometry(2.0,1),cityM.green);crown.position.set(x,H(x,z)+4,z);g.add(crown)
  }
 
- // Street residents make the town feel inhabited without expensive AI.
- makeHuman(g,-118,11,0x76504a,'Resident');
- makeHuman(g,-147,7,0x496579,'Resident');
- makeHuman(g,-91,9,0x8c3e36,'Resident');
- makeHuman(g,-171,11,0x315c39,'Resident');
+ // Street residents and workers.
+ makeHuman(g,-118,11,0x76504a,'Ranger','Iris');
+ makeHuman(g,-147,7,0x496579,'Surveyor','Theo');
+ makeHuman(g,-91,9,0x8c3e36,'Courier','Rafi');
+ makeHuman(g,-171,11,0x315c39,'Miner','Ada');
+ makeHuman(g,-112,50,0x59406f,'Builder','Mason');
+ makeHuman(g,-139,51,0x6c7040,'Botanist','Mae');
+ makeHuman(g,-149,-7,0x3d6175,'Pilot','Soren');
+ makeHuman(g,-76,17,0x7b5b46,'Traveller','Tess');
 
  scene.add(g);return g
 }
 const cityGroup=makeCity();
+
+const buildGroup=new T.Group(),buildColliders=[],earthResources=[];
+scene.add(buildGroup);
+function buildMat(color,metal=0){return new T.MeshStandardMaterial({color,roughness:metal?.55:.9,metalness:metal?.35:0})}
+function addBuildCollider(x,z,hx,hz){buildColliders.push({x,z,hx,hz})}
+function makeBuildPiece(b,save=false){
+ const y=earthH(b.x,b.z),g=new T.Group(),wood=buildMat(0x6f4f34),stone=buildMat(0x77756f),metal=buildMat(0x4f5c62,1);
+ if(b.type==='Wood Wall'){
+   const m=new T.Mesh(new T.BoxGeometry(5,2.7,.28),wood);m.position.y=1.35;g.add(m);addBuildCollider(b.x,b.z,2.5,.3)
+ }else if(b.type==='Foundation'){
+   const m=new T.Mesh(new T.BoxGeometry(5,.3,5),stone);m.position.y=.15;g.add(m)
+ }else if(b.type==='Camp Light'){
+   const pole=new T.Mesh(new T.CylinderGeometry(.08,.1,3,8),metal);pole.position.y=1.5;g.add(pole);
+   const bulb=new T.Mesh(new T.SphereGeometry(.2,8,6),new T.MeshBasicMaterial({color:0xffefb8}));bulb.position.y=3.0;g.add(bulb);
+   const l=new T.PointLight(0xffe7b0,2.5,26,1.6);l.position.y=2.9;l.userData.baseIntensity=2.5;l.userData.owner=g;l.userData.maxDistance=50;g.add(l);managedLights.push(l);
+   addBuildCollider(b.x,b.z,.35,.35)
+ }else if(b.type==='Workbench'){
+   const top=new T.Mesh(new T.BoxGeometry(3,.25,1.2),wood);top.position.y=1.05;g.add(top);
+   for(const sx of[-1.2,1.2])for(const sz of[-.42,.42]){const leg=new T.Mesh(new T.BoxGeometry(.18,1,.18),metal);leg.position.set(sx,.5,sz);g.add(leg)}
+   addBuildCollider(b.x,b.z,1.6,.75);addTownInteraction('workbench',b.x,b.z,'USE WORKBENCH')
+ }
+ g.position.set(b.x,y,b.z);g.rotation.y=b.yaw||0;buildGroup.add(g);
+ if(save){world.builds.push({type:b.type,x:+b.x.toFixed(2),z:+b.z.toFixed(2),yaw:+(b.yaw||0).toFixed(3)});persist()}
+ return g
+}
+for(const b of world.builds)makeBuildPiece(b,false);
+
+function makeResourceNode(parent,id,type,x,z){
+ if(world.resourceGathered[id])return;
+ let mesh;
+ if(type==='Wood'){
+   mesh=new T.Group();
+   for(let i=0;i<4;i++){let log=new T.Mesh(new T.CylinderGeometry(.24,.28,2.8,8),cityM.wood);log.rotation.z=Math.PI/2;log.position.set(0,.32+i*.3,(i%2-.5)*.55);mesh.add(log)}
+ }else if(type==='Stone'){
+   mesh=new T.Mesh(new T.DodecahedronGeometry(1.4,0),buildMat(0x777873));mesh.scale.y=.75
+ }else{
+   mesh=new T.Group();
+   for(let i=0;i<4;i++){let s=new T.Mesh(new T.BoxGeometry(1.3,.22,.7),buildMat(i%2?0x596166:0x7b5a45,1));s.rotation.set(i*.16,i*.55,i*.09);s.position.set((i-1.5)*.45,.3+i*.18,(i%2-.5)*.45);mesh.add(s)}
+ }
+ mesh.position.set(x,earthH(x,z)+(type==='Stone'?1:0),z);parent.add(mesh);
+ earthResources.push({id,type,x,z,mesh});
+ addTownInteraction('resource',x,z,type==='Wood'?'CHOP TIMBER':type==='Stone'?'MINE STONE':'SALVAGE SCRAP',{resourceId:id,resourceType:type})
+}
+const resourceGroup=new T.Group();scene.add(resourceGroup);
+[
+ ['wood1','Wood',-185,-28],['wood2','Wood',-182,30],['wood3','Wood',-70,-38],['wood4','Wood',-67,44],
+ ['stone1','Stone',-194,8],['stone2','Stone',-188,52],['stone3','Stone',-63,-50],['stone4','Stone',-56,57],
+ ['scrap1','Scrap',-72,25],['scrap2','Scrap',-92,-47],['scrap3','Scrap',-159,-48],['scrap4','Scrap',-176,30]
+].forEach(q=>makeResourceNode(resourceGroup,...q));
 
 const moonColliders=[],moonMineables=[],moonCollectibles=[];
 function moonBox(parent,x,y,z,w,h,d,mat,collide=false){
@@ -951,7 +1007,7 @@ function blocked(x,z,radius=0.6,ignoreVehicle=null){
  if(moonMode){
    if(colliderListBlocked(moonColliders,x,z,radius))return true
  }else{
-   if(colliderListBlocked(colliders,x,z,radius)||colliderListBlocked(cityColliders,x,z,radius)||colliderListBlocked(startColliders,x,z,radius))return true
+   if(colliderListBlocked(colliders,x,z,radius)||colliderListBlocked(cityColliders,x,z,radius)||colliderListBlocked(startColliders,x,z,radius)||colliderListBlocked(buildColliders,x,z,radius))return true
  }
  for(const v of vehicles){
    if(v===activeVehicle||v===ignoreVehicle)continue;
@@ -1143,6 +1199,7 @@ function nearestTownInteraction(){
  if(moonMode||activeVehicle)return null;
  let best=null,bd=3.1;
  for(const a of townInteractions){
+   if(a.resourceId&&world.resourceGathered[a.resourceId])continue;
    let d=Math.hypot(player.x-a.x,player.z-a.z);
    if(d<bd){bd=d;best=a}
  }
@@ -1227,7 +1284,11 @@ $('inventoryClose').onclick=()=>$('inventoryPanel').classList.add('hidden');
 const craftRecipes=[
  {name:'Lunar Alloy Plate',needs:{'Lunar Ore':3},out:'Lunar Alloy Plate'},
  {name:'Impact Lens',needs:{'Impact Glass':1,'Regolith Sample':1},out:'Impact Lens'},
- {name:'Field Repair Kit',needs:{'Lunar Rock':1,'Regolith Sample':1},out:'Field Repair Kit'}
+ {name:'Field Repair Kit',needs:{'Lunar Rock':1,'Regolith Sample':1},out:'Field Repair Kit'},
+ {name:'Wood Wall Kit',needs:{Wood:4,Scrap:1},out:'Wood Wall Kit'},
+ {name:'Foundation Kit',needs:{Stone:4,Wood:2},out:'Foundation Kit'},
+ {name:'Camp Light Kit',needs:{Scrap:3,'Impact Glass':1},out:'Camp Light Kit'},
+ {name:'Workbench Kit',needs:{Wood:5,Scrap:3,Stone:2},out:'Workbench Kit'}
 ];
 function inventoryQty(name){return inventoryCounts()[name]||0}
 function consumeItem(name,count){
@@ -1246,6 +1307,28 @@ function consumeItem(name,count){
    }else{delete world.inventory[k];count--}
  }
 }
+const buildKits=[
+ {item:'Wood Wall Kit',type:'Wood Wall'},
+ {item:'Foundation Kit',type:'Foundation'},
+ {item:'Camp Light Kit',type:'Camp Light'},
+ {item:'Workbench Kit',type:'Workbench'}
+];
+function placeBuild(type,item){
+ if(moonMode||activeVehicle){toast('Build on foot on Earth');return}
+ if(inventoryQty(item)<1){toast('You need '+item);return}
+ const dist=5.2,x=player.x-Math.sin(player.yaw)*dist,z=player.z-Math.cos(player.yaw)*dist;
+ if(blocked(x,z,1.4)||slopeAt(x,z)>2.2){toast('Cannot build there');return}
+ consumeItem(item,1);makeBuildPiece({type,x,z,yaw:player.yaw},true);renderInventory();renderCrafting();toast(type+' placed')
+}
+function renderBuildList(){
+ const list=$('buildList');list.innerHTML='';
+ for(const bld of buildKits){
+   const row=document.createElement('div');row.className='craftRow';
+   row.innerHTML='<div><strong>'+bld.type+'</strong><small>'+inventoryQty(bld.item)+' kit(s) available</small></div>';
+   const b=document.createElement('button');b.textContent='PLACE';b.disabled=inventoryQty(bld.item)<1;
+   b.onclick=()=>placeBuild(bld.type,bld.item);row.appendChild(b);list.appendChild(row)
+ }
+}
 function renderCrafting(){
  const list=$('craftList');list.innerHTML='';
  for(const r of craftRecipes){
@@ -1262,18 +1345,21 @@ function renderCrafting(){
    };
    row.appendChild(b);list.appendChild(row)
  }
+ renderBuildList()
 }
 $('craftBtn').onclick=()=>{const p=$('craftPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'craftPanel':null);p.classList.toggle('hidden',!open);if(open)renderCrafting()};
 $('craftClose').onclick=()=>$('craftPanel').classList.add('hidden');
 
 const shopBuy=[
  {name:'Field Flashlight',price:35,desc:'Portable exploration light'},
- {name:'Heavy Pickaxe',price:60,desc:'Mining and field tool'},
+ {name:'Basic Hatchet',price:25,desc:'Harvest timber from resource piles'},
+ {name:'Heavy Pickaxe',price:60,desc:'Mine stone and mineral resources'},
+ {name:'Salvage Wrench',price:40,desc:'Recover useful scrap'},
  {name:'Geology Scanner',price:90,desc:'Survey equipment'},
  {name:'Repair Kit',price:45,desc:'Vehicle repair equipment'},
  {name:'Trail Rations',price:12,desc:'Emergency supplies'}
 ];
-const sellPrices={'Lunar Ore':18,'Lunar Rock':8,'Regolith Sample':12,'Impact Glass':30,'Lunar Alloy Plate':42,'Impact Lens':55};
+const sellPrices={Wood:3,Stone:4,Scrap:6,'Lunar Ore':18,'Lunar Rock':8,'Regolith Sample':12,'Impact Glass':30,'Lunar Alloy Plate':42,'Impact Lens':55,'Wood Wall Kit':16,'Foundation Kit':20,'Workbench Kit':35};
 let shopMode='buy';
 function addInventoryItem(name,count=1){world.inventory[name]=(Number(world.inventory[name])||0)+count}
 function renderShop(){
@@ -1317,6 +1403,32 @@ $('townAction').onclick=()=>{
    const score=1200+Math.floor((Math.sin(performance.now()*.013+a.x)*.5+.5)*8800);
    world.arcadeScores[a.game]=Math.max(world.arcadeScores[a.game]||0,score);persist();
    toast(a.game+' • SCORE '+score)
+ }else if(a.type==='talk'){
+   const lines={
+     Ranger:'Iris: The wilds get stranger the farther you travel.',
+     Surveyor:'Theo: I have seen unusual signals beyond the northern ridges.',
+     Courier:'Rafi: I move supplies between the airfield and town.',
+     Miner:'Ada: Bring proper tools if you want useful stone.',
+     Builder:'Mason: Craft build kits, then place them from the Craft menu.',
+     Botanist:'Mae: The forests are dense enough to hide almost anything.',
+     Pilot:'Soren: Keep an eye on your altitude and throttle.',
+     Traveller:'Tess: I came in from the western hills this morning.',
+     Medic:'Dr. Vale: The clinic is always open.',
+     'Arcade Attendant':'Eli: Try to beat your own high score.',
+     Barista:'Nia: Coffee is easier to find than answers out here.',
+     Caretaker:'June: The hall is open to anyone passing through.'
+   };
+   toast(lines[a.role]||a.name+': Good to see another explorer.')
+ }else if(a.type==='workbench'){
+   closeSidePanels('craftPanel');$('craftPanel').classList.remove('hidden');renderCrafting();toast('Workbench ready')
+ }else if(a.type==='resource'){
+   const need=a.resourceType==='Wood'?'Basic Hatchet':a.resourceType==='Stone'?'Heavy Pickaxe':'Salvage Wrench';
+   if(inventoryQty(need)<1){toast('You need a '+need);return}
+   const node=earthResources.find(r=>r.id===a.resourceId);
+   if(!node||world.resourceGathered[a.resourceId])return;
+   world.resourceGathered[a.resourceId]=1;node.mesh.visible=false;
+   const amount=a.resourceType==='Scrap'?3:4;addInventoryItem(a.resourceType,amount);
+   persist();renderInventory();renderCrafting();toast('Collected '+amount+' '+a.resourceType)
  }
 };
 
@@ -1468,6 +1580,8 @@ function updateSky(time,dt=0.016){
  }
  startBase.visible=!moonMode&&spaceFactor<0.88;
  cityGroup.visible=!moonMode&&spaceFactor<0.88;
+ buildGroup.visible=!moonMode&&spaceFactor<0.88;
+ resourceGroup.visible=!moonMode&&spaceFactor<0.88;
  moonGroup.visible=moonMode;
  for(const ch of chunks.values())ch.root.visible=!moonMode&&spaceFactor<0.88;
  for(const craft of vehicles){
