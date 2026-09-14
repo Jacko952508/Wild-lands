@@ -936,7 +936,7 @@ function step(dt,t){
 
 sync(true);
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
-let last=performance.now(),start=performance.now()/1000;
+let last=performance.now(),start=performance.now()/1000-240;
 function loop(now){let dt=Math.min(0.04,(now-last)/1000);last=now;let t=now/1000;step(dt,t-start);processFarQueue();renderer.render(scene,camera);requestAnimationFrame(loop)}
 requestAnimationFrame(loop);
 
