@@ -70,7 +70,7 @@ if(!player)player={x:0,z:12,yaw:0,pitch:-0.03};
 
 const seed=world.seed;
 const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
-let currentChunk='',saveTimer=0,lastSyncX=1e9,lastSyncZ=1e9;
+let currentChunk='',saveTimer=0,lastSyncX=1e9,lastSyncZ=1e9,syncGeneration=0;
 let mapView={cx:0,cz:0},mapSelected=null;
 
 function key(x,z){return x+','+z}
@@ -415,7 +415,16 @@ const cityGroup=makeCity();
 
 function createChunk(cx,cz){
  let k=key(cx,cz),d=descriptor(cx,cz),root=new T.Group(),near=new T.Group(),far=new T.Group();
- near.add(terrain(cx,cz,28));far.add(terrain(cx,cz,7));
+
+ // Freeze every chunk the first time it is actually rendered, not only when
+ // the player steps into it. This prevents surrounding chunks from being
+ // regenerated differently after cache eviction.
+ if(!world.saved[k])world.saved[k]=JSON.parse(JSON.stringify(d));
+ d=world.saved[k];
+
+ // Near/far terrain must have identical topology or the ground visibly
+ // reshapes when a chunk changes LOD. Decorations still use separate LOD.
+ near.add(terrain(cx,cz,20));far.add(terrain(cx,cz,20));
  for(const q of d.trees){
    let wx=cx*CH+q[0],wz=cz*CH+q[1];if(!inCityZone(wx,wz))near.add(makeTree(wx,wz,q[2],true));
  }
@@ -467,11 +476,12 @@ function blocked(x,z,radius=0.6){for(const c of colliders){let dx=x-c.x,dz=z-c.z
 
 function queueFar(cx,cz){
  let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
- farPending.add(k);farQueue.push({cx,cz,k});
+ farPending.add(k);farQueue.push({cx,cz,k,generation:syncGeneration});
 }
 function processFarQueue(){
  if(!farQueue.length)return;
  let cc=chunkOf(player.x,player.z),job=farQueue.shift();farPending.delete(job.k);
+ if(job.generation!==syncGeneration)return;
  if(chunks.has(job.k))return;
  let dx=Math.abs(job.cx-cc.cx),dz=Math.abs(job.cz-cc.cz),dist=Math.max(dx,dz);
  if(dist<=NEAR||dist>FAR)return;
@@ -481,6 +491,9 @@ function sync(force=false){
  let cc=chunkOf(player.x,player.z);
  if(!force&&cc.cx===lastSyncX&&cc.cz===lastSyncZ)return;
  lastSyncX=cc.cx;lastSyncZ=cc.cz;
+ syncGeneration++;
+ farQueue.length=0;
+ farPending.clear();
  let nearSet=new Set(),keepSet=new Set();
 
  for(let dz=-FAR;dz<=FAR;dz++)for(let dx=-FAR;dx<=FAR;dx++){
@@ -601,7 +614,7 @@ function activateUfo(v){
  let g=v.group,c=v.chunk;
  if(c&&g.parent)c.near.remove(g);
  scene.add(g);
- if(c)c.anomaly=null;
+ if(c){c.anomaly=null;c.d.anomaly=null;world.saved[c.k]=JSON.parse(JSON.stringify(c.d));persist()}
  g.userData.float=false;
  g.userData.piloted=true;
  let craft={
