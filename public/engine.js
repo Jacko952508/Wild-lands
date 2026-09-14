@@ -454,7 +454,7 @@ function renderMap(){
 }
 $('travel').onclick=()=>{
  if(!mapSelected)return;
- player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;player.yaw=0;
+ activeVehicle=null;refreshUse();player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;player.yaw=0;
  $('panel').classList.add('hidden');lastSyncX=1e9;lastSyncZ=1e9;sync(true);
  if(blocked(player.x,player.z)){outer:for(let r=3;r<=18;r+=3)for(let i=0;i<16;i++){let a=i/16*Math.PI*2,x=mapSelected.cx*CH+Math.cos(a)*r,z=mapSelected.cz*CH+Math.sin(a)*r;if(!blocked(x,z)&&Math.abs(H(x,z)-H(player.x,player.z))<3){player.x=x;player.z=z;break outer}}}
  camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);persist();toast('Fast travel complete');
@@ -534,7 +534,7 @@ document.oncontextmenu=e=>e.preventDefault();
 window.__world={
  state:()=>({near:[...chunks.values()].filter(c=>c.mode==='near').length,far:[...chunks.values()].filter(c=>c.mode==='far').length,cached:chunks.size,animals:animalAgents.length,explored:Object.keys(world.explored).length,pos:{x:player.x,z:player.z},seed}),
  chunk:(x,z)=>JSON.parse(JSON.stringify(descriptor(x,z))),
- teleportChunk:(cx,cz)=>{player.x=cx*CH;player.z=cz*CH;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
+ teleportChunk:(cx,cz)=>{activeVehicle=null;player.x=cx*CH;player.z=cz*CH;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  mapOpen:()=>openMap(),
  animals:()=>animalAgents.slice(0,8).map(a=>({kind:a.kind,x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(2)})),
  vehicles:()=>vehicles.map(v=>({type:v.type,x:+v.x.toFixed(2),z:+v.z.toFixed(2),alt:+v.alt.toFixed(2),active:v===activeVehicle})),
