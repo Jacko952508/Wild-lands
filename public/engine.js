@@ -94,7 +94,7 @@ const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.ui=world.ui||{lookSensitivity:1,hudScale:1};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.ui=world.ui||{lookSensitivity:1,hudScale:1};
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -114,12 +114,18 @@ function fbm(x,z,s=0){let a=0.5,f=1,v=0;for(let i=0;i<5;i++){v+=a*noise(x*f,z*f,
 let moonMode=false;
 function earthRawH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
 const START_PLATEAU=earthRawH(0,0);
+const TOWN_LEVEL=earthRawH(-126,8);
 function earthH(x,z){
   const raw=earthRawH(x,z),edge=Math.max(Math.abs(x),Math.abs(z));
   if(edge<=46)return START_PLATEAU;
-  if(edge>=48)return raw;
-  let t=smooth((edge-46)/2);
-  return T.MathUtils.lerp(START_PLATEAU,raw,t)
+  if(edge<48)return T.MathUtils.lerp(START_PLATEAU,raw,smooth((edge-46)/2));
+
+  // West town is built on a gently levelled plateau so floors and doorways
+  // remain genuinely walkable, with only a narrow blend back to wild terrain.
+  const tx=Math.max(0,-190-x,x+64),tz=Math.max(0,Math.abs(z)-70),td=Math.max(tx,tz);
+  if(td<=0)return TOWN_LEVEL;
+  if(td<10)return T.MathUtils.lerp(TOWN_LEVEL,raw,smooth(td/10));
+  return raw
 }
 function moonRawH(x,z){
  let broad=(fbm(x*0.0032,z*0.0032,901)-0.5)*18,
@@ -495,7 +501,7 @@ function runwayStrip(){
 const startBase=runwayStrip();
 
 const cityColliders=[];
-function inCityZone(x,z){return x>68&&x<184&&z>-58&&z<68}
+function inCityZone(x,z){return x>-190&&x<-64&&z>-70&&z<70}
 function cityMat(color,roughness=0.85,emissive=0){
  return new T.MeshStandardMaterial({color,roughness,emissive,emissiveIntensity:emissive?0.32:0});
 }
@@ -592,50 +598,128 @@ function cityBuilding(parent,cx,cz,w,d,h,mat,type,label){
  awning.rotation.x=-.08;
  furnishRoom(parent,cx,cz,w,d,type,y);
 }
+const townInteractions=[],townHumans=[];
+function townText(parent,text,x,y,z,w=7,h=1.15){
+ const cv=document.createElement('canvas');cv.width=512;cv.height=96;const ctx=cv.getContext('2d');
+ ctx.fillStyle='#151b1d';ctx.fillRect(0,0,512,96);ctx.strokeStyle='#8fe6c1';ctx.lineWidth=5;ctx.strokeRect(3,3,506,90);
+ ctx.fillStyle='#effff7';ctx.font='bold 34px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,48);
+ const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;
+ const m=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshBasicMaterial({map:tex,transparent:false}));
+ m.position.set(x,y,z);parent.add(m);return m
+}
+function makeHuman(parent,x,z,shirt=0x546f8a,role='Resident'){
+ const g=new T.Group(),skin=cityMat(0xc99872,.8),cloth=cityMat(shirt,.82),pants=cityMat(0x2f3438,.9);
+ const body=new T.Mesh(new T.CylinderGeometry(.38,.46,1.35,8),cloth);body.position.y=1.55;g.add(body);
+ const head=new T.Mesh(new T.SphereGeometry(.34,10,8),skin);head.position.y=2.55;g.add(head);
+ for(const sx of[-.2,.2]){let leg=new T.Mesh(new T.CylinderGeometry(.11,.13,.85,7),pants);leg.position.set(sx,.55,0);g.add(leg)}
+ g.position.set(x,H(x,z),z);g.userData.role=role;parent.add(g);townHumans.push(g);return g
+}
+function addTownInteraction(type,x,z,label,data={}){townInteractions.push({type,x,z,label,...data})}
+function townShell(parent,cx,cz,w,d,h,mat,label,doorSide='south'){
+ const y=H(cx,cz),wall=.42,door=4.2;
+ cityBox(parent,cx,y+.08,cz,w,.16,d,cityM.floor,false);
+ cityBox(parent,cx,y+h,cz,w,.3,d,cityM.dark,false);
+ cityBox(parent,cx-w/2+wall/2,y+h/2,cz,wall,h,d,mat,true);
+ cityBox(parent,cx+w/2-wall/2,y+h/2,cz,wall,h,d,mat,true);
+ const frontZ=doorSide==='south'?cz-d/2:cz+d/2,backZ=doorSide==='south'?cz+d/2:cz-d/2;
+ cityBox(parent,cx,y+h/2,backZ-(doorSide==='south'?wall/2:-wall/2),w,h,wall,mat,true);
+ let side=(w-door)/2;
+ cityBox(parent,cx-(door/2+side/2),y+h/2,frontZ+(doorSide==='south'?wall/2:-wall/2),side,h,wall,mat,true);
+ cityBox(parent,cx+(door/2+side/2),y+h/2,frontZ+(doorSide==='south'?wall/2:-wall/2),side,h,wall,mat,true);
+ cityBox(parent,cx,y+h-.38,frontZ+(doorSide==='south'?wall/2:-wall/2),door,.76,wall,mat,true);
+ const porchZ=frontZ+(doorSide==='south'?-1.25:1.25);
+ cityBox(parent,cx,y+.06,porchZ,door*1.05,.12,2.6,cityM.concrete,false);
+ townText(parent,label,cx,y+h-.95,frontZ+(doorSide==='south'?-0.24:0.24),Math.min(w*.72,9),1.05);
+ for(const sx of[-.3,.3]){
+   let win=new T.Mesh(new T.BoxGeometry(w*.2,1.5,.08),cityM.glass);
+   win.position.set(cx+sx*w,y+2.6,frontZ+(doorSide==='south'?-0.05:.05));parent.add(win)
+ }
+ return {y,frontZ,door}
+}
+function townBench(parent,x,z,rot=0){
+ const y=H(x,z),g=new T.Group();
+ cityBox(g,0,.55,0,2.5,.18,.55,cityM.wood,false);cityBox(g,0,1.15,.22,2.5,.18,.45,cityM.wood,false);
+ for(const sx of[-.9,.9])cityBox(g,sx,.28,0,.14,.56,.5,cityM.dark,false);
+ g.position.set(x,y,z);g.rotation.y=rot;parent.add(g);cityColliders.push({x,z,hx:1.3,hz:.5});
+ addTownInteraction('bench',x,z,'SIT ON BENCH',{yaw:rot});
+}
+function arcadeMachine(parent,x,z,rot=0,name='STAR RUNNER'){
+ const y=H(x,z),g=new T.Group(),cab=cityMat(0x302447,.55),trim=new T.MeshBasicMaterial({color:0x7cf6ff});
+ cityBox(g,0,1.15,0,1.05,2.3,.9,cab,false);
+ let scr=new T.Mesh(new T.PlaneGeometry(.72,.52),new T.MeshBasicMaterial({color:0x1ae1ee}));scr.position.set(0,1.48,.46);g.add(scr);
+ cityBox(g,0,2.18,0,1.1,.13,.95,trim,false);g.position.set(x,y,z);g.rotation.y=rot;parent.add(g);
+ cityColliders.push({x,z,hx:.6,hz:.55});addTownInteraction('arcade',x,z,'PLAY '+name,{game:name});
+}
 function makeCity(){
- let g=new T.Group(),cx=126,cz=8;
- cityRoad(g,52,-4,75,2,8,9);
- cityRoad(g,72,2,184,2,10,30);
- cityRoad(g,124,-52,124,62,9,30);
- cityRoad(g,78,-47,78,55,7,24);
- cityRoad(g,170,-46,170,54,7,24);
+ let g=new T.Group(),cx=-126,cz=6;
 
- for(let x=74;x<=178;x+=13){
-   let stripe=cityBox(g,x,H(x,2)+.09,2,.16,.05,3.7,cityM.cream,false);
+ // Road from the airfield heads west into a compact walkable town.
+ cityRoad(g,-46,8,-72,8,8,10);
+ cityRoad(g,-72,8,-184,8,10,30);
+ cityRoad(g,-126,-58,-126,64,9,30);
+ cityRoad(g,-82,-48,-82,56,7,24);
+ cityRoad(g,-170,-48,-170,56,7,24);
+ for(let x=-178;x<=-74;x+=13)cityBox(g,x,H(x,8)+.09,8,.16,.05,3.7,cityM.cream,false);
+ for(const z of[-36,43])for(let x=-176;x<=-76;x+=14)cityLamp(g,x,z);
+ for(const x of[-86,-166])for(let z=-29;z<=45;z+=18)cityLamp(g,x,z);
+
+ // WESTSIDE SUPPLY - fully enterable shop with clerk, counters and equipment racks.
+ let s=townShell(g,-101,-20,20,20,6.2,cityM.brick,'WESTSIDE SUPPLY');
+ cityBox(g,-106,s.y+.65,-16,6,1.3,1.2,cityM.dark,true);
+ cityBox(g,-95,s.y+1.0,-16,1.2,2.0,6.8,cityM.wood,true);
+ cityBox(g,-91.8,s.y+1.0,-16,1.2,2.0,6.8,cityM.wood,true);
+ makeHuman(g,-106,-18,0x315c39,'Shopkeeper');
+ addTownInteraction('shop',-106,-18,'TRADE WITH SHOPKEEPER');
+
+ // Arcade with several working machines and open central aisle.
+ s=townShell(g,-129,-20,22,20,6.2,cityM.blue,'NEON ARCADE');
+ for(const [x,z,n] of[[-135,-17,'STAR RUNNER'],[-132,-17,'MOON RAID'],[-126,-17,'WILDLANDS GT'],[-123,-17,'ASTRO DROP'],[-120,-17,'TANK DUEL']])arcadeMachine(g,x,z,Math.PI,n);
+ cityBox(g,-129,s.y+.55,-26,8,1.1,1.1,cityM.dark,true);
+ makeHuman(g,-130,-24,0x7a4c8e,'Arcade Attendant');
+
+ // Cafe with tables spaced around a clear entrance.
+ s=townShell(g,-158,-20,20,20,6,cityM.plaster,'CAFE');
+ cityBox(g,-158,s.y+.65,-16,9,1.3,1.2,cityM.wood,true);
+ for(const [x,z] of[[-163,-23],[-155,-23],[-163,-28],[-155,-28]]){
+   cityBox(g,x,s.y+.4,z,1.5,.8,1.5,cityM.wood,true);
+   cityBox(g,x+1,s.y+.35,z,.45,.7,.45,cityM.dark,true)
  }
- for(const z of[-35,39]){
-   for(let x=82;x<=166;x+=14)cityLamp(g,x,z);
- }
- for(const x of[88,160]){
-   for(let z=-30;z<=40;z+=18)cityLamp(g,x,z);
- }
+ makeHuman(g,-160,-17,0x8c3e36,'Barista');
 
- const buildings=[
-  [92,-20,14,17,5.7,cityM.brick,'cafe','CAFE'],
-  [110,-20,13,17,5.4,cityM.plaster,'shop','GENERAL'],
-  [140,-20,15,18,6.1,cityM.blue,'office','OFFICES'],
-  [160,-20,14,17,5.6,cityM.brick,'library','LIBRARY'],
-  [92,27,14,17,5.5,cityM.plaster,'home','HOUSE'],
-  [111,27,14,17,5.8,cityM.brick,'clinic','CLINIC'],
-  [141,27,15,18,6.0,cityM.plaster,'home','APARTMENTS'],
-  [162,27,14,17,5.7,cityM.blue,'shop','MARKET']
- ];
- buildings.forEach(b=>cityBuilding(g,...b));
+ // Tool workshop. The human is interactive through the main shop economy too.
+ s=townShell(g,-101,34,20,20,6.2,cityM.plaster,'WORKSHOP','north');
+ cityBox(g,-106,s.y+1.0,31,1.2,2,7,cityM.wood,true);
+ cityBox(g,-95,s.y+1.0,31,1.2,2,7,cityM.wood,true);
+ cityBox(g,-101,s.y+.72,28,7,1.44,1.1,cityM.dark,true);
+ makeHuman(g,-101,30,0x6e543c,'Mechanic');
+ addTownInteraction('shop',-101,30,'BROWSE TOOLS');
 
- let plazaY=H(126,48);
- cityBox(g,126,plazaY+.05,48,24,.1,16,cityM.concrete,false);
- let fountain=new T.Mesh(new T.CylinderGeometry(3.1,3.4,.65,20),cityM.concrete);fountain.position.set(126,H(126,48)+.34,48);g.add(fountain);
- let water=new T.Mesh(new T.CylinderGeometry(2.65,2.65,.08,20),new T.MeshPhysicalMaterial({color:0x4d8da6,transparent:true,opacity:.7,roughness:.2}));water.position.set(126,H(126,48)+.7,48);g.add(water);
- cityColliders.push({x:126,z:48,hx:3.4,hz:3.4});
+ // Clinic, residence and community hall are enterable and furnished.
+ s=townShell(g,-130,34,22,20,6.1,cityM.brick,'CLINIC','north');
+ for(const x of[-135,-126])cityBox(g,x,s.y+.42,31,3,.84,5,cityM.cream,true);
+ makeHuman(g,-130,30,0x496579,'Medic');
 
- for(const x of[116,136])for(const z of[43,53]){
-   cityBox(g,x,H(x,z)+.38,z,2.3,.75,.58,cityM.wood,true)
- }
+ s=townShell(g,-160,34,22,20,6.3,cityM.cream,'COMMUNITY HALL','north');
+ for(const x of[-166,-160,-154])cityBox(g,x,s.y+.42,31,3.5,.84,1.2,cityM.wood,true);
+ makeHuman(g,-160,29,0x725d45,'Resident');
 
- for(const [x,z] of[[76,-34],[76,34],[178,-33],[178,33],[102,48],[150,49]]){
-   let trunk=cityBox(g,x,H(x,z)+1.5,z,.45,3,.45,cityM.wood,true);
+ // Central square with fountain, trees and interactive benches.
+ let py=H(-126,53);
+ cityBox(g,-126,py+.05,53,30,.1,18,cityM.concrete,false);
+ let fountain=new T.Mesh(new T.CylinderGeometry(3.2,3.6,.7,20),cityM.concrete);fountain.position.set(-126,py+.36,53);g.add(fountain);
+ let water=new T.Mesh(new T.CylinderGeometry(2.7,2.7,.08,20),new T.MeshPhysicalMaterial({color:0x4d8da6,transparent:true,opacity:.7,roughness:.2}));water.position.set(-126,py+.74,53);g.add(water);
+ cityColliders.push({x:-126,z:53,hx:3.6,hz:3.6});
+ townBench(g,-136,49,0);townBench(g,-116,49,Math.PI);townBench(g,-136,58,0);townBench(g,-116,58,Math.PI);
+ for(const [x,z] of[[-178,-39],[-74,-39],[-178,43],[-74,43],[-145,53],[-107,53]]){
+   cityBox(g,x,H(x,z)+1.5,z,.45,3,.45,cityM.wood,true);
    let crown=new T.Mesh(new T.IcosahedronGeometry(2.0,1),cityM.green);crown.position.set(x,H(x,z)+4,z);g.add(crown)
  }
+
+ // Street residents make the town feel inhabited without expensive AI.
+ makeHuman(g,-118,11,0x76504a,'Resident');
+ makeHuman(g,-147,7,0x496579,'Resident');
+ makeHuman(g,-91,9,0x8c3e36,'Resident');
+ makeHuman(g,-171,11,0x315c39,'Resident');
 
  scene.add(g);return g
 }
@@ -985,7 +1069,7 @@ function updateAnomalies(dt,t){
  }
 }
 
-let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8);
+let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8),sitting=null;
 let worldCtl={weather:'clear',autoTime:true,time:12};
 function bindPad(el,v){
  let id=null,start={x:0,y:0},stick=el.querySelector('i');
@@ -1055,10 +1139,19 @@ function findSafeExit(v){
  }
  return{x:v.x+Math.sin(v.yaw+Math.PI/2)*baseR*2.2,z:v.z+Math.cos(v.yaw+Math.PI/2)*baseR*2.2}
 }
+function nearestTownInteraction(){
+ if(moonMode||activeVehicle)return null;
+ let best=null,bd=3.1;
+ for(const a of townInteractions){
+   let d=Math.hypot(player.x-a.x,player.z-a.z);
+   if(d<bd){bd=d;best=a}
+ }
+ return best
+}
 function refreshUse(){
- let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup');
+ let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction');
  if(activeVehicle){
-   pickup.classList.add('hidden');
+   pickup.classList.add('hidden');town.classList.add('hidden');
    b.classList.remove('hidden');
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
    const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek';
@@ -1071,6 +1164,9 @@ function refreshUse(){
    return
  }
  fc.classList.add('hidden');mine.classList.add('hidden');$('sprint').classList.remove('hidden');$('sprint').textContent='SPRINT';
+ if(sitting){town.classList.remove('hidden');town.textContent='STAND UP'}else{
+   let a=nearestTownInteraction();town.classList.toggle('hidden',!a);if(a)town.textContent=a.label;
+ }
  let item=nearestCollectible();pickup.classList.toggle('hidden',!item);if(item)pickup.textContent='PICK UP '+item.name.toUpperCase();
  let v=nearestVehicle();
  if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}
@@ -1123,7 +1219,7 @@ function renderInventory(){
  for(const k of keys){const row=document.createElement('div');row.className='invRow';row.innerHTML='<span>'+k+'</span><b>'+items[k]+'</b>';list.appendChild(row)}
 }
 function closeSidePanels(except=null){
- for(const id of['inventoryPanel','craftPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
+ for(const id of['inventoryPanel','craftPanel','shopPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
 }
 $('inventoryBtn').onclick=()=>{const p=$('inventoryPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'inventoryPanel':null);p.classList.toggle('hidden',!open);if(open)renderInventory()};
 $('inventoryClose').onclick=()=>$('inventoryPanel').classList.add('hidden');
@@ -1143,7 +1239,11 @@ function consumeItem(name,count){
  for(const [k,v] of Object.entries(world.inventory)){
    if(count<=0)break;
    const n=k.startsWith('sample:')?(typeof v==='string'?v:'Lunar Sample'):k;
-   if(n===name&&v){delete world.inventory[k];count--}
+   if(n!==name||!v)continue;
+   if(typeof v==='number'){
+     const take=Math.min(count,v),left=v-take;count-=take;
+     if(left>0)world.inventory[k]=left;else delete world.inventory[k]
+   }else{delete world.inventory[k];count--}
  }
 }
 function renderCrafting(){
@@ -1165,6 +1265,60 @@ function renderCrafting(){
 }
 $('craftBtn').onclick=()=>{const p=$('craftPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'craftPanel':null);p.classList.toggle('hidden',!open);if(open)renderCrafting()};
 $('craftClose').onclick=()=>$('craftPanel').classList.add('hidden');
+
+const shopBuy=[
+ {name:'Field Flashlight',price:35,desc:'Portable exploration light'},
+ {name:'Heavy Pickaxe',price:60,desc:'Mining and field tool'},
+ {name:'Geology Scanner',price:90,desc:'Survey equipment'},
+ {name:'Repair Kit',price:45,desc:'Vehicle repair equipment'},
+ {name:'Trail Rations',price:12,desc:'Emergency supplies'}
+];
+const sellPrices={'Lunar Ore':18,'Lunar Rock':8,'Regolith Sample':12,'Impact Glass':30,'Lunar Alloy Plate':42,'Impact Lens':55};
+let shopMode='buy';
+function addInventoryItem(name,count=1){world.inventory[name]=(Number(world.inventory[name])||0)+count}
+function renderShop(){
+ $('creditsReadout').textContent=Math.floor(world.credits)+' credits';
+ $('shopBuyTab').classList.toggle('active',shopMode==='buy');$('shopSellTab').classList.toggle('active',shopMode==='sell');
+ const list=$('shopList');list.innerHTML='';
+ if(shopMode==='buy'){
+   for(const it of shopBuy){
+     const row=document.createElement('div');row.className='shopRow';row.innerHTML='<div><strong>'+it.name+'</strong><small>'+it.desc+' • '+it.price+' credits</small></div>';
+     const b=document.createElement('button');b.textContent='BUY';b.disabled=world.credits<it.price;
+     b.onclick=()=>{if(world.credits<it.price)return;world.credits-=it.price;addInventoryItem(it.name,1);persist();renderInventory();renderShop();toast(it.name+' purchased')};
+     row.appendChild(b);list.appendChild(row)
+   }
+ }else{
+   const inv=inventoryCounts(),names=Object.keys(inv).filter(n=>sellPrices[n]&&inv[n]>0);
+   if(!names.length){list.innerHTML='<div class="shopRow"><div><strong>Nothing to sell</strong><small>Bring resources and crafted goods.</small></div></div>';return}
+   for(const name of names){
+     const price=sellPrices[name],row=document.createElement('div');row.className='shopRow';
+     row.innerHTML='<div><strong>'+name+'</strong><small>'+inv[name]+' owned • '+price+' credits each</small></div>';
+     const b=document.createElement('button');b.textContent='SELL 1';
+     b.onclick=()=>{if(inventoryQty(name)<1)return;consumeItem(name,1);world.credits+=price;persist();renderInventory();renderShop();toast(name+' sold for '+price+' credits')};
+     row.appendChild(b);list.appendChild(row)
+   }
+ }
+}
+function openShop(){closeSidePanels('shopPanel');$('shopPanel').classList.remove('hidden');renderShop()}
+$('shopClose').onclick=()=>$('shopPanel').classList.add('hidden');
+$('shopBuyTab').onclick=()=>{shopMode='buy';renderShop()};
+$('shopSellTab').onclick=()=>{shopMode='sell';renderShop()};
+$('townAction').onclick=()=>{
+ if(sitting){sitting=null;toast('Stood up');return}
+ const a=nearestTownInteraction();if(!a)return;
+ if(a.type==='shop'){openShop();toast('Westside Supply opened')}
+ else if(a.type==='bench'){
+   sitting={x:a.x,z:a.z,yaw:a.yaw||0};
+   move.x=move.y=0;look.x=look.y=0;
+   player.x=a.x+Math.sin(a.yaw||0)*.72;player.z=a.z+Math.cos(a.yaw||0)*.72;player.yaw=(a.yaw||0)+Math.PI;
+   toast('Sitting on bench')
+ }else if(a.type==='arcade'){
+   world.arcadeScores=world.arcadeScores||{};
+   const score=1200+Math.floor((Math.sin(performance.now()*.013+a.x)*.5+.5)*8800);
+   world.arcadeScores[a.game]=Math.max(world.arcadeScores[a.game]||0,score);persist();
+   toast(a.game+' • SCORE '+score)
+ }
+};
 
 function nearestCollectible(){
  if(!moonMode||activeVehicle)return null;
@@ -1505,10 +1659,13 @@ function step(dt,t){
    camera.lookAt(v.x,h+1.1-ly*1.5,v.z);
  }else{
    player.yaw-=lx*dt*2.45;
-   let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
-   let dh=Math.abs(H(nx,nz)-H(player.x,player.z));
-   if(!blocked(nx,nz)&&dh<1.05&&slopeAt(nx,nz)<2.35){player.x=nx;player.z=nz}
-   cameraLerpTarget.set(player.x,H(player.x,player.z)+1.7,player.z);camera.position.lerp(cameraLerpTarget,0.24);camera.rotation.set(player.pitch,player.yaw,0);
+   if(!sitting){
+     let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
+     let dh=Math.abs(H(nx,nz)-H(player.x,player.z));
+     if(!blocked(nx,nz)&&dh<1.05&&slopeAt(nx,nz)<2.35){player.x=nx;player.z=nz}
+     cameraLerpTarget.set(player.x,H(player.x,player.z)+1.7,player.z)
+   }else cameraLerpTarget.set(player.x,H(player.x,player.z)+1.18,player.z);
+   camera.position.lerp(cameraLerpTarget,0.24);camera.rotation.set(player.pitch,player.yaw,0);
  }
 
  let cc=chunkOf(player.x,player.z);
