@@ -29,6 +29,8 @@ for(let i=0;i<420;i++){let a=Math.random()*Math.PI*2,y=Math.random()*0.72+0.2,r=
 starGeo.setAttribute('position',new T.Float32BufferAttribute(starPos,3));
 const stars=new T.Points(starGeo,new T.PointsMaterial({color:0xffffff,size:0.8,sizeAttenuation:false,transparent:true,opacity:0}));
 scene.add(stars);
+const rainCount=520,rainPos=new Float32Array(rainCount*3);for(let i=0;i<rainCount;i++){rainPos[i*3]=(Math.random()-.5)*80;rainPos[i*3+1]=Math.random()*42;rainPos[i*3+2]=(Math.random()-.5)*80}const rainGeo=new T.BufferGeometry();rainGeo.setAttribute('position',new T.BufferAttribute(rainPos,3));const rain=new T.Points(rainGeo,new T.PointsMaterial({color:0xc8def0,size:0.085,transparent:true,opacity:0,depthWrite:false}));scene.add(rain);
+const cloudGroup=new T.Group(),cloudGeo=new T.SphereGeometry(1,8,6),cloudMat=new T.MeshLambertMaterial({color:0xe5e8e5,transparent:true,opacity:0.25,depthWrite:false});for(let i=0;i<10;i++){let g=new T.Group();for(let j=0;j<3;j++){let m=new T.Mesh(cloudGeo,cloudMat.clone());m.scale.set(6+Math.random()*5,1.2+Math.random(),3+Math.random()*3);m.position.set((j-1)*4,Math.random(),Math.random()*2);g.add(m)}g.userData={a:i/10*Math.PI*2,r:70+Math.random()*70,h:40+Math.random()*22};cloudGroup.add(g)}scene.add(cloudGroup);
 
 const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
@@ -397,7 +399,8 @@ function updateAnomalies(dt,t){
  }
 }
 
-let move={x:0,y:0},look={x:0,y:0},sprinting=false;
+let move={x:0,y:0},look={x:0,y:0},sprinting=false,climbInput=0;
+let worldCtl={weather:'clear',autoTime:true,time:12};
 function bindPad(el,v){
  let id=null,start={x:0,y:0},stick=el.querySelector('i');
  function end(){id=null;v.x=0;v.y=0;stick.style.transform='translate(0,0)'}
@@ -410,11 +413,17 @@ bindPad($('move'),move);bindPad($('look'),look);
 $('sprint').addEventListener('pointerdown',()=>{sprinting=true;$('sprint').classList.add('active')});
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>$('sprint').addEventListener(ev,()=>{sprinting=false;$('sprint').classList.remove('active')}));
 function nearestVehicle(){let best=null,bd=5;for(const v of vehicles){let d=Math.hypot(player.x-v.x,player.z-v.z);if(d<bd){bd=d;best=v}}return best}
-function refreshUse(){let b=$('use');if(activeVehicle){b.classList.remove('hidden');b.textContent='EXIT '+activeVehicle.type.toUpperCase();return}let v=nearestVehicle();if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}else b.classList.add('hidden')}
+function refreshUse(){let b=$('use'),fc=$('flightControls');if(activeVehicle){b.classList.remove('hidden');b.textContent='EXIT '+activeVehicle.type.toUpperCase();fc.classList.toggle('hidden',!(activeVehicle.kind==='heli'||activeVehicle.kind==='jet'));return}fc.classList.add('hidden');let v=nearestVehicle();if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}else b.classList.add('hidden')}
 $('use').onclick=()=>{
- if(activeVehicle){let v=activeVehicle;activeVehicle=null;player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;toast('Exited '+v.type);refreshUse();return}
- let v=nearestVehicle();if(!v)return;activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;toast(v.type+' controls active');refreshUse();
+ if(activeVehicle){let v=activeVehicle;activeVehicle=null;climbInput=0;$('flightControls').classList.add('hidden');player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;toast('Exited '+v.type);refreshUse();return}
+ let v=nearestVehicle();if(!v)return;activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;if(v.kind==='heli'||v.kind==='jet')$('flightControls').classList.remove('hidden');else $('flightControls').classList.add('hidden');toast(v.type+' controls active');refreshUse();
 };
+function bindHold(id,value){let b=$(id),stop=()=>{if(climbInput===value)climbInput=0};b.addEventListener('pointerdown',()=>climbInput=value);['pointerup','pointercancel','pointerleave'].forEach(ev=>b.addEventListener(ev,stop))}
+bindHold('ascend',1);bindHold('descend',-1);
+$('worldctl').onclick=()=>{$('worldPanel').classList.toggle('hidden')};$('worldClose').onclick=()=>$('worldPanel').classList.add('hidden');
+$('timeSlider').addEventListener('input',e=>{worldCtl.time=+e.target.value;worldCtl.autoTime=false;$('autoTime').textContent='AUTO TIME: OFF'});
+$('autoTime').onclick=()=>{worldCtl.autoTime=!worldCtl.autoTime;$('autoTime').textContent='AUTO TIME: '+(worldCtl.autoTime?'ON':'OFF')};
+document.querySelectorAll('.weatherButtons button').forEach(b=>b.onclick=()=>{worldCtl.weather=b.dataset.weather;document.querySelectorAll('.weatherButtons button').forEach(x=>x.classList.toggle('active',x===b))});
 
 function openMap(){
  let c=chunkOf(player.x,player.z);mapView={cx:c.cx,cz:c.cz};mapSelected=null;$('panel').classList.remove('hidden');renderMap();
@@ -463,11 +472,17 @@ $('travel').onclick=()=>{
 let toastTimer;
 function toast(s){let e=$('toast');e.textContent=s;e.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>e.classList.remove('show'),1600)}
 
-function updateSky(time){
- let cycle=(time%480)/480,a=cycle*Math.PI*2-Math.PI/2,sy=Math.sin(a),day=T.MathUtils.clamp((sy+0.18)*2.3,0,1);
- sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=0.05+day*2.25;hemi.intensity=0.18+day*0.95;
- let dayCol=new T.Color(0xa7c0bd),nightCol=new T.Color(0x06101a),c=nightCol.clone().lerp(dayCol,day);scene.background.copy(c);scene.fog.color.copy(c);
- stars.position.set(player.x,0,player.z);stars.material.opacity=1-day;
+function updateSky(time,dt=0.016){
+ let hour=worldCtl.autoTime?((time/480)*24)%24:worldCtl.time,cycle=hour/24,a=cycle*Math.PI*2-Math.PI/2,sy=Math.sin(a),day=T.MathUtils.clamp((sy+0.18)*2.3,0,1),w=worldCtl.weather;
+ if(worldCtl.autoTime){worldCtl.time=hour;$('timeSlider').value=hour.toFixed(2)}
+ $('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
+ sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);hemi.intensity=(0.18+day*0.95)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
+ let dayCol=new T.Color(w==='storm'?0x48545b:w==='rain'?0x6f8088:w==='cloudy'?0x8fa2a4:0xa7c0bd),nightCol=new T.Color(0x06101a),c=nightCol.clone().lerp(dayCol,day);scene.background.copy(c);scene.fog.color.copy(c);
+ scene.fog.density=w==='mist'?0.018:w==='storm'?0.012:w==='rain'?0.009:w==='cloudy'?0.0068:0.0048;
+ stars.position.set(player.x,0,player.z);stars.material.opacity=(1-day)*(w==='clear'?1:0.35);
+ let wet=w==='rain'||w==='storm';rain.material.opacity=wet?(w==='storm'?0.82:0.55):0;rain.position.set(player.x,0,player.z);for(let i=0;i<rainCount;i++){rainPos[i*3+1]-=dt*(w==='storm'?28:20);if(rainPos[i*3+1]<0)rainPos[i*3+1]=42}rainGeo.attributes.position.needsUpdate=wet;
+ cloudGroup.children.forEach((g,i)=>{let u=g.userData;u.a+=dt*(w==='storm'?0.09:0.035);g.position.set(player.x+Math.cos(u.a)*u.r,u.h,player.z+Math.sin(u.a)*u.r);g.children.forEach(m=>m.material.opacity=w==='clear'?0.1:w==='cloudy'?0.38:w==='rain'?0.52:w==='storm'?0.68:0.22)});
+ document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
 }
 
 function step(dt,t){
@@ -485,17 +500,20 @@ function step(dt,t){
      v.yaw-=look.x*dt*1.7;
      let speed=(sprinting?14:8),fw=f*speed,strafe=side*speed*0.65;
      v.x+=(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt;v.z+=(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
-     v.alt=T.MathUtils.lerp(v.alt,sprinting?11:5,Math.min(1,dt*1.2));
+     v.alt=T.MathUtils.clamp(v.alt+climbInput*dt*(sprinting?9:6),0,42);
+     if(v.alt<0.2)v.alt=0;
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;
-     let rotor=v.group.getObjectByName('rotor');if(rotor)rotor.rotation.y+=dt*18;
+     v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.12,Math.min(1,dt*3));v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,f*0.08,Math.min(1,dt*3));
+     let rotor=v.group.getObjectByName('rotor');if(rotor)rotor.rotation.y+=dt*(v.alt>0||Math.abs(f)+Math.abs(side)>0?22:10);
    }else{
      v.yaw-=look.x*dt*(v.alt>1?0.8:0.45);
-     let target=Math.max(0,f)*(sprinting?30:14);v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.8));
+     let target=Math.max(0,f)*(sprinting?32:16);v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.8));
      if(f<-.2)v.speed=T.MathUtils.lerp(v.speed,-4,Math.min(1,dt*2));
      let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
      if(v.alt>1||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.1)){v.x=nx;v.z=nz}else v.speed*=0.35;
-     let takeoff=sprinting&&v.speed>12&&f>0.35;v.alt=T.MathUtils.lerp(v.alt,takeoff?16:0.25,Math.min(1,dt*(takeoff?0.7:0.35)));
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;
+     let liftReady=v.speed>10;v.alt=T.MathUtils.clamp(v.alt+(liftReady?climbInput*dt*(sprinting?13:8):Math.min(0,climbInput)*dt*5),0,65);
+     if(v.alt<0.15)v.alt=0;
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,-climbInput*0.16,Math.min(1,dt*3));v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.08,Math.min(1,dt*2));
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=H(v.x,v.z)+(v.alt||0),back=v.kind==='jet'?9:v.kind==='heli'?7:5.5,up=v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5;
@@ -514,7 +532,7 @@ function step(dt,t){
  let deg=((player.yaw*180/Math.PI)%360+360)%360,names=['N','NE','E','SE','S','SW','W','NW'];
  $('compass').textContent=names[Math.round(deg/45)%8];
  $('stats').textContent=(activeVehicle?activeVehicle.type+' • ':'')+biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife';
- refreshUse();updateAnimals(dt,t);updateAnomalies(dt,t);updateSky(t);
+ refreshUse();updateAnimals(dt,t);updateAnomalies(dt,t);updateSky(t,dt);
  for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
    let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
    if(d<(c.d.anomaly==='titan'?35:20)&&!world.discoveries[id]){world.discoveries[id]=c.d.anomaly;toast(c.d.anomaly==='ufo'?'Unidentified craft discovered':c.d.anomaly==='titan'?'Giant entity discovered':'Unknown creature discovered');persist()}
@@ -542,6 +560,7 @@ window.__world={
  teleport:(x,z)=>{player.x=x;player.z=z;activeVehicle=null;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  setMove:(x,y)=>{move.x=x;move.y=y},setLook:(x,y)=>{look.x=x;look.y=y},
  enterNearest:()=>{let v=nearestVehicle();if(v){activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;refreshUse();return v.type}return null},
- findAnomaly:(r=12)=>{let c=chunkOf(player.x,player.z);for(let z=c.cz-r;z<=c.cz+r;z++)for(let x=c.cx-r;x<=c.cx+r;x++){let d=descriptor(x,z);if(d.anomaly)return{x,z,type:d.anomaly}}return null}
+ findAnomaly:(r=12)=>{let c=chunkOf(player.x,player.z);for(let z=c.cz-r;z<=c.cz+r;z++)for(let x=c.cx-r;x<=c.cx+r;x++){let d=descriptor(x,z);if(d.anomaly)return{x,z,type:d.anomaly}}return null},
+ setWeather:w=>{worldCtl.weather=w},setTime:h=>{worldCtl.autoTime=false;worldCtl.time=T.MathUtils.clamp(h,0,24);$('timeSlider').value=worldCtl.time},setClimb:v=>{climbInput=T.MathUtils.clamp(v,-1,1)}
 };
 })();
