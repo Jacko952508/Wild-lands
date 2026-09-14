@@ -25,10 +25,40 @@ sun.shadow.camera.left=-85;sun.shadow.camera.right=85;sun.shadow.camera.top=85;s
 scene.add(hemi,sun);
 
 const starGeo=new T.BufferGeometry(),starPos=[];
-for(let i=0;i<420;i++){let a=Math.random()*Math.PI*2,y=Math.random()*0.72+0.2,r=260,rr=Math.sqrt(1-y*y)*r;starPos.push(Math.cos(a)*rr,y*r,Math.sin(a)*rr)}
+for(let i=0;i<1800;i++){
+  let u=Math.random()*2-1,a=Math.random()*Math.PI*2,r=900+Math.random()*700,rr=Math.sqrt(1-u*u)*r;
+  starPos.push(Math.cos(a)*rr,u*r,Math.sin(a)*rr)
+}
 starGeo.setAttribute('position',new T.Float32BufferAttribute(starPos,3));
-const stars=new T.Points(starGeo,new T.PointsMaterial({color:0xffffff,size:0.8,sizeAttenuation:false,transparent:true,opacity:0}));
+const stars=new T.Points(starGeo,new T.PointsMaterial({color:0xffffff,size:0.9,sizeAttenuation:false,transparent:true,opacity:0,depthWrite:false}));
 scene.add(stars);
+
+const SPACE_MOON={x:2350,y:1900,z:2850};
+const celestialMoon=new T.Group();
+const moonOrb=new T.Mesh(
+  new T.SphereGeometry(180,34,22),
+  new T.MeshStandardMaterial({color:0xa9aba7,roughness:1,metalness:0,emissive:0x101114,emissiveIntensity:0.15})
+);
+const moonBeaconGlow=new T.Mesh(
+  new T.SphereGeometry(8,12,8),
+  new T.MeshBasicMaterial({color:0x8ffcff,transparent:true,opacity:0.95})
+);
+moonBeaconGlow.position.set(0,155,-88);
+const moonBeaconHalo=new T.Mesh(new T.SphereGeometry(22,12,8),new T.MeshBasicMaterial({color:0x68ffff,transparent:true,opacity:0.18,depthWrite:false}));
+moonBeaconHalo.position.copy(moonBeaconGlow.position);
+const moonBeaconBeam=new T.Mesh(new T.CylinderGeometry(2.4,5.5,80,10),new T.MeshBasicMaterial({color:0x8ffcff,transparent:true,opacity:0.28,depthWrite:false}));
+moonBeaconBeam.position.set(0,195,-88);
+celestialMoon.add(moonOrb,moonBeaconHalo,moonBeaconGlow,moonBeaconBeam);
+celestialMoon.position.set(SPACE_MOON.x,SPACE_MOON.y,SPACE_MOON.z);
+celestialMoon.visible=false;
+scene.add(celestialMoon);
+
+const spaceSun=new T.Group();
+const sunOrb=new T.Mesh(new T.SphereGeometry(135,24,16),new T.MeshBasicMaterial({color:0xfff2bd}));
+const sunHalo=new T.Mesh(new T.SphereGeometry(185,20,12),new T.MeshBasicMaterial({color:0xffc85a,transparent:true,opacity:0.16,depthWrite:false}));
+spaceSun.add(sunHalo,sunOrb);
+spaceSun.visible=false;
+scene.add(spaceSun);
 
 const spacePlanet=new T.Group();
 const planet=new T.Mesh(
@@ -52,7 +82,7 @@ const atmosphere=new T.Mesh(
 spacePlanet.add(planet,atmosphere);
 spacePlanet.visible=false;
 scene.add(spacePlanet);
-camera.far=7000;
+camera.far=12000;
 camera.updateProjectionMatrix();
 
 const rainCount=520,rainPos=new Float32Array(rainCount*3);for(let i=0;i<rainCount;i++){rainPos[i*3]=(Math.random()-.5)*80;rainPos[i*3+1]=Math.random()*42;rainPos[i*3+2]=(Math.random()-.5)*80}const rainGeo=new T.BufferGeometry();rainGeo.setAttribute('position',new T.BufferAttribute(rainPos,3));const rain=new T.Points(rainGeo,new T.PointsMaterial({color:0xc8def0,size:0.085,transparent:true,opacity:0,depthWrite:false}));scene.add(rain);
@@ -62,7 +92,7 @@ const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -79,7 +109,15 @@ function hash(x,z,s=0){let n=Math.sin(x*127.1+z*311.7+(seed+s)*0.017)*43758.5453
 function smooth(t){return t*t*(3-2*t)}
 function noise(x,z,s=0){let X=Math.floor(x),Z=Math.floor(z),fx=x-X,fz=z-Z,a=hash(X,Z,s),b=hash(X+1,Z,s),c=hash(X,Z+1,s),d=hash(X+1,Z+1,s),u=smooth(fx),v=smooth(fz);return T.MathUtils.lerp(T.MathUtils.lerp(a,b,u),T.MathUtils.lerp(c,d,u),v)}
 function fbm(x,z,s=0){let a=0.5,f=1,v=0;for(let i=0;i<5;i++){v+=a*noise(x*f,z*f,s+i*29);a*=0.5;f*=2.02}return v}
-function H(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
+let moonMode=false;
+function earthH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
+function moonH(x,z){
+ let broad=(fbm(x*0.006,z*0.006,901)-0.5)*7,
+     craters=(fbm(x*0.021,z*0.021,902)-0.5)*2.8,
+     fine=(fbm(x*0.065,z*0.065,903)-0.5)*0.65;
+ return broad+craters+fine;
+}
+function H(x,z){return moonMode?moonH(x,z):earthH(x,z)}
 function biome(x,z){let h=H(x,z),m=fbm(x*0.002,z*0.002,50),t=fbm(x*0.0015,z*0.0015,60)-h*0.005;if(h>24)return'alpine';if(h>14)return'highland';if(t<0.4)return'pine';if(m>0.62)return'forest';if(m<0.36)return'meadow';return'woodland'}
 const regionA=['Ash','Raven','Moon','Fox','Elder','Black','Silver','Storm','Moss','Frost','Hollow','Red'],regionB=['Reach','Vale','Moor','Wood','Fell','Hollow','Watch','Ridge','Wilds','Basin','March','Field'];
 function regionName(cx,cz){return regionA[Math.floor(hash(cx,cz,701)*regionA.length)]+' '+regionB[Math.floor(hash(cx,cz,702)*regionB.length)]}
@@ -413,6 +451,105 @@ function makeCity(){
 }
 const cityGroup=makeCity();
 
+const moonColliders=[],moonMineables=[];
+function moonBox(parent,x,y,z,w,h,d,mat,collide=false){
+ let m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);
+ m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);
+ if(collide)moonColliders.push({x,z,hx:w/2,hz:d/2});
+ return m
+}
+function makeMoonBuggy(parent,x,z){
+ let g=new T.Group(),
+     body=new T.Mesh(new T.BoxGeometry(2.6,.55,3.8),cityM.cream),
+     cab=new T.Mesh(new T.BoxGeometry(1.9,.8,1.7),mats.glass);
+ body.position.y=1.0;cab.position.set(0,1.55,.35);g.add(body,cab);
+ for(const sx of[-1.25,1.25])for(const sz of[-1.35,1.35]){
+   let w=new T.Mesh(new T.CylinderGeometry(.5,.5,.34,10),cityM.dark);
+   w.rotation.z=Math.PI/2;w.position.set(sx,.65,sz);g.add(w)
+ }
+ g.position.set(x,moonH(x,z),z);parent.add(g);
+ let v={type:'Moon Buggy',kind:'moonbuggy',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0};
+ vehicles.push(v);return v
+}
+function makeMek(parent,x,z){
+ let g=new T.Group(),metal=cityMat(0x59656c,.55),accent=cityMat(0xb5d8d6,.48,0x183c44);
+ let torso=new T.Mesh(new T.BoxGeometry(3.6,3.4,2.8),metal);torso.position.y=5.1;g.add(torso);
+ let cockpit=new T.Mesh(new T.BoxGeometry(2.2,1.5,1.3),mats.glass);cockpit.position.set(0,5.8,1.55);g.add(cockpit);
+ for(const sx of[-1.15,1.15]){
+   let leg=new T.Mesh(new T.BoxGeometry(1.05,3.7,1.2),metal);leg.position.set(sx,2.1,0);g.add(leg);
+   let foot=new T.Mesh(new T.BoxGeometry(1.7,.65,2.2),cityM.dark);foot.position.set(sx,.35,.25);g.add(foot);
+   let arm=new T.Mesh(new T.BoxGeometry(.8,3.2,.9),metal);arm.position.set(sx*2.0,4.8,.1);g.add(arm)
+ }
+ let drill=new T.Mesh(new T.ConeGeometry(.55,2.6,10),accent);drill.rotation.x=Math.PI/2;drill.position.set(2.1,3.8,2);g.add(drill);
+ for(const sx of[-.85,.85]){
+   let jet=new T.Mesh(new T.CylinderGeometry(.28,.38,1.4,8),accent);jet.rotation.x=Math.PI/2;jet.position.set(sx,3.8,-2);g.add(jet)
+ }
+ g.position.set(x,moonH(x,z),z);parent.add(g);
+ let v={type:'MEK Miner',kind:'mek',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0};
+ vehicles.push(v);return v
+}
+function makeMoonWorld(){
+ let g=new T.Group(),geo=new T.PlaneGeometry(1600,1600,56,56);geo.rotateX(-Math.PI/2);
+ let p=geo.attributes.position,cols=[];
+ for(let i=0;i<p.count;i++){
+   let x=p.getX(i),z=p.getZ(i),h=moonH(x,z);p.setY(i,h);
+   let c=new T.Color(0x9a9994);c.multiplyScalar(.78+fbm(x*.04,z*.04,920)*.2);cols.push(c.r,c.g,c.b)
+ }
+ geo.setAttribute('color',new T.Float32BufferAttribute(cols,3));geo.computeVertexNormals();
+ let ground=new T.Mesh(geo,new T.MeshStandardMaterial({vertexColors:true,roughness:1,metalness:0}));
+ ground.receiveShadow=true;g.add(ground);
+
+ // Landing beacon visible from far above the moon surface.
+ let beaconPole=moonBox(g,0,moonH(0,0)+5,0,.55,10,.55,cityM.dark,true);
+ let beacon=new T.Mesh(new T.SphereGeometry(1.15,12,8),new T.MeshBasicMaterial({color:0x8ffcff}));
+ beacon.position.set(0,moonH(0,0)+10.8,0);g.add(beacon);
+ let beaconLight=new T.PointLight(0x8ffcff,8,190);beaconLight.position.copy(beacon.position);g.add(beaconLight);
+
+ // Open-front hangar and connected habitat: both are full-scale and walkable.
+ let by=moonH(0,18);
+ moonBox(g,0,by+.12,18,30,.24,22,cityM.floor,false);
+ moonBox(g,-15,by+4.3,18,.55,8.6,22,cityM.cream,true);
+ moonBox(g,15,by+4.3,18,.55,8.6,22,cityM.cream,true);
+ moonBox(g,0,by+4.3,29,30,8.6,.55,cityM.cream,true);
+ moonBox(g,0,by+8.6,18,30,.45,22,cityM.dark,false);
+ moonBox(g,-10.2,by+4.3,7.1,9.2,8.6,.55,cityM.cream,true);
+ moonBox(g,10.2,by+4.3,7.1,9.2,8.6,.55,cityM.cream,true);
+ moonBox(g,0,by+7.4,7.1,11.2,2.4,.55,cityM.cream,true);
+
+ // Interior control room, bunks, storage and mining lab.
+ moonBox(g,-8,by+.65,20,7,1.1,2.2,cityM.blue,true);
+ moonBox(g,7.5,by+.8,22,8,1.4,2.4,cityM.dark,true);
+ for(const x of[-9,-5])moonBox(g,x,by+.5,26,3.1,.8,1.25,cityM.cream,true);
+ for(const x of[3,7,11])moonBox(g,x,by+1.0,27,2.2,2.0,1.1,cityM.wood,true);
+ for(const x of[-5,0,5]){
+   let panel=moonBox(g,x,by+2.3,8.0,3.6,1.8,.22,cityM.dark,false);
+   let screen=new T.Mesh(new T.PlaneGeometry(2.4,.95),new T.MeshBasicMaterial({color:0x74dbe4}));
+   screen.position.set(x,by+2.45,7.86);screen.rotation.x=0;g.add(screen)
+ }
+
+ // Surface lights and landing pads.
+ for(const x of[-24,-12,12,24])for(const z of[-7,3]){
+   let l=new T.PointLight(0xbfeaff,1.8,32);l.position.set(x,moonH(x,z)+2.2,z);g.add(l);
+   moonBox(g,x,moonH(x,z)+.05,z,.25,3.5,.25,cityM.dark,false)
+ }
+ for(const x of[-24,24]){
+   let pad=new T.Mesh(new T.CircleGeometry(7,24),cityM.concrete);pad.rotation.x=-Math.PI/2;pad.position.set(x,moonH(x,-13)+.08,-13);g.add(pad)
+ }
+
+ // Mineable lunar rocks.
+ const rocks=[[-48,-18],[-62,8],[-45,42],[-24,58],[26,58],[52,39],[66,7],[49,-31],[22,-54],[-18,-58],[-78,52],[82,-44]];
+ rocks.forEach((q,i)=>{
+   if(world.moonMined['r'+i])return;
+   let m=new T.Mesh(new T.DodecahedronGeometry(1.8+(i%3)*.45,1),cityMat(0x777773,1));
+   m.scale.y=.72;m.position.set(q[0],moonH(q[0],q[1])+1.1,q[1]);m.castShadow=true;g.add(m);
+   moonMineables.push({id:'r'+i,x:q[0],z:q[1],mesh:m})
+ });
+
+ makeMoonBuggy(g,-22,-13);makeMoonBuggy(g,22,-13);makeMek(g,34,4);
+ g.visible=false;scene.add(g);return g
+}
+const moonGroup=makeMoonWorld();
+
 function createChunk(cx,cz){
  let k=key(cx,cz),d=descriptor(cx,cz),root=new T.Group(),near=new T.Group(),far=new T.Group();
 
@@ -472,7 +609,20 @@ function rebuildColliders(nearSet){
    if(c.d.mark==='tower')colliders.push({x:c.cx*CH,z:c.cz*CH,r:2.2});
    }
 }
-function blocked(x,z,radius=0.6){for(const c of colliders){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}for(const c of cityColliders){if(Math.abs(x-c.x)<c.hx+radius&&Math.abs(z-c.z)<c.hz+radius)return true}for(const v of vehicles){if(v===activeVehicle)continue;let dx=x-v.x,dz=z-v.z,rr=(v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5)+radius;if(dx*dx+dz*dz<rr*rr)return true}return false}
+function blocked(x,z,radius=0.6){
+ const staticCols=moonMode?moonColliders:[...colliders,...cityColliders];
+ for(const c of staticCols){
+   if(c.r!=null){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}
+   else if(Math.abs(x-c.x)<c.hx+radius&&Math.abs(z-c.z)<c.hz+radius)return true
+ }
+ for(const v of vehicles){
+   if(v===activeVehicle)continue;
+   if(moonMode?(v.realm!=='moon'):(v.realm==='moon'))continue;
+   let dx=x-v.x,dz=z-v.z,rr=(v.kind==='mek'?2.7:v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5)+radius;
+   if(dx*dx+dz*dz<rr*rr)return true
+ }
+ return false
+}
 
 function queueFar(cx,cz){
  let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
@@ -596,9 +746,11 @@ $('sprint').addEventListener('pointerdown',()=>{sprinting=true;$('sprint').class
 function nearestVehicle(){
  let best=null,bd=5;
  for(const v of vehicles){
+   if(moonMode?(v.realm!=='moon'):(v.realm==='moon'))continue;
    let d=Math.hypot(player.x-v.x,player.z-v.z);
    if(d<bd){bd=d;best=v}
  }
+ if(moonMode)return best;
  for(const c of chunks.values()){
    let g=c.anomaly;
    if(!g||c.mode!=='near'||c.d.anomaly!=='ufo'||g.userData.piloted)continue;
@@ -636,14 +788,17 @@ function activateUfo(v){
  return craft
 }
 function refreshUse(){
- let b=$('use'),fc=$('flightControls');
+ let b=$('use'),fc=$('flightControls'),mine=$('mine');
  if(activeVehicle){
    b.classList.remove('hidden');
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
-   fc.classList.toggle('hidden',!(activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'));
+   fc.classList.toggle('hidden',!(activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek'));
+   mine.classList.toggle('hidden',activeVehicle.kind!=='mek');
+   if(activeVehicle.kind==='mek')document.querySelector('.engineHead span').textContent='JET BOOST';
+   else document.querySelector('.engineHead span').textContent='ENGINE';
    return
  }
- fc.classList.add('hidden');
+ fc.classList.add('hidden');mine.classList.add('hidden');
  let v=nearestVehicle();
  if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}
  else b.classList.add('hidden')
@@ -652,15 +807,17 @@ $('use').onclick=()=>{
  if(activeVehicle){
    let v=activeVehicle;
    if(v.kind==='ufo'&&v.alt>8){toast('Land the UFO before exiting');return}
-   activeVehicle=null;$('flightControls').classList.add('hidden');
+   if(v.kind==='mek'&&v.alt>1.2){toast('Land the MEK before exiting');return}
+   activeVehicle=null;$('flightControls').classList.add('hidden');$('mine').classList.add('hidden');
    player.x=v.x+Math.cos(v.yaw)*3;player.z=v.z-Math.sin(v.yaw)*3;
    toast('Exited '+v.type);refreshUse();return
  }
  let v=nearestVehicle();if(!v)return;
  if(v.kind==='ufoCandidate')v=activateUfo(v);
  activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;
- if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo'){
+ if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo'||v.kind==='mek'){
    $('flightControls').classList.remove('hidden');
+   if(v.kind==='mek')flightThrottle=0;
    syncEngineUI();
  }else $('flightControls').classList.add('hidden');
  toast(v.type+' controls active');refreshUse();
@@ -673,12 +830,28 @@ function syncEngineUI(){
  $('engineSlider').value=Math.round(flightThrottle*100);
  $('engineValue').textContent=Math.round(flightThrottle*100)+'%';
 }
+$('mine').onclick=()=>{
+ if(!activeVehicle||activeVehicle.kind!=='mek')return;
+ let best=null,bd=10;
+ for(const r of moonMineables){
+   if(!r.mesh.visible)continue;
+   let d=Math.hypot(activeVehicle.x-r.x,activeVehicle.z-r.z);
+   if(d<bd){bd=d;best=r}
+ }
+ if(!best){toast('No mineral deposit in drilling range');return}
+ best.mesh.visible=false;
+ world.moonMined[best.id]=1;
+ world.moonOre=(world.moonOre||0)+1;
+ persist();
+ toast('Lunar ore extracted • '+world.moonOre+' stored');
+}
 $('worldctl').onclick=()=>{$('worldPanel').classList.toggle('hidden')};$('worldClose').onclick=()=>$('worldPanel').classList.add('hidden');
 $('timeSlider').addEventListener('input',e=>{worldCtl.time=+e.target.value;worldCtl.autoTime=false;$('autoTime').textContent='AUTO TIME: OFF'});
 $('autoTime').onclick=()=>{worldCtl.autoTime=!worldCtl.autoTime;$('autoTime').textContent='AUTO TIME: '+(worldCtl.autoTime?'ON':'OFF')};
 document.querySelectorAll('.weatherButtons button').forEach(b=>b.onclick=()=>{worldCtl.weather=b.dataset.weather;document.querySelectorAll('.weatherButtons button').forEach(x=>x.classList.toggle('active',x===b))});
 
 function openMap(){
+ if(moonMode){toast('Earth map unavailable on the Moon');return}
  let c=chunkOf(player.x,player.z);mapView={cx:c.cx,cz:c.cz};mapSelected=null;$('panel').classList.remove('hidden');renderMap();
 }
 $('map').onclick=openMap;
@@ -725,39 +898,70 @@ $('travel').onclick=()=>{
 let toastTimer;
 function toast(s){let e=$('toast');e.textContent=s;e.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>e.classList.remove('show'),1600)}
 
+function enterMoon(v){
+ moonMode=true;
+ moonGroup.visible=true;
+ v.realm='moon';
+ v.x=0;v.z=-145;v.worldY=moonH(v.x,v.z)+92;v.alt=92;v.vy=-4;v.speed=Math.min(v.speed||0,28);v.yaw=0;v.pitch=0;v.roll=0;
+ v.group.position.set(v.x,v.worldY,v.z);
+ player.x=v.x;player.z=v.z;player.yaw=v.yaw;
+ $('region').textContent='LUNAR OUTPOST';
+ toast('Lunar approach • follow the cyan beacon');
+}
+function leaveMoon(v){
+ moonMode=false;
+ moonGroup.visible=false;
+ v.realm=null;
+ v.x=SPACE_MOON.x;v.z=SPACE_MOON.z-245;v.worldY=SPACE_MOON.y+125;v.alt=Math.max(180,v.worldY-earthH(v.x,v.z));v.vy=12;v.speed=Math.max(v.speed||0,55);v.yaw=Math.PI;
+ v.group.position.set(v.x,v.worldY,v.z);
+ player.x=v.x;player.z=v.z;player.yaw=v.yaw;
+ lastSyncX=1e9;lastSyncZ=1e9;
+ toast('Leaving lunar gravity');
+}
+
 function updateSky(time,dt=0.016){
  let hour=worldCtl.autoTime?((time/480)*24)%24:worldCtl.time,cycle=hour/24,a=cycle*Math.PI*2-Math.PI/2,sy=Math.sin(a),day=T.MathUtils.clamp((sy+0.18)*2.3,0,1),w=worldCtl.weather;
  if(worldCtl.autoTime){worldCtl.time=hour;$('timeSlider').value=hour.toFixed(2)}
  $('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
  sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);hemi.intensity=(0.18+day*0.95)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
  let ufoAlt=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.alt:0,
-     spaceFactor=T.MathUtils.clamp((ufoAlt-110)/170,0,1),
+     spaceFactor=moonMode?1:T.MathUtils.clamp((ufoAlt-110)/170,0,1),
      dayCol=new T.Color(w==='storm'?0x48545b:w==='rain'?0x6f8088:w==='cloudy'?0x8fa2a4:0xa7c0bd),
      nightCol=new T.Color(0x06101a),
-     c=nightCol.clone().lerp(dayCol,day).lerp(new T.Color(0x000106),spaceFactor);
+     c=moonMode?new T.Color(0x000005):nightCol.clone().lerp(dayCol,day).lerp(new T.Color(0x000106),spaceFactor);
  scene.background.copy(c);scene.fog.color.copy(c);
 
  let normalFog=w==='mist'?0.018:w==='storm'?0.012:w==='rain'?0.009:w==='cloudy'?0.0068:0.0048;
- scene.fog.density=normalFog*(1-spaceFactor);
+ scene.fog.density=moonMode?0.00012:normalFog*(1-spaceFactor);
 
- let skyY=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:0;
+ let skyY=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:(moonMode?camera.position.y:0);
  stars.position.set(player.x,skyY,player.z);
- stars.material.opacity=Math.max((1-day)*(w==='clear'?1:0.35),spaceFactor);
+ stars.material.opacity=moonMode?1:Math.max((1-day)*(w==='clear'?1:0.35),spaceFactor);
 
- let wet=(w==='rain'||w==='storm')&&spaceFactor<0.45;
+ let wet=!moonMode&&(w==='rain'||w==='storm')&&spaceFactor<0.45;
  rain.material.opacity=wet?(w==='storm'?0.82:0.55):0;
  rain.position.set(player.x,0,player.z);
  for(let i=0;i<rainCount;i++){rainPos[i*3+1]-=dt*(w==='storm'?28:20);if(rainPos[i*3+1]<0)rainPos[i*3+1]=42}
  rainGeo.attributes.position.needsUpdate=wet;
 
- cloudGroup.visible=spaceFactor<0.72;
+ cloudGroup.visible=!moonMode&&spaceFactor<0.72;
  cloudGroup.children.forEach((g,i)=>{let u=g.userData;u.a+=dt*(w==='storm'?0.09:0.035);g.position.set(player.x+Math.cos(u.a)*u.r,u.h,player.z+Math.sin(u.a)*u.r);g.children.forEach(m=>m.material.opacity=w==='clear'?0.1:w==='cloudy'?0.38:w==='rain'?0.52:w==='storm'?0.68:0.22)});
 
- spacePlanet.visible=spaceFactor>0.18;
- startBase.visible=spaceFactor<0.88;
- cityGroup.visible=spaceFactor<0.88;
- for(const ch of chunks.values())ch.root.visible=spaceFactor<0.88;
- for(const craft of vehicles)if(craft!==activeVehicle)craft.group.visible=spaceFactor<0.88;
+ spacePlanet.visible=!moonMode&&spaceFactor>0.18;
+ celestialMoon.visible=!moonMode&&spaceFactor>0.55;
+ spaceSun.visible=moonMode||spaceFactor>0.45;
+ if(spaceSun.visible){
+   let baseY=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:(moonMode?camera.position.y:0);
+   spaceSun.position.set(player.x+5200,baseY+1700,player.z-4100);
+ }
+ startBase.visible=!moonMode&&spaceFactor<0.88;
+ cityGroup.visible=!moonMode&&spaceFactor<0.88;
+ moonGroup.visible=moonMode;
+ for(const ch of chunks.values())ch.root.visible=!moonMode&&spaceFactor<0.88;
+ for(const craft of vehicles){
+   if(craft===activeVehicle)continue;
+   craft.group.visible=moonMode?(craft.realm==='moon'):(craft.realm!=='moon'&&spaceFactor<0.88);
+ }
  if(activeVehicle)activeVehicle.group.visible=true;
  if(spacePlanet.visible){
    spacePlanet.position.set(player.x,-2200,player.z);
@@ -772,12 +976,30 @@ function step(dt,t){
 
  if(activeVehicle){
    let v=activeVehicle,f=-move.y,side=move.x;
-   if(v.kind==='buggy'){
+   if(v.kind==='buggy'||v.kind==='moonbuggy'){
      v.yaw-=look.x*dt*1.65;v.yaw+=side*dt*1.25*(0.35+Math.abs(f));
-     let target=f*(sprinting?12:7.5);v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*3.2));
+     let top=v.kind==='moonbuggy'?(sprinting?17:11):(sprinting?12:7.5),
+         target=f*top;
+     v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*3.2));
      let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
-     if(!blocked(nx,nz,1.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<0.95&&slopeAt(nx,nz)<2.1){v.x=nx;v.z=nz}else v.speed*=0.25;
+     if(!blocked(nx,nz,1.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.15&&slopeAt(nx,nz)<2.5){v.x=nx;v.z=nz}else v.speed*=0.25;
      v.alt=0;v.group.position.set(v.x,H(v.x,v.z),v.z);v.group.rotation.y=v.yaw;
+   }else if(v.kind==='mek'){
+     v.yaw+=side*dt*1.05;
+     let target=f*(sprinting?9:5.5);
+     v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*3));
+     let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
+     if(v.alt>0.3||(!blocked(nx,nz,2.1)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.6)){v.x=nx;v.z=nz}else v.speed*=0.2;
+
+     let thrust=flightThrottle*15.5,gravity=5.2;
+     v.vy+=(thrust-gravity-v.vy*.5)*dt;
+     if(flightThrottle<0.03)v.vy-=gravity*.45*dt;
+     v.alt=Math.max(0,Math.min(42,v.alt+v.vy*dt));
+     if(v.alt<=0){v.alt=0;v.vy=Math.max(0,v.vy)}
+     v.pitch=T.MathUtils.lerp(v.pitch,-f*.08,Math.min(1,dt*3));
+     v.roll=T.MathUtils.lerp(v.roll,-side*.08,Math.min(1,dt*3));
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
+     v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
    }else if(v.kind==='heli'){
      let pitchInput=-move.y,rollInput=move.x;
      v.yaw+=(-v.roll)*dt*0.9;
@@ -843,6 +1065,13 @@ function step(dt,t){
 
      v.group.position.set(v.x,v.worldY,v.z);
      v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+
+     if(moonMode&&v.alt>235){
+       leaveMoon(v);
+     }else if(!moonMode&&v.inSpace){
+       let md=Math.hypot(v.x-SPACE_MOON.x,v.worldY-SPACE_MOON.y,v.z-SPACE_MOON.z);
+       if(md<245)enterMoon(v);
+     }
    }else{
      let onGround=v.alt<0.12,
          pitchInput=move.y,
@@ -905,8 +1134,8 @@ function step(dt,t){
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
-       back=v.kind==='ufo'?11:v.kind==='jet'?9:v.kind==='heli'?7:5.5,
-       up=v.kind==='ufo'?5:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
+       back=v.kind==='ufo'?11:v.kind==='mek'?11:v.kind==='jet'?9:v.kind==='heli'?7:v.kind==='moonbuggy'?6.5:5.5,
+       up=v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
        camYaw=v.yaw-look.x*0.9,
        camLift=look.y*4.2;
    let cam=new T.Vector3(
@@ -925,7 +1154,7 @@ function step(dt,t){
  }
 
  let cc=chunkOf(player.x,player.z);
- if(!(activeVehicle&&activeVehicle.kind==='ufo'&&activeVehicle.alt>180)&&key(cc.cx,cc.cz)!==currentChunk)sync();
+ if(!moonMode&&!(activeVehicle&&activeVehicle.kind==='ufo'&&activeVehicle.alt>180)&&key(cc.cx,cc.cz)!==currentChunk)sync();
  let deg=((player.yaw*180/Math.PI)%360+360)%360,names=['N','NE','E','SE','S','SW','W','NW'];
  $('compass').textContent=names[Math.round(deg/45)%8];
  let vehicleHud='';
@@ -938,8 +1167,9 @@ function step(dt,t){
    }
    vehicleHud+=' • '
  }
- $('stats').textContent=vehicleHud+biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife';
- refreshUse();updateAnimals(dt,t);updateAnomalies(dt,t);updateSky(t,dt);
+ if(activeVehicle&&activeVehicle.kind==='ufo'&&!moonMode&&activeVehicle.inSpace){let md=Math.hypot(activeVehicle.x-SPACE_MOON.x,activeVehicle.worldY-SPACE_MOON.y,activeVehicle.z-SPACE_MOON.z);vehicleHud+='MOON '+Math.round(md)+'m • '}
+ $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife');
+ refreshUse();if(!moonMode){updateAnimals(dt,t);updateAnomalies(dt,t)}updateSky(t,dt);
  for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
    let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
    if(d<(c.d.anomaly==='titan'?35:20)&&!world.discoveries[id]){world.discoveries[id]=c.d.anomaly;toast(c.d.anomaly==='ufo'?'Unidentified craft discovered':c.d.anomaly==='titan'?'Giant entity discovered':'Unknown creature discovered');persist()}
