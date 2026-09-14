@@ -115,7 +115,7 @@ const CH=96,NEAR=1,IS_MOBILE=matchMedia('(pointer:coarse)').matches||innerWidth<
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};world.ui.fpsTarget=world.ui.fpsTarget||60;world.ui.graphicsQuality=world.ui.graphicsQuality||'balanced';world.ui.renderQuality=world.ui.renderQuality||1;world.ui.dynamicResolution=world.ui.dynamicResolution!==false;world.ui.shadows=world.ui.shadows!==false;world.ui.effects=world.ui.effects!==false;
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -596,8 +596,8 @@ function makeJet(x,z){
  const nose=new T.Mesh(new T.ConeGeometry(.52,3.25,24),skin);nose.rotation.x=Math.PI/2;nose.position.set(0,1.42,5.8);g.add(nose);
  const chineL=new T.Mesh(new T.BoxGeometry(.38,.16,4.1),accent),chineR=chineL.clone();chineL.position.set(-.58,1.32,2.15);chineR.position.set(.58,1.32,2.15);g.add(chineL,chineR);
  const wingGeo=new T.BufferGeometry();wingGeo.setAttribute('position',new T.Float32BufferAttribute([-5.2,0,1.25,5.2,0,1.25,2.15,0,-2.35,-2.15,0,-2.35],3));wingGeo.setIndex([0,1,2,0,2,3]);wingGeo.computeVertexNormals();
- const wing=new T.Mesh(wingGeo,skin);wing.position.y=1.34;g.add(wing);
- const wingUnder=wing.clone();wingUnder.material=accent;wingUnder.position.y=1.25;wingUnder.scale.set(.96,1,.96);g.add(wingUnder);
+ const wingMat=skin.clone();wingMat.side=T.DoubleSide;const wing=new T.Mesh(wingGeo,wingMat);wing.position.y=1.34;g.add(wing);
+ const underMat=accent.clone();underMat.side=T.DoubleSide;const wingUnder=new T.Mesh(wingGeo,underMat);wingUnder.position.y=1.25;wingUnder.scale.set(.96,1,.96);g.add(wingUnder);
  const tailPlane=new T.Mesh(new T.BoxGeometry(3.7,.12,1.25),skin);tailPlane.position.set(0,1.55,-3.6);g.add(tailPlane);
  const fin=new T.Mesh(new T.BoxGeometry(.16,2.0,1.5),accent);fin.position.set(0,2.35,-3.75);fin.rotation.x=-.14;g.add(fin);
  const glass=new T.Mesh(new T.SphereGeometry(.72,20,12),new T.MeshPhysicalMaterial({color:0x476a7a,transparent:true,opacity:.66,roughness:.08,metalness:.12}));glass.scale.set(.78,.48,1.55);glass.position.set(0,1.96,2.1);g.add(glass);
@@ -641,11 +641,13 @@ for(let i=0;i<(IS_MOBILE?32:56);i++){
 }
 let particleCursor=0,trackCursor=0;
 function spawnVehicleParticle(pos,color=0x8b8b82,size=.35,life=.9,vy=.7,spread=.25){
+ if(world.ui.effects===false)return;
  const m=particlePool[particleCursor++%particlePool.length];
  m.visible=true;m.position.copy(pos);m.position.x+=(Math.random()-.5)*spread;m.position.z+=(Math.random()-.5)*spread;
  m.scale.setScalar(size*(.7+Math.random()*.5));m.material.color.setHex(color);m.material.opacity=.34;m.userData.life=life;m.userData.maxLife=life;m.userData.vy=vy;m.userData.vx=(Math.random()-.5)*.22;m.userData.vz=(Math.random()-.5)*.22
 }
 function spawnVehicleTrack(x,z,y,yaw,moon=false,width=.42,length=1.2){
+ if(world.ui.effects===false)return;
  const m=trackPool[trackCursor++%trackPool.length];
  m.visible=true;m.position.set(x,y+.025,z);m.rotation.set(-Math.PI/2,0,-yaw);m.scale.set(width,length,1);
  m.material.color.setHex(moon?0x6d6c68:0x23311f);m.material.opacity=moon?.24:.2;m.userData.life=moon?11:7;m.userData.maxLife=m.userData.life
@@ -1548,9 +1550,9 @@ function blocked(x,z,radius=0.6,ignoreVehicle=null){
  return false
 }
 
-function queueFar(cx,cz){
+function queueFar(cx,cz,target='far'){
  let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
- farPending.add(k);farQueue.push({cx,cz,k,generation:syncGeneration});
+ farPending.add(k);farQueue.push({cx,cz,k,target,generation:syncGeneration});
 }
 let farBuildAt=0;
 function processFarQueue(){
@@ -1559,7 +1561,9 @@ function processFarQueue(){
  if(job.generation!==syncGeneration)return;
  if(chunks.has(job.k))return;
  let dx=Math.abs(job.cx-cc.cx),dz=Math.abs(job.cz-cc.cz),dist=Math.max(dx,dz);
- if(dist<=NEAR||dist>FAR)return;
+ if(dist>FAR)return;
+ if(job.target==='near'&&dist<=NEAR){let c=createChunk(job.cx,job.cz);setMode(c,'near');return}
+ if(dist<=NEAR)return;
  let c=createChunk(job.cx,job.cz);setMode(c,'far');
 }
 function sync(force=false){
@@ -1575,9 +1579,13 @@ function sync(force=false){
    let cx=cc.cx+dx,cz=cc.cz+dz,k=key(cx,cz),dist=Math.max(Math.abs(dx),Math.abs(dz));
    keepSet.add(k);
    if(dist<=NEAR){
-     nearSet.add(k);let c=chunks.get(k)||createChunk(cx,cz);setMode(c,'near');
+     nearSet.add(k);
+     let c=chunks.get(k);
+     if(c)setMode(c,'near');
+     else if(dx===0&&dz===0){c=createChunk(cx,cz);setMode(c,'near')}
+     else queueFar(cx,cz,'near');
    }else{
-     let c=chunks.get(k);if(c)setMode(c,'far');else queueFar(cx,cz);
+     let c=chunks.get(k);if(c)setMode(c,'far');else queueFar(cx,cz,'far');
    }
  }
 
@@ -2275,6 +2283,41 @@ $('worldClose').onclick=()=>$('worldPanel').classList.add('hidden');
 $('lookSensitivity').value=lookSensitivity;
 $('hudScale').value=world.ui.hudScale||1;
 document.documentElement.style.setProperty('--hud-scale',world.ui.hudScale||1);
+
+function graphicsScaleCap(){
+ const q=world.ui.graphicsQuality||'balanced',r=Number(world.ui.renderQuality||1);
+ const base=q==='performance'?.82:q==='high'?1.18:1.0;
+ return Math.min(devicePixelRatio,base*r)
+}
+function applyGraphicsSettings(resetScale=true){
+ const q=world.ui.graphicsQuality||'balanced';
+ const shadows=world.ui.shadows!==false&&q!=='performance';
+ renderer.shadowMap.enabled=shadows;sun.castShadow=shadows;
+ if(resetScale){
+   renderScale=Math.max(.65,Math.min(graphicsScaleCap(),q==='performance'?.78:q==='high'?1.05:.92));
+   renderer.setPixelRatio(renderScale);renderer.setSize(innerWidth,innerHeight,false)
+ }
+ const rainFrac=q==='performance'?.45:q==='high'?1:.72;
+ rain.geometry.setDrawRange(0,Math.floor(rainCount*rainFrac));
+ cloudGroup.children.forEach((c,i)=>c.visible=q!=='performance'||i%2===0);
+ for(const m of particlePool)if(world.ui.effects===false)m.visible=false;
+ for(const m of trackPool)if(world.ui.effects===false)m.visible=false;
+ persist()
+}
+$('fpsTarget').value=String(world.ui.fpsTarget||60);
+$('graphicsQuality').value=world.ui.graphicsQuality||'balanced';
+$('renderQuality').value=String(world.ui.renderQuality||1);
+$('dynamicResolution').checked=world.ui.dynamicResolution!==false;
+$('shadowToggle').checked=world.ui.shadows!==false;
+$('effectsToggle').checked=world.ui.effects!==false;
+$('fpsTarget').onchange=e=>{world.ui.fpsTarget=+e.target.value;persist()};
+$('graphicsQuality').onchange=e=>{world.ui.graphicsQuality=e.target.value;applyGraphicsSettings(true)};
+$('renderQuality').onchange=e=>{world.ui.renderQuality=+e.target.value;applyGraphicsSettings(true)};
+$('dynamicResolution').onchange=e=>{world.ui.dynamicResolution=e.target.checked;applyGraphicsSettings(false)};
+$('shadowToggle').onchange=e=>{world.ui.shadows=e.target.checked;applyGraphicsSettings(false)};
+$('effectsToggle').onchange=e=>{world.ui.effects=e.target.checked;applyGraphicsSettings(false)};
+applyGraphicsSettings(true);
+
 $('lookSensitivity').addEventListener('input',e=>{lookSensitivity=+e.target.value;world.ui.lookSensitivity=lookSensitivity;persist()});
 $('hudScale').addEventListener('input',e=>{world.ui.hudScale=+e.target.value;document.documentElement.style.setProperty('--hud-scale',world.ui.hudScale);persist()});
 $('timeSlider').addEventListener('input',e=>{worldCtl.time=+e.target.value;worldCtl.autoTime=false;$('autoTime').textContent='AUTO TIME: OFF'});
@@ -2695,31 +2738,39 @@ function step(dt,t){
 
 sync(true);
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
-let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0,lastFrameAt=0;
+let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0,lastFrameAt=0,fpsUiAt=0,fpsUiFrames=0,fpsUiStart=last;
 function loop(now){
  requestAnimationFrame(loop);
 
- // iPhone ProMotion can request 120fps; this game deliberately targets a stable 60.
- if(now-lastFrameAt<15.5)return;
+ const target=T.MathUtils.clamp(Number(world.ui.fpsTarget||60),24,120),frameMs=1000/target;
+ if(now-lastFrameAt<frameMs-.55)return;
  lastFrameAt=now;
 
  let rawDt=(now-last)/1000,dt=Math.min(0.04,rawDt);last=now;let t=now/1000;
  step(dt,t-start);processFarQueue();processNearBuildQueue();processAnimalLoadQueue();updateShadowCasters();
 
- // Shadows remain dynamic, but rebuilding them every 8 frames was needlessly costly.
- const shadowInterval=IS_MOBILE?260:170;
- if(now-shadowAt>shadowInterval){shadowAt=now;renderer.shadowMap.needsUpdate=true}
+ const shadows=renderer.shadowMap.enabled&&world.ui.shadows!==false&&world.ui.graphicsQuality!=='performance',
+       shadowInterval=world.ui.graphicsQuality==='high'?(IS_MOBILE?220:145):(IS_MOBILE?320:210);
+ if(shadows&&now-shadowAt>shadowInterval){shadowAt=now;renderer.shadowMap.needsUpdate=true}
 
  renderer.render(scene,camera);
 
- // Prefer maintaining frame pacing over native-pixel rendering on a phone.
+ fpsUiFrames++;
+ if(now-fpsUiStart>600){
+   const fps=Math.round(fpsUiFrames*1000/(now-fpsUiStart));fpsUiFrames=0;fpsUiStart=now;
+   if($('fpsReadout'))$('fpsReadout').textContent=fps+' FPS'
+ }
+
  perfFrames++;perfTotal+=rawDt;
- if(now-perfAt>1400){
-   const avg=perfTotal/Math.max(1,perfFrames),cap=Math.min(devicePixelRatio,IS_MOBILE?1.0:1.2);
+ if(now-perfAt>1200){
+   const avg=perfTotal/Math.max(1,perfFrames),cap=graphicsScaleCap(),dynamic=world.ui.dynamicResolution!==false;
    let next=renderScale;
-   if(avg>.027)next=Math.max(.72,renderScale-.14);
-   else if(avg>.0205)next=Math.max(.72,renderScale-.08);
-   else if(avg<.0174)next=Math.min(cap,renderScale+.035);
+   if(dynamic){
+     const budget=1/target,minScale=world.ui.graphicsQuality==='performance'?.62:.68;
+     if(avg>budget*1.28)next=Math.max(minScale,renderScale-.12);
+     else if(avg>budget*1.08)next=Math.max(minScale,renderScale-.065);
+     else if(avg<budget*.88)next=Math.min(cap,renderScale+.035)
+   }else next=cap;
    if(Math.abs(next-renderScale)>.01){renderScale=next;renderer.setPixelRatio(renderScale);renderer.setSize(innerWidth,innerHeight,false)}
    perfAt=now;perfFrames=0;perfTotal=0
  }
