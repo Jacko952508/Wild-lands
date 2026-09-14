@@ -34,7 +34,7 @@ input[type=range]{touch-action:pan-x}
 #actionCluster button{pointer-events:auto;min-width:92px;max-width:158px;padding:11px 13px;border:1px solid #ffffff26;background:#0b1712e8;border-radius:12px;font-size:10px;font-weight:900;letter-spacing:.06em;box-shadow:0 8px 24px #0005}
 #actionCluster #use{background:#234334e8;border-color:#90d3aa55}
 #actionCluster #pickup{background:#283a32e8}
-#actionCluster #mine{background:#102c32e8;border-color:#8ffcff66;color:#d9ffff}
+#actionCluster #mine{background:#102c32e8;border-color:#8ffcff66;color:#d9ffff}#actionCluster #toolAction{background:#3a2f1fe8;border-color:#e7c27c66;color:#fff3d2}#equippedTool{position:fixed;left:50%;bottom:calc(208px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:6;display:flex;gap:8px;align-items:center;padding:7px 10px;border:1px solid #ffffff1b;border-radius:10px;background:#07100ddd;backdrop-filter:blur(7px);box-shadow:0 8px 22px #0005}#equippedTool span{font-size:8px;letter-spacing:.12em;opacity:.6}#equippedTool b{font-size:10px;color:#ffe3a6}
 #actionCluster button:active{transform:scale(.97)}
 
 #vehicleCard{position:fixed;left:50%;bottom:calc(164px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:6;display:flex;gap:10px;align-items:center;padding:8px 12px;border:1px solid #ffffff1c;border-radius:12px;background:#07100cdc;backdrop-filter:blur(8px);box-shadow:0 8px 24px #0005}

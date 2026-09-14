@@ -94,7 +94,7 @@ const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.ui=world.ui||{lookSensitivity:1,hudScale:1};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.ui=world.ui||{lookSensitivity:1,hudScale:1};
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -1216,9 +1216,9 @@ function nearestTownInteraction(){
  return best
 }
 function refreshUse(){
- let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction'),jump=$('jump');
+ let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction'),jump=$('jump'),tool=$('toolAction'),equip=$('equippedTool');
  if(activeVehicle){
-   pickup.classList.add('hidden');town.classList.add('hidden');jump.classList.add('hidden');
+   pickup.classList.add('hidden');town.classList.add('hidden');jump.classList.add('hidden');tool.classList.add('hidden');equip.classList.add('hidden');toolView.visible=false;
    b.classList.remove('hidden');
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
    const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek';
@@ -1230,11 +1230,22 @@ function refreshUse(){
    else document.querySelector('.engineHead span').textContent='ENGINE';
    return
  }
- fc.classList.add('hidden');mine.classList.add('hidden');$('sprint').classList.remove('hidden');$('sprint').textContent='SPRINT';jump.classList.toggle('hidden',!!sitting);
+ fc.classList.add('hidden');mine.classList.add('hidden');$('sprint').classList.remove('hidden');$('sprint').textContent='SPRINT';jump.classList.toggle('hidden',!!sitting);toolView.visible=!!world.equippedTool&&!sitting;equip.classList.toggle('hidden',!world.equippedTool);if(world.equippedTool)$('equippedToolName').textContent=world.equippedTool.toUpperCase();
  if(sitting){town.classList.remove('hidden');town.textContent='STAND UP'}else{
    let a=nearestTownInteraction();town.classList.toggle('hidden',!a);if(a)town.textContent=a.label;
  }
  let item=nearestCollectible();pickup.classList.toggle('hidden',!item);if(item)pickup.textContent='PICK UP '+item.name.toUpperCase();
+ if(world.equippedTool&&!sitting){
+   tool.classList.remove('hidden');
+   const a=nearestTownInteraction();
+   if(a&&a.type==='resource'){
+     const need=a.resourceType==='Wood'?'Basic Hatchet':a.resourceType==='Stone'?'Heavy Pickaxe':'Salvage Wrench';
+     tool.textContent=world.equippedTool===need?'USE '+world.equippedTool.toUpperCase():'NEED '+need.toUpperCase()
+   }else if(world.equippedTool==='Field Flashlight')tool.textContent=toolLight.intensity>0?'FLASHLIGHT OFF':'FLASHLIGHT ON';
+   else if(world.equippedTool==='Geology Scanner')tool.textContent='SCAN AREA';
+   else if(world.equippedTool==='Repair Kit')tool.textContent='USE REPAIR KIT';
+   else tool.textContent='USE '+world.equippedTool.toUpperCase()
+ }else tool.classList.add('hidden');
  let v=nearestVehicle();
  if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}
  else b.classList.add('hidden')
@@ -1279,12 +1290,53 @@ function inventoryCounts(){
  if(world.moonOre)out['Lunar Ore']=Math.max(out['Lunar Ore']||0,world.moonOre);
  return out
 }
+const equippableTools=new Set(['Field Flashlight','Basic Hatchet','Heavy Pickaxe','Salvage Wrench','Geology Scanner','Repair Kit']);
+const toolView=new T.Group();camera.add(toolView);scene.add(camera);
+const toolLight=new T.SpotLight(0xf2f7ff,0,70,Math.PI/7,.45,1.4);toolLight.position.set(.22,-.18,-.4);toolLight.target.position.set(0,-.1,-10);camera.add(toolLight,toolLight.target);
+function rebuildToolView(){
+ while(toolView.children.length)toolView.remove(toolView.children[0]);
+ const name=world.equippedTool;if(!name||!equippableTools.has(name))return;
+ const metal=new T.MeshStandardMaterial({color:0x5c6469,roughness:.45,metalness:.65}),wood=new T.MeshStandardMaterial({color:0x6e4c31,roughness:.82}),dark=new T.MeshStandardMaterial({color:0x24282b,roughness:.7,metalness:.4});
+ if(name==='Basic Hatchet'){
+   let h=new T.Mesh(new T.CylinderGeometry(.035,.045,.75,8),wood);h.rotation.z=Math.PI/5;let head=new T.Mesh(new T.BoxGeometry(.28,.16,.08),metal);head.position.set(.2,.27,0);head.rotation.z=Math.PI/5;toolView.add(h,head)
+ }else if(name==='Heavy Pickaxe'){
+   let h=new T.Mesh(new T.CylinderGeometry(.035,.05,.85,8),wood);h.rotation.z=Math.PI/5;let head=new T.Mesh(new T.BoxGeometry(.48,.08,.08),metal);head.position.set(.2,.32,0);head.rotation.z=Math.PI/5;toolView.add(h,head)
+ }else if(name==='Salvage Wrench'){
+   let h=new T.Mesh(new T.BoxGeometry(.09,.65,.07),metal);h.rotation.z=.35;let jaw=new T.Mesh(new T.TorusGeometry(.13,.04,6,10,Math.PI*1.35),metal);jaw.position.set(.15,.29,0);jaw.rotation.z=-.4;toolView.add(h,jaw)
+ }else if(name==='Field Flashlight'){
+   let b=new T.Mesh(new T.CylinderGeometry(.08,.1,.42,10),dark);b.rotation.z=Math.PI/2;toolView.add(b)
+ }else if(name==='Geology Scanner'){
+   let b=new T.Mesh(new T.BoxGeometry(.34,.48,.12),dark);let s=new T.Mesh(new T.PlaneGeometry(.24,.18),new T.MeshBasicMaterial({color:0x63d9ff}));s.position.set(0,.05,-.065);toolView.add(b,s)
+ }else if(name==='Repair Kit'){
+   let b=new T.Mesh(new T.BoxGeometry(.38,.28,.16),new T.MeshStandardMaterial({color:0x8c2f2a,roughness:.55,metalness:.2}));toolView.add(b)
+ }
+ toolView.position.set(.42,-.34,-.78);toolView.rotation.set(-.1,.15,-.25)
+}
+function setEquippedTool(name){
+ if(name&&inventoryQty(name)<1)return;
+ world.equippedTool=name||null;
+ if(!name)toolLight.intensity=0;
+ rebuildToolView();persist();renderInventory();refreshUse();
+ toast(name?name+' equipped':'Tool unequipped')
+}
 function renderInventory(){
  const list=$('inventoryList'),items=inventoryCounts();list.innerHTML='';
  const keys=Object.keys(items);
  if(!keys.length){list.innerHTML='<div class="invRow"><span>Empty</span><b>0</b></div>';return}
- for(const k of keys){const row=document.createElement('div');row.className='invRow';row.innerHTML='<span>'+k+'</span><b>'+items[k]+'</b>';list.appendChild(row)}
+ for(const k of keys){
+   const row=document.createElement('div');row.className='invRow';
+   const left=document.createElement('span');left.textContent=k;
+   const right=document.createElement('div');right.style.display='flex';right.style.gap='6px';right.style.alignItems='center';
+   const count=document.createElement('b');count.textContent=items[k];right.appendChild(count);
+   if(equippableTools.has(k)){
+     const btn=document.createElement('button');btn.textContent=world.equippedTool===k?'UNEQUIP':'EQUIP';
+     btn.style.cssText='border:1px solid #ffffff22;background:#234334;color:#fff;border-radius:8px;padding:6px 8px;font-size:9px;font-weight:900';
+     btn.onclick=()=>setEquippedTool(world.equippedTool===k?null:k);right.appendChild(btn)
+   }
+   row.append(left,right);list.appendChild(row)
+ }
 }
+rebuildToolView();
 function closeSidePanels(except=null){
  for(const id of['inventoryPanel','craftPanel','shopPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
 }
@@ -1399,6 +1451,57 @@ function openShop(){closeSidePanels('shopPanel');$('shopPanel').classList.remove
 $('shopClose').onclick=()=>$('shopPanel').classList.add('hidden');
 $('shopBuyTab').onclick=()=>{shopMode='buy';renderShop()};
 $('shopSellTab').onclick=()=>{shopMode='sell';renderShop()};
+function gatherResourceWithTool(a){
+ const need=a.resourceType==='Wood'?'Basic Hatchet':a.resourceType==='Stone'?'Heavy Pickaxe':'Salvage Wrench';
+ if(world.equippedTool!==need){toast('Equip '+need+' first');return false}
+ const node=earthResources.find(r=>r.id===a.resourceId);
+ if(!node||world.resourceGathered[a.resourceId])return false;
+ world.resourceGathered[a.resourceId]=1;node.mesh.visible=false;
+ const amount=a.resourceType==='Scrap'?3:4;addInventoryItem(a.resourceType,amount);
+ persist();renderInventory();renderCrafting();toast('Collected '+amount+' '+a.resourceType);return true
+}
+function nearestRepairVehicle(){
+ let best=null,bd=7;
+ for(const v of vehicles){
+   if(moonMode?(v.realm!=='moon'):(v.realm==='moon'))continue;
+   let d=Math.hypot(player.x-v.x,player.z-v.z);if(d<bd){bd=d;best=v}
+ }
+ return best
+}
+function scannerResult(){
+ let best=null,bd=Infinity,label='';
+ if(moonMode){
+   for(const c of moonCollectibles){if(!c.mesh.visible)continue;let d=Math.hypot(player.x-c.x,player.z-c.z);if(d<bd){bd=d;best=c;label=c.name}}
+   for(const r of moonMineables){if(!r.mesh.visible)continue;let d=Math.hypot(player.x-r.x,player.z-r.z);if(d<bd){bd=d;best=r;label='Mineral deposit'}}
+ }else{
+   for(const r of earthResources){if(world.resourceGathered[r.id]||!r.mesh.visible)continue;let d=Math.hypot(player.x-r.x,player.z-r.z);if(d<bd){bd=d;best=r;label=r.type+' resource'}}
+ }
+ if(!best)return null;
+ const ang=Math.atan2(best.x-player.x,best.z-player.z),rel=((ang-player.yaw)*180/Math.PI+540)%360-180;
+ const dir=Math.abs(rel)<22?'ahead':rel>0?'right':'left';
+ return{label,d:Math.round(bd),dir}
+}
+$('toolAction').onclick=()=>{
+ if(activeVehicle||!world.equippedTool)return;
+ const tool=world.equippedTool,a=nearestTownInteraction();
+ if(a&&a.type==='resource'){
+   gatherResourceWithTool(a);refreshUse();return
+ }
+ if(tool==='Field Flashlight'){
+   toolLight.intensity=toolLight.intensity>0?0:5.5;
+   toast(toolLight.intensity>0?'Flashlight on':'Flashlight off');refreshUse();return
+ }
+ if(tool==='Geology Scanner'){
+   const hit=scannerResult();
+   toast(hit?hit.label+' • '+hit.d+'m • '+hit.dir.toUpperCase():'No resources detected nearby');return
+ }
+ if(tool==='Repair Kit'){
+   const v=nearestRepairVehicle();if(!v){toast('No vehicle close enough to repair');return}
+   if(inventoryQty('Repair Kit')<1){toast('No Repair Kit remaining');setEquippedTool(null);return}
+   consumeItem('Repair Kit',1);v.stalled=false;v.vy=0;persist();renderInventory();toast(v.type+' serviced');if(inventoryQty('Repair Kit')<1)setEquippedTool(null);return
+ }
+ toast('Move close to a matching resource to use '+tool)
+};
 $('townAction').onclick=()=>{
  if(sitting){sitting=null;toast('Stood up');return}
  const a=nearestTownInteraction();if(!a)return;
@@ -1432,13 +1535,7 @@ $('townAction').onclick=()=>{
  }else if(a.type==='workbench'){
    closeSidePanels('craftPanel');$('craftPanel').classList.remove('hidden');renderCrafting();toast('Workbench ready')
  }else if(a.type==='resource'){
-   const need=a.resourceType==='Wood'?'Basic Hatchet':a.resourceType==='Stone'?'Heavy Pickaxe':'Salvage Wrench';
-   if(inventoryQty(need)<1){toast('You need a '+need);return}
-   const node=earthResources.find(r=>r.id===a.resourceId);
-   if(!node||world.resourceGathered[a.resourceId])return;
-   world.resourceGathered[a.resourceId]=1;node.mesh.visible=false;
-   const amount=a.resourceType==='Scrap'?3:4;addInventoryItem(a.resourceType,amount);
-   persist();renderInventory();renderCrafting();toast('Collected '+amount+' '+a.resourceType)
+   gatherResourceWithTool(a)
  }
 };
 
