@@ -11,28 +11,56 @@
 
 <div id="hud">
   <div class="brand"><b>WILDLANDS</b><span>IMMUTABLE</span></div>
-  <div class="centerHud"><div id="region">Loading world…</div><div id="compass">N</div></div>
+  <div class="centerHud"><div id="region">Loading world…</div><div class="headingRow"><span id="compass">N</span><span id="modeReadout">ON FOOT</span></div></div>
   <div id="stats">—</div>
 </div>
 
-<div id="cross">+</div>
-<div class="pad" id="move"><i></i></div>
-<div class="pad" id="look"><i></i></div>
-<button id="sprint">SPRINT</button>
-<button id="use" class="hidden">USE</button>
-<button id="map">MAP</button>
-<button id="worldctl">WORLD</button>
-<button id="inventoryBtn">INVENTORY</button>
-<button id="pickup" class="hidden">PICK UP</button>
-<div id="inventoryPanel" class="hidden"><div class="worldHead"><b>INVENTORY</b><button id="inventoryClose">×</button></div><div id="inventoryList"></div></div>
+<div id="topActions">
+  <button id="map" aria-label="Map"><span>MAP</span></button>
+  <button id="inventoryBtn" aria-label="Inventory"><span>PACK</span></button>
+  <button id="craftBtn" aria-label="Crafting"><span>CRAFT</span></button>
+  <button id="worldctl" aria-label="Settings"><span>SETTINGS</span></button>
+</div>
+
+<div id="cross"><i></i></div>
+
+<div class="controlZone leftZone">
+  <div class="controlLabel">MOVE</div>
+  <div class="pad" id="move"><i></i></div>
+  <button id="sprint">SPRINT</button>
+</div>
+<div class="controlZone rightZone">
+  <div class="controlLabel">LOOK</div>
+  <div class="pad" id="look"><i></i></div>
+</div>
+
+<div id="actionCluster">
+  <button id="use" class="hidden">USE</button>
+  <button id="pickup" class="hidden">PICK UP</button>
+  <button id="mine" class="hidden">MINE</button>
+</div>
+
+<div id="vehicleCard" class="hidden"><span id="vehicleName">VEHICLE</span><b id="vehicleSpeed">0 km/h</b></div>
+
 <div id="flightControls" class="hidden">
   <div id="engineControl">
     <div class="engineHead"><span>ENGINE</span><b id="engineValue">0%</b></div>
     <input id="engineSlider" type="range" min="0" max="100" step="1" value="0" aria-label="Engine power">
   </div>
 </div>
-<button id="mine" class="hidden">MINE</button>
-<div id="worldPanel" class="hidden"><div class="worldHead"><b>WORLD CONTROLS</b><button id="worldClose">×</button></div><label>Time of day <input id="timeSlider" type="range" min="0" max="24" step="0.25" value="12"></label><div id="timeReadout">12:00</div><div class="weatherButtons"><button data-weather="clear">CLEAR</button><button data-weather="cloudy">CLOUDY</button><button data-weather="rain">RAIN</button><button data-weather="mist">MIST</button><button data-weather="storm">STORM</button></div><button id="autoTime">AUTO TIME: ON</button></div>
+
+<div id="inventoryPanel" class="sidePanel hidden"><div class="worldHead"><b>INVENTORY</b><button id="inventoryClose">×</button></div><div id="inventoryList"></div></div>
+<div id="craftPanel" class="sidePanel hidden"><div class="worldHead"><b>CRAFTING</b><button id="craftClose">×</button></div><div id="craftList"></div></div>
+<div id="worldPanel" class="sidePanel hidden">
+  <div class="worldHead"><b>SETTINGS</b><button id="worldClose">×</button></div>
+  <label>Look sensitivity <input id="lookSensitivity" type="range" min="0.55" max="1.8" step="0.05" value="1"></label>
+  <label>HUD scale <input id="hudScale" type="range" min="0.85" max="1.15" step="0.05" value="1"></label>
+  <div class="settingsDivider"></div>
+  <label>Time of day <input id="timeSlider" type="range" min="0" max="24" step="0.25" value="12"></label>
+  <div id="timeReadout">12:00</div>
+  <div class="weatherButtons"><button data-weather="clear">CLEAR</button><button data-weather="cloudy">CLOUDY</button><button data-weather="rain">RAIN</button><button data-weather="mist">MIST</button><button data-weather="storm">STORM</button></div>
+  <button id="autoTime">AUTO TIME: ON</button>
+</div>
 
 <div id="toast"></div>
 

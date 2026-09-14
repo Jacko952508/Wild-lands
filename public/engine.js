@@ -92,7 +92,7 @@ const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.ui=world.ui||{lookSensitivity:1,hudScale:1};
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -923,7 +923,7 @@ function updateAnomalies(dt,t){
  }
 }
 
-let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0;
+let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8);
 let worldCtl={weather:'clear',autoTime:true,time:12};
 function bindPad(el,v){
  let id=null,start={x:0,y:0},stick=el.querySelector('i');
@@ -999,13 +999,16 @@ function refreshUse(){
    pickup.classList.add('hidden');
    b.classList.remove('hidden');
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
-   fc.classList.toggle('hidden',!(activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek'));
+   const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek';
+   fc.classList.toggle('hidden',!flight);
    mine.classList.toggle('hidden',activeVehicle.kind!=='mek');
+   $('sprint').classList.toggle('hidden',flight&&activeVehicle.kind!=='mek');
+   $('sprint').textContent=activeVehicle.kind==='buggy'||activeVehicle.kind==='moonbuggy'||activeVehicle.kind==='mek'?'BOOST':'SPRINT';
    if(activeVehicle.kind==='mek')document.querySelector('.engineHead span').textContent='JET BOOST';
    else document.querySelector('.engineHead span').textContent='ENGINE';
    return
  }
- fc.classList.add('hidden');mine.classList.add('hidden');
+ fc.classList.add('hidden');mine.classList.add('hidden');$('sprint').classList.remove('hidden');$('sprint').textContent='SPRINT';
  let item=nearestCollectible();pickup.classList.toggle('hidden',!item);if(item)pickup.textContent='PICK UP '+item.name.toUpperCase();
  let v=nearestVehicle();
  if(v){b.classList.remove('hidden');b.textContent='ENTER '+v.type.toUpperCase()}
@@ -1057,8 +1060,50 @@ function renderInventory(){
  if(!keys.length){list.innerHTML='<div class="invRow"><span>Empty</span><b>0</b></div>';return}
  for(const k of keys){const row=document.createElement('div');row.className='invRow';row.innerHTML='<span>'+k+'</span><b>'+items[k]+'</b>';list.appendChild(row)}
 }
-$('inventoryBtn').onclick=()=>{$('inventoryPanel').classList.toggle('hidden');renderInventory()};
+function closeSidePanels(except=null){
+ for(const id of['inventoryPanel','craftPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
+}
+$('inventoryBtn').onclick=()=>{const p=$('inventoryPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'inventoryPanel':null);p.classList.toggle('hidden',!open);if(open)renderInventory()};
 $('inventoryClose').onclick=()=>$('inventoryPanel').classList.add('hidden');
+
+const craftRecipes=[
+ {name:'Lunar Alloy Plate',needs:{'Lunar Ore':3},out:'Lunar Alloy Plate'},
+ {name:'Impact Lens',needs:{'Impact Glass':1,'Regolith Sample':1},out:'Impact Lens'},
+ {name:'Field Repair Kit',needs:{'Lunar Rock':1,'Regolith Sample':1},out:'Field Repair Kit'}
+];
+function inventoryQty(name){return inventoryCounts()[name]||0}
+function consumeItem(name,count){
+ if(name==='Lunar Ore'){
+   world.moonOre=Math.max(0,(world.moonOre||0)-count);
+   world.inventory['Lunar Ore']=world.moonOre;
+   return
+ }
+ for(const [k,v] of Object.entries(world.inventory)){
+   if(count<=0)break;
+   const n=k.startsWith('sample:')?(typeof v==='string'?v:'Lunar Sample'):k;
+   if(n===name&&v){delete world.inventory[k];count--}
+ }
+}
+function renderCrafting(){
+ const list=$('craftList');list.innerHTML='';
+ for(const r of craftRecipes){
+   const ok=Object.entries(r.needs).every(([n,q])=>inventoryQty(n)>=q);
+   const row=document.createElement('div');row.className='craftRow';
+   const need=Object.entries(r.needs).map(([n,q])=>q+'× '+n).join(' + ');
+   row.innerHTML='<div><strong>'+r.name+'</strong><small>'+need+'</small></div>';
+   const b=document.createElement('button');b.textContent='CRAFT';b.disabled=!ok;
+   b.onclick=()=>{
+     if(!Object.entries(r.needs).every(([n,q])=>inventoryQty(n)>=q)){toast('Missing materials');renderCrafting();return}
+     for(const [n,q] of Object.entries(r.needs))consumeItem(n,q);
+     world.inventory[r.out]=(world.inventory[r.out]||0)+1;
+     persist();renderInventory();renderCrafting();toast(r.name+' crafted')
+   };
+   row.appendChild(b);list.appendChild(row)
+ }
+}
+$('craftBtn').onclick=()=>{const p=$('craftPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'craftPanel':null);p.classList.toggle('hidden',!open);if(open)renderCrafting()};
+$('craftClose').onclick=()=>$('craftPanel').classList.add('hidden');
+
 function nearestCollectible(){
  if(!moonMode||activeVehicle)return null;
  let best=null,bd=3.2;
@@ -1089,7 +1134,13 @@ $('mine').onclick=()=>{
  persist();renderInventory();
  toast('Lunar ore extracted • '+world.moonOre+' stored');
 }
-$('worldctl').onclick=()=>{$('worldPanel').classList.toggle('hidden')};$('worldClose').onclick=()=>$('worldPanel').classList.add('hidden');
+$('worldctl').onclick=()=>{const p=$('worldPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'worldPanel':null);p.classList.toggle('hidden',!open)};
+$('worldClose').onclick=()=>$('worldPanel').classList.add('hidden');
+$('lookSensitivity').value=lookSensitivity;
+$('hudScale').value=world.ui.hudScale||1;
+document.documentElement.style.setProperty('--hud-scale',world.ui.hudScale||1);
+$('lookSensitivity').addEventListener('input',e=>{lookSensitivity=+e.target.value;world.ui.lookSensitivity=lookSensitivity;persist()});
+$('hudScale').addEventListener('input',e=>{world.ui.hudScale=+e.target.value;document.documentElement.style.setProperty('--hud-scale',world.ui.hudScale);persist()});
 $('timeSlider').addEventListener('input',e=>{worldCtl.time=+e.target.value;worldCtl.autoTime=false;$('autoTime').textContent='AUTO TIME: OFF'});
 $('autoTime').onclick=()=>{worldCtl.autoTime=!worldCtl.autoTime;$('autoTime').textContent='AUTO TIME: '+(worldCtl.autoTime?'ON':'OFF')};
 document.querySelectorAll('.weatherButtons button').forEach(b=>b.onclick=()=>{worldCtl.weather=b.dataset.weather;document.querySelectorAll('.weatherButtons button').forEach(x=>x.classList.toggle('active',x===b))});
@@ -1217,12 +1268,13 @@ function updateSky(time,dt=0.016){
 }
 
 function step(dt,t){
- player.pitch=T.MathUtils.clamp(player.pitch-look.y*dt*1.65,-1.02,0.92);
+ const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
+ player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);
 
  if(activeVehicle){
    let v=activeVehicle,f=-move.y,side=move.x;
    if(v.kind==='buggy'||v.kind==='moonbuggy'){
-     v.yaw-=look.x*dt*1.65;v.yaw+=side*dt*1.25*(0.35+Math.abs(f));
+     v.yaw-=lx*dt*1.65;v.yaw+=side*dt*1.25*(0.35+Math.abs(f));
      let top=v.kind==='moonbuggy'?(sprinting?17:11):(sprinting?12:7.5),
          target=f*top;
      v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*3.2));
@@ -1248,7 +1300,7 @@ function step(dt,t){
    }else if(v.kind==='heli'){
      let pitchInput=-move.y,rollInput=move.x;
      v.yaw+=(-v.roll)*dt*0.9;
-     v.yaw-=look.x*dt*0.55;
+     v.yaw-=lx*dt*0.55;
 
      let targetPitch=pitchInput*0.24,
          targetRoll=-rollInput*0.32;
@@ -1381,17 +1433,17 @@ function step(dt,t){
    let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
        back=v.kind==='ufo'?11:v.kind==='mek'?11:v.kind==='jet'?9:v.kind==='heli'?7:v.kind==='moonbuggy'?6.5:5.5,
        up=v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
-       camYaw=v.yaw-look.x*0.9,
-       camLift=look.y*4.2;
+       camYaw=v.yaw-lx*0.9,
+       camLift=ly*4.2;
    let cam=new T.Vector3(
      v.x-Math.sin(camYaw)*back,
      h+up+camLift,
      v.z-Math.cos(camYaw)*back
    );
    camera.position.lerp(cam,0.16);
-   camera.lookAt(v.x,h+1.1-look.y*1.5,v.z);
+   camera.lookAt(v.x,h+1.1-ly*1.5,v.z);
  }else{
-   player.yaw-=look.x*dt*2.45;
+   player.yaw-=lx*dt*2.45;
    let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
    let dh=Math.abs(H(nx,nz)-H(player.x,player.z));
    if(!blocked(nx,nz)&&dh<1.05&&slopeAt(nx,nz)<2.35){player.x=nx;player.z=nz}
@@ -1404,13 +1456,19 @@ function step(dt,t){
  $('compass').textContent=names[Math.round(deg/45)%8];
  let vehicleHud='';
  if(activeVehicle){
-   vehicleHud=activeVehicle.type+' • '+Math.round(Math.abs(activeVehicle.speed||0)*3.6)+' km/h';
-   if(activeVehicle.kind!=='buggy'){
+   const kmh=Math.round(Math.abs(activeVehicle.speed||0)*3.6);
+   vehicleHud=activeVehicle.type+' • '+kmh+' km/h';
+   if(activeVehicle.kind!=='buggy'&&activeVehicle.kind!=='moonbuggy'){
      vehicleHud+=' • '+Math.round(activeVehicle.alt)+'m';
      if(activeVehicle.kind==='ufo'&&activeVehicle.alt>160)vehicleHud+=' • SPACE';
      if(activeVehicle.stalled)vehicleHud+=' • STALL';
    }
+   $('modeReadout').textContent=activeVehicle.kind==='jet'||activeVehicle.kind==='heli'||activeVehicle.kind==='ufo'?'FLIGHT':activeVehicle.kind==='mek'?'MEK':'DRIVING';
+   $('vehicleCard').classList.remove('hidden');$('vehicleName').textContent=activeVehicle.type.toUpperCase();$('vehicleSpeed').textContent=kmh+' km/h';
    vehicleHud+=' • '
+ }else{
+   $('modeReadout').textContent=moonMode?'MOON EVA':'ON FOOT';
+   $('vehicleCard').classList.add('hidden')
  }
  if(activeVehicle&&activeVehicle.kind==='ufo'&&!moonMode&&activeVehicle.inSpace){let md=Math.hypot(activeVehicle.x-SPACE_MOON.x,activeVehicle.worldY-SPACE_MOON.y,activeVehicle.z-SPACE_MOON.z);vehicleHud+='MOON '+Math.round(md)+'m • '}
  $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife');
