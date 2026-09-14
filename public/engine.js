@@ -905,7 +905,7 @@ function step(dt,t){
    camera.lookAt(v.x,h+1.1-look.y*1.5,v.z);
  }else{
    player.yaw-=look.x*dt*2.45;
-   let f=-move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
+   let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
    let dh=Math.abs(H(nx,nz)-H(player.x,player.z));
    if(!blocked(nx,nz)&&dh<1.05&&slopeAt(nx,nz)<2.35){player.x=nx;player.z=nz}
    camera.position.lerp(new T.Vector3(player.x,H(player.x,player.z)+1.7,player.z),0.24);camera.rotation.set(player.pitch,player.yaw,0);
