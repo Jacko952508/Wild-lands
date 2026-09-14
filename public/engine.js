@@ -291,11 +291,9 @@ function rebuildColliders(nearSet){
    for(const q of c.d.rocks){colliders.push({x:c.cx*CH+q[0],z:c.cz*CH+q[1],r:0.62*q[2]})}
    if(c.d.mark==='ring')for(let i=0;i<7;i++){let a=i/7*Math.PI*2;colliders.push({x:c.cx*CH+Math.cos(a)*5,z:c.cz*CH+Math.sin(a)*5,r:0.8})}
    if(c.d.mark==='tower')colliders.push({x:c.cx*CH,z:c.cz*CH,r:2.2});
-   if(c.d.anomaly==='titan'){let wx=c.cx*CH+(hash(c.cx,c.cz,141)-0.5)*42,wz=c.cz*CH+(hash(c.cx,c.cz,142)-0.5)*42;colliders.push({x:wx,z:wz,r:3.8})}
- }
- for(const v of vehicles)colliders.push({x:v.x,z:v.z,r:v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5,vehicle:v});
+   }
 }
-function blocked(x,z,radius=0.6){for(const c of colliders){if(c.vehicle&&c.vehicle===activeVehicle)continue;let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}return false}
+function blocked(x,z,radius=0.6){for(const c of colliders){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}for(const v of vehicles){if(v===activeVehicle)continue;let dx=x-v.x,dz=z-v.z,rr=(v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5)+radius;if(dx*dx+dz*dz<rr*rr)return true}return false}
 
 function queueFar(cx,cz){
  let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
@@ -538,6 +536,9 @@ window.__world={
  chunk:(x,z)=>JSON.parse(JSON.stringify(descriptor(x,z))),
  teleportChunk:(cx,cz)=>{player.x=cx*CH;player.z=cz*CH;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  mapOpen:()=>openMap(),
- animals:()=>animalAgents.slice(0,8).map(a=>({kind:a.kind,x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(2)}))
+ animals:()=>animalAgents.slice(0,8).map(a=>({kind:a.kind,x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(2)})),
+ vehicles:()=>vehicles.map(v=>({type:v.type,x:+v.x.toFixed(2),z:+v.z.toFixed(2),alt:+v.alt.toFixed(2),active:v===activeVehicle})),
+ anomalies:()=>[...chunks.values()].filter(c=>c.anomaly&&c.mode==='near').map(c=>({type:c.d.anomaly,x:+c.anomaly.position.x.toFixed(1),z:+c.anomaly.position.z.toFixed(1)})),
+ teleport:(x,z)=>{player.x=x;player.z=z;activeVehicle=null;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()}
 };
 })();
