@@ -17,9 +17,16 @@
 
 <div id="topActions">
   <button id="map" aria-label="Map"><span>MAP</span></button>
+  <button id="missionsBtn" aria-label="Missions"><span>MISSIONS</span></button>
   <button id="inventoryBtn" aria-label="Inventory"><span>PACK</span></button>
   <button id="craftBtn" aria-label="Crafting"><span>CRAFT</span></button>
   <button id="worldctl" aria-label="Settings"><span>SETTINGS</span></button>
+</div>
+<div id="objectiveTracker"><span>OBJECTIVE</span><b id="objectiveText">Explore the airfield</b></div>
+<div id="vitals">
+  <div class="vital"><span>HEALTH</span><i><b id="healthBar"></b></i></div>
+  <div class="vital"><span>STAMINA</span><i><b id="staminaBar"></b></i></div>
+  <div class="vital"><span>ENERGY</span><i><b id="energyBar"></b></i></div>
 </div>
 
 <div id="cross"><i></i></div>
@@ -43,6 +50,7 @@
   <button id="mine" class="hidden">MINE</button>
 </div>
 <div id="equippedTool" class="hidden"><span>EQUIPPED</span><b id="equippedToolName">NONE</b></div>
+<div id="buildModeHud" class="hidden"><div><span>BUILD MODE</span><b id="buildModeName">STRUCTURE</b></div><button id="buildRotate">ROTATE</button><button id="buildConfirm">PLACE</button><button id="buildCancel">CANCEL</button></div>
 
 <div id="vehicleCard" class="hidden"><span id="vehicleName">VEHICLE</span><b id="vehicleSpeed">0 km/h</b></div>
 
@@ -53,6 +61,7 @@
   </div>
 </div>
 
+<div id="missionsPanel" class="sidePanel hidden"><div class="worldHead"><b>MISSIONS & PROGRESSION</b><button id="missionsClose">×</button></div><div id="progressSummary"></div><div id="missionList"></div></div>
 <div id="inventoryPanel" class="sidePanel hidden"><div class="worldHead"><b>INVENTORY</b><button id="inventoryClose">×</button></div><div id="inventoryList"></div></div>
 <div id="craftPanel" class="sidePanel hidden"><div class="worldHead"><b>CRAFTING & BUILDING</b><button id="craftClose">×</button></div><div id="craftList"></div><div class="settingsDivider"></div><div class="buildHead"><b>BUILD KITS</b><small>Craft a kit, then place it in the world.</small></div><div id="buildList"></div></div>
 <div id="shopPanel" class="sidePanel hidden"><div class="worldHead"><div><b>WESTSIDE SUPPLY</b><div id="creditsReadout">0 credits</div></div><button id="shopClose">×</button></div><div class="shopTabs"><button id="shopBuyTab" class="active">BUY</button><button id="shopSellTab">SELL</button></div><div id="shopList"></div></div>

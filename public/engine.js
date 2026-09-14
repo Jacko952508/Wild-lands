@@ -1,6 +1,27 @@
 (()=>{'use strict';
 const T=THREE,$=id=>document.getElementById(id),canvas=$('game');
 
+// Lightweight procedural audio: no downloads, no large assets, iPhone-safe after first gesture.
+let audioCtx=null,audioMaster=null,ambientOsc=null,ambientGain=null,lastStepSfx=0;
+function ensureAudio(){
+ if(audioCtx){if(audioCtx.state==='suspended')audioCtx.resume();return}
+ try{
+   audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+   audioMaster=audioCtx.createGain();audioMaster.gain.value=.22;audioMaster.connect(audioCtx.destination);
+   ambientOsc=audioCtx.createOscillator();ambientGain=audioCtx.createGain();
+   ambientOsc.type='sine';ambientOsc.frequency.value=48;ambientGain.gain.value=.016;
+   ambientOsc.connect(ambientGain).connect(audioMaster);ambientOsc.start()
+ }catch(e){}
+}
+function sfx(freq=220,dur=.08,gain=.06,type='triangle'){
+ if(!audioCtx||!audioMaster)return;
+ const o=audioCtx.createOscillator(),g=audioCtx.createGain(),n=audioCtx.currentTime;
+ o.type=type;o.frequency.setValueAtTime(freq,n);o.frequency.exponentialRampToValueAtTime(Math.max(35,freq*.55),n+dur);
+ g.gain.setValueAtTime(gain,n);g.gain.exponentialRampToValueAtTime(.0001,n+dur);
+ o.connect(g).connect(audioMaster);o.start(n);o.stop(n+dur+.02)
+}
+addEventListener('pointerdown',ensureAudio,{once:true,passive:true});
+
 const scene=new T.Scene();
 scene.background=new T.Color(0x9bb2b5);
 scene.fog=new T.FogExp2(0x9fb0aa,0.0048);
@@ -94,7 +115,7 @@ const CH=96,NEAR=1,FAR=3,CACHE=4;
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.ui=world.ui||{lookSensitivity:1,hudScale:1};
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -186,9 +207,16 @@ const mats={
  trail:new T.MeshStandardMaterial({color:0x786b52,roughness:1})
 };
 
+const WORLD_BACKUP='wi_world_v3_backup';let lastBackupAt=0;
 function persist(){
- localStorage.setItem(WORLD,JSON.stringify(world));
- localStorage.setItem(POS,JSON.stringify(player));
+ try{
+   const now=Date.now(),snapshot=JSON.stringify(world),pos=JSON.stringify(player);
+   if(now-lastBackupAt>60000){
+     const current=localStorage.getItem(WORLD);if(current)localStorage.setItem(WORLD_BACKUP,current);
+     lastBackupAt=now
+   }
+   localStorage.setItem(WORLD,snapshot);localStorage.setItem(POS,pos)
+ }catch(e){console.warn('Save failed',e)}
 }
 
 function descriptor(cx,cz){
@@ -392,7 +420,7 @@ function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,ra
    bulb.position.set(sx,y,zFront);g.add(bulb);
    const light=new T.SpotLight(color,power,range,Math.PI/7,.45,1.4);
    light.position.set(sx,y,zFront+.05);light.target.position.set(sx,y-.35,zFront+14);
-   light.userData.baseIntensity=power;light.userData.owner=g;light.userData.maxDistance=Math.max(75,range*1.8);
+   light.userData.baseIntensity=power;light.userData.owner=g;light.userData.maxDistance=Math.max(75,range*1.8);light.userData.vehicleLight=true;
    g.add(light,light.target);managedLights.push(light)
  }
 }
@@ -691,11 +719,13 @@ function makeHuman(parent,x,z,shirt=0x546f8a,role='Resident',name=role){
 
  g.position.set(x,H(x,z),z);
  g.userData.role=role;g.userData.name=name;g.userData.arms=arms;g.userData.legs=legs;g.userData.phase=Math.random()*Math.PI*2;g.userData.baseY=g.position.y;
+ g.userData.homeX=x;g.userData.homeZ=z;g.userData.wander=!['Shopkeeper','Mechanic','Medic','Barista','Arcade Attendant'].includes(role);
+ g.userData.targetX=x;g.userData.targetZ=z;g.userData.moveT=1+Math.random()*4;
  parent.add(g);townHumans.push(g);
- if(role!=='Shopkeeper'&&role!=='Mechanic')addTownInteraction('talk',x,z,'TALK TO '+name.toUpperCase(),{name,role});
+ if(role!=='Shopkeeper'&&role!=='Mechanic')g.userData.interaction=addTownInteraction('talk',x,z,'TALK TO '+name.toUpperCase(),{name,role});
  return g
 }
-function addTownInteraction(type,x,z,label,data={}){townInteractions.push({type,x,z,label,...data})}
+function addTownInteraction(type,x,z,label,data={}){const a={type,x,z,label,...data};townInteractions.push(a);return a}
 function townShell(parent,cx,cz,w,d,h,mat,label,doorSide='south'){
  const y=H(cx,cz),wall=.42,door=4.2;
  cityBox(parent,cx,y+.08,cz,w,.16,d,cityM.floor,false);
@@ -830,6 +860,17 @@ function makeBuildPiece(b,save=false){
    const top=new T.Mesh(new T.BoxGeometry(3,.25,1.2),wood);top.position.y=1.05;g.add(top);
    for(const sx of[-1.2,1.2])for(const sz of[-.42,.42]){const leg=new T.Mesh(new T.BoxGeometry(.18,1,.18),metal);leg.position.set(sx,.5,sz);g.add(leg)}
    addBuildCollider(b.x,b.z,1.6,.75);addTownInteraction('workbench',b.x,b.z,'USE WORKBENCH')
+ }else if(b.type==='Field Shelter'){
+   const cloth=new T.MeshStandardMaterial({color:0x6d735d,roughness:.92,side:T.DoubleSide});
+   const floor=new T.Mesh(new T.BoxGeometry(4.8,.16,4.2),wood);floor.position.y=.08;g.add(floor);
+   const roof=new T.Mesh(new T.CylinderGeometry(0,3.6,3.2,4,1,false,Math.PI/4,Math.PI*2),cloth);roof.rotation.y=Math.PI/4;roof.scale.z=.8;roof.position.y=2.1;g.add(roof);
+   addBuildCollider(b.x-2,b.z,0.18,2.1);addBuildCollider(b.x+2,b.z,0.18,2.1);
+   addTownInteraction('shelter',b.x,b.z,'REST IN SHELTER')
+ }else if(b.type==='Signal Beacon'){
+   const mast=new T.Mesh(new T.CylinderGeometry(.08,.12,4.8,8),metal);mast.position.y=2.4;g.add(mast);
+   const ring=new T.Mesh(new T.TorusGeometry(.7,.07,8,20),new T.MeshBasicMaterial({color:0xffc96b}));ring.position.y=4.7;ring.rotation.x=Math.PI/2;g.add(ring);
+   const l=new T.PointLight(0xffc96b,3,38,1.7);l.position.y=4.7;l.userData.baseIntensity=3;l.userData.owner=g;l.userData.maxDistance=65;g.add(l);managedLights.push(l);
+   addBuildCollider(b.x,b.z,.35,.35)
  }
  g.position.set(b.x,y,b.z);g.rotation.y=b.yaw||0;buildGroup.add(g);
  if(save){world.builds.push({type:b.type,x:+b.x.toFixed(2),z:+b.z.toFixed(2),yaw:+(b.yaw||0).toFixed(3)});persist()}
@@ -859,6 +900,39 @@ const resourceGroup=new T.Group();scene.add(resourceGroup);
  ['stone1','Stone',-194,8],['stone2','Stone',-188,52],['stone3','Stone',-63,-50],['stone4','Stone',-56,57],
  ['scrap1','Scrap',-72,25],['scrap2','Scrap',-92,-47],['scrap3','Scrap',-159,-48],['scrap4','Scrap',-176,30]
 ].forEach(q=>makeResourceNode(resourceGroup,...q));
+
+const lootGroup=new T.Group();scene.add(lootGroup);
+function makeLootCache(parent,id,x,z,realm='earth'){
+ if(world.lootOpened[id])return;
+ const y=realm==='moon'?moonH(x,z):earthH(x,z),g=new T.Group(),
+       box=new T.Mesh(new T.BoxGeometry(1.4,.8,1.0),new T.MeshStandardMaterial({color:realm==='moon'?0x7b8588:0x48553e,roughness:.72,metalness:.22})),
+       band=new T.Mesh(new T.BoxGeometry(1.5,.14,1.05),new T.MeshStandardMaterial({color:0xb7c9a5,roughness:.5,metalness:.3}));
+ box.position.y=.45;band.position.y=.52;g.add(box,band);g.position.set(x,y,z);parent.add(g);
+ addTownInteraction('loot',x,z,'OPEN SUPPLY CACHE',{lootId:id,realm})
+}
+[['cache_town',-186,-55],['cache_ridge',-245,90],['cache_forest',-315,-145],['cache_airfield',55,62]].forEach(q=>makeLootCache(lootGroup,...q));
+
+const poiGroup=new T.Group();scene.add(poiGroup);
+function makeEarthPoi(type,x,z){
+ const y=earthH(x,z),g=new T.Group(),rust=buildMat(0x5d5144,1),concrete=buildMat(0x686c68),dark=buildMat(0x25292b,1);
+ if(type==='bunker'){
+   const floor=new T.Mesh(new T.BoxGeometry(12,.3,9),concrete);floor.position.y=.15;g.add(floor);
+   for(const sx of[-5.8,5.8]){const w=new T.Mesh(new T.BoxGeometry(.4,3.2,9),concrete);w.position.set(sx,1.6,0);g.add(w);buildColliders.push({x:x+sx,z,hx:.3,hz:4.5})}
+   const back=new T.Mesh(new T.BoxGeometry(12,3.2,.4),concrete);back.position.set(0,1.6,4.3);g.add(back);buildColliders.push({x,z:z+4.3,hx:6,hz:.3});
+   const roof=new T.Mesh(new T.BoxGeometry(12,.45,9),concrete);roof.position.y=3.3;g.add(roof);
+   const doorL=new T.Mesh(new T.BoxGeometry(3.8,3.2,.4),concrete);doorL.position.set(-4.1,1.6,-4.3);g.add(doorL);
+   const doorR=doorL.clone();doorR.position.x=4.1;g.add(doorR);
+   buildColliders.push({x:x-4.1,z:z-4.3,hx:1.9,hz:.3},{x:x+4.1,z:z-4.3,hx:1.9,hz:.3});
+   townText(g,'ABANDONED STATION',0,2.75,-4.55,7,1);
+   addTownInteraction('poi',x,z-2,'SEARCH ABANDONED STATION',{poi:'bunker'})
+ }else{
+   const body=new T.Mesh(new T.BoxGeometry(7,1.8,2.8),rust);body.rotation.set(.12,.25,.35);body.position.y=1.2;g.add(body);
+   const boom=new T.Mesh(new T.BoxGeometry(9,.35,1.1),dark);boom.position.set(0,1.4,0);boom.rotation.y=.5;g.add(boom);
+   addTownInteraction('poi',x,z,'INSPECT CRASH SITE',{poi:'wreck'})
+ }
+ g.position.set(x,y,z);poiGroup.add(g)
+}
+makeEarthPoi('bunker',-255,96);makeEarthPoi('wreck',-318,-142);
 
 const moonColliders=[],moonDoorways=[],moonMineables=[],moonCollectibles=[];
 function moonBox(parent,x,y,z,w,h,d,mat,collide=false){
@@ -968,6 +1042,25 @@ function makeMoonWorld(){
    m.position.set(x,moonH(x,z)+s*.55,z);m.castShadow=true;g.add(m)
  }
 
+ // Distant lunar points of interest: relay wreck, abandoned drill and cave mouth.
+ const wreckMat=new T.MeshStandardMaterial({color:0x51585c,roughness:.55,metalness:.65});
+ for(const [x,z,rot] of[[215,118,.35],[-265,-140,-.7]]){
+   const wreck=new T.Group();
+   const core=new T.Mesh(new T.BoxGeometry(7,2.6,3.4),wreckMat);core.rotation.z=.18;wreck.add(core);
+   const wing=new T.Mesh(new T.BoxGeometry(11,.35,2.2),wreckMat);wing.position.set(0,.2,0);wing.rotation.y=.35;wreck.add(wing);
+   wreck.position.set(x,moonH(x,z)+1.4,z);wreck.rotation.y=rot;g.add(wreck)
+ }
+ const caveX=-330,caveZ=205,caveY=moonH(caveX,caveZ);
+ const cave=new T.Mesh(new T.TorusGeometry(10,3.2,10,20,Math.PI),new T.MeshStandardMaterial({color:0x343434,roughness:1}));
+ cave.rotation.x=Math.PI/2;cave.rotation.z=Math.PI;cave.position.set(caveX,caveY+3.1,caveZ);g.add(cave);
+ let caveDark=new T.Mesh(new T.CircleGeometry(7,20),new T.MeshBasicMaterial({color:0x020202}));caveDark.position.set(caveX,caveY+3,caveZ+.35);caveDark.rotation.x=-Math.PI/2;g.add(caveDark);
+ addTownInteraction('moonSite',215,118,'INSPECT CRASHED RELAY',{realm:'moon',site:'relay'});
+ addTownInteraction('moonSite',-265,-140,'INSPECT ABANDONED DRILL',{realm:'moon',site:'drill'});
+ addTownInteraction('moonSite',caveX,caveZ,'EXPLORE CAVE MOUTH',{realm:'moon',site:'cave'});
+ makeLootCache(g,'moon_cache_relay',222,121,'moon');
+ makeLootCache(g,'moon_cache_drill',-258,-144,'moon');
+ makeLootCache(g,'moon_cache_cave',-320,198,'moon');
+
  // Collectible field samples for the player's inventory.
  const samples=[[-52,72,'Lunar Rock'],[74,88,'Lunar Rock'],[-92,-54,'Regolith Sample'],[132,-18,'Regolith Sample'],[-148,96,'Impact Glass'],[205,142,'Impact Glass']];
  samples.forEach((q,i)=>{
@@ -1011,8 +1104,10 @@ function updateManagedLights(day){
    l.getWorldPosition(lightProbe);
    const py=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:H(player.x,player.z)+1.7;
    const d=Math.hypot(lightProbe.x-player.x,lightProbe.y-py,lightProbe.z-player.z);
-   const max=l.userData.maxDistance||85,on=d<max&&dark>.08;
-   l.visible=on;if(on)l.intensity=(l.userData.baseIntensity||1)*dark
+   const beamBoost=l.userData.vehicleLight&&world.vehicleUpgrades.lights?1.55:1,
+         max=(l.userData.maxDistance||85)*(l.userData.vehicleLight&&world.vehicleUpgrades.lights?1.35:1),
+         on=d<max&&dark>.08;
+   l.visible=on;if(on)l.intensity=(l.userData.baseIntensity||1)*dark*beamBoost
  }
 }
 
@@ -1046,7 +1141,7 @@ function loadAnimals(c){
  c.d.animals.forEach((q,i)=>{
    let st=saved[i],x=st?st.x:c.cx*CH+q[0],z=st?st.z:c.cz*CH+q[1],dir=st?st.dir:hash(c.cx*9+i,c.cz*7-i,200)*Math.PI*2;
    let g=animalModel(q[2]);g.position.set(x,H(x,z),z);scene.add(g);
-   let a={chunk:c.k,index:i,kind:q[2],group:g,x,z,homeX:c.cx*CH+q[0],homeZ:c.cz*CH+q[1],dir,target:dir,speed:q[2]==='fox'?1.35:q[2]==='wolf'?1.2:q[2]==='deer'?1.0:0.72,stateT:2+hash(c.cx+i,c.cz-i,201)*5,phase:hash(c.cx-i,c.cz+i,202)*6.28};
+   let a={chunk:c.k,index:i,kind:q[2],group:g,x,z,homeX:c.cx*CH+q[0],homeZ:c.cz*CH+q[1],dir,target:dir,speed:q[2]==='fox'?1.35:q[2]==='wolf'?1.2:q[2]==='deer'?1.0:0.72,stateT:2+hash(c.cx+i,c.cz-i,201)*5,phase:hash(c.cx-i,c.cz+i,202)*6.28,hp:q[2]==='boar'?4:q[2]==='wolf'?3:2,fear:0};
    c.agents.push(a);animalAgents.push(a);
  });
 }
@@ -1153,9 +1248,15 @@ function sync(force=false){
 
 function updateAnimals(dt,t){
  for(const a of animalAgents){
-   a.stateT-=dt;
+   a.stateT-=dt;a.fear=Math.max(0,(a.fear||0)-dt);
    let pd=Math.hypot(player.x-a.x,player.z-a.z),mult=1,focus=null;
-   if(pd<7){
+   if(a.fear>0){
+     a.target=Math.atan2(a.x-player.x,a.z-player.z);a.stateT=2.4;mult=2.05;
+   }else if(pd<9&&!activeVehicle&&a.kind==='wolf'){
+     a.target=Math.atan2(player.x-a.x,player.z-a.z);a.stateT=1.8;mult=pd<3?1.6:1.25;
+   }else if(pd<4.5&&!activeVehicle&&a.kind==='boar'){
+     a.target=Math.atan2(player.x-a.x,player.z-a.z);a.stateT=1.3;mult=1.7;
+   }else if(pd<7){
      a.target=Math.atan2(a.x-player.x,a.z-player.z);a.stateT=2.4;mult=1.75;
    }else{
      if((a.kind==='wolf'||a.kind==='fox')){
@@ -1197,22 +1298,35 @@ function updateAnimals(dt,t){
 
 function updateTownHumans(t){
  for(const h of townHumans){
-   const u=h.userData,p=u.phase||0;
+   const u=h.userData,p=u.phase||0,dt=.033;
+   const d=Math.hypot(player.x-h.position.x,player.z-h.position.z);
+   let walking=false;
+   if(u.wander&&d>4.5){
+     u.moveT-=dt;
+     if(u.moveT<=0||Math.hypot(h.position.x-u.targetX,h.position.z-u.targetZ)<.6){
+       const a=Math.random()*Math.PI*2,r=4+Math.random()*9;
+       u.targetX=T.MathUtils.clamp(u.homeX+Math.sin(a)*r,-184,-70);
+       u.targetZ=T.MathUtils.clamp(u.homeZ+Math.cos(a)*r,-55,60);
+       u.moveT=4+Math.random()*8
+     }
+     const ang=Math.atan2(u.targetX-h.position.x,u.targetZ-h.position.z),nx=h.position.x+Math.sin(ang)*.45*dt,nz=h.position.z+Math.cos(ang)*.45*dt;
+     if(!blocked(nx,nz,.35)){h.position.x=nx;h.position.z=nz;walking=true;let dif=((ang-h.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;h.rotation.y+=T.MathUtils.clamp(dif,-dt*2.2,dt*2.2)}
+   }
    h.position.y=H(h.position.x,h.position.z)+Math.sin(t*1.35+p)*.012;
    if(u.arms){
-     u.arms[0].rotation.x=Math.sin(t*.75+p)*.045;
-     u.arms[1].rotation.x=-Math.sin(t*.75+p)*.045
+     const sw=walking?Math.sin(t*5+p)*.38:Math.sin(t*.75+p)*.045;
+     u.arms[0].rotation.x=sw;u.arms[1].rotation.x=-sw
    }
    if(u.legs){
-     u.legs[0].rotation.x=Math.sin(t*.65+p)*.018;
-     u.legs[1].rotation.x=-Math.sin(t*.65+p)*.018
+     const sw=walking?Math.sin(t*5+p)*.42:Math.sin(t*.65+p)*.018;
+     u.legs[0].rotation.x=-sw;u.legs[1].rotation.x=sw
    }
-   const d=Math.hypot(player.x-h.position.x,player.z-h.position.z);
    if(d<6){
      const target=Math.atan2(player.x-h.position.x,player.z-h.position.z);
      let dif=((target-h.rotation.y+Math.PI*3)%(Math.PI*2))-Math.PI;
      h.rotation.y+=T.MathUtils.clamp(dif,-.035,.035)
    }
+   if(u.interaction){u.interaction.x=h.position.x;u.interaction.z=h.position.z}
  }
 }
 function updateAnomalies(dt,t){
@@ -1305,10 +1419,12 @@ function findSafeExit(v){
  return{x:v.x+Math.sin(v.yaw+Math.PI/2)*baseR*2.2,z:v.z+Math.cos(v.yaw+Math.PI/2)*baseR*2.2}
 }
 function nearestTownInteraction(){
- if(moonMode||activeVehicle)return null;
+ if(activeVehicle)return null;
  let best=null,bd=3.1;
  for(const a of townInteractions){
+   const realm=a.realm||'earth';if(moonMode?(realm!=='moon'):(realm==='moon'))continue;
    if(a.resourceId&&world.resourceGathered[a.resourceId])continue;
+   if(a.lootId&&world.lootOpened[a.lootId])continue;
    let d=Math.hypot(player.x-a.x,player.z-a.z);
    if(d<bd){bd=d;best=a}
  }
@@ -1390,7 +1506,7 @@ function inventoryCounts(){
  return out
 }
 const equippableTools=new Set(['Field Flashlight','Basic Hatchet','Heavy Pickaxe','Salvage Wrench','Geology Scanner','Repair Kit']);
-const toolView=new T.Group();camera.add(toolView);scene.add(camera);
+const toolView=new T.Group();camera.add(toolView);scene.add(camera);let toolSwing=0;
 const toolLight=new T.SpotLight(0xf2f7ff,0,70,Math.PI/7,.45,1.4);toolLight.position.set(.22,-.18,-.4);toolLight.target.position.set(0,-.1,-10);camera.add(toolLight,toolLight.target);
 function rebuildToolView(){
  while(toolView.children.length)toolView.remove(toolView.children[0]);
@@ -1418,6 +1534,43 @@ function setEquippedTool(name){
  rebuildToolView();persist();renderInventory();refreshUse();
  toast(name?name+' equipped':'Tool unequipped')
 }
+const missions=[
+ {title:'Getting Equipped',desc:'Own a Basic Hatchet and Heavy Pickaxe.',reward:80,xp:100,done:()=>inventoryQty('Basic Hatchet')>0&&inventoryQty('Heavy Pickaxe')>0},
+ {title:'Gathering Ground',desc:'Collect at least 4 Wood, 4 Stone and 3 Scrap.',reward:120,xp:140,done:()=>inventoryQty('Wood')>=4&&inventoryQty('Stone')>=4&&inventoryQty('Scrap')>=3},
+ {title:'Make It Yours',desc:'Place your first persistent structure.',reward:140,xp:160,done:()=>world.builds.length>0},
+ {title:'Unknown Signal',desc:'Discover one anomaly in the wilderness.',reward:180,xp:220,done:()=>Object.keys(world.discoveries).length>0},
+ {title:'Moonbound',desc:'Reach the lunar surface.',reward:250,xp:300,done:()=>!!world.progress.reachedMoon},
+ {title:'Lunar Extraction',desc:'Extract at least 3 pieces of Lunar Ore.',reward:300,xp:360,done:()=>world.moonOre>=3},
+ {title:'Return From Beyond',desc:'Bring lunar material back to Earth.',reward:450,xp:500,done:()=>!!world.progress.reachedMoon&&!moonMode&&inventoryQty('Lunar Ore')>0}
+];
+function updateLevel(){
+ const p=world.progress;p.level=1+Math.floor(p.xp/300)
+}
+function completeMission(i){
+ const p=world.progress;if(p.completed.includes(i))return;
+ p.completed.push(i);p.mission=Math.max(p.mission,i+1);p.xp+=missions[i].xp;p.reputation+=1;world.credits+=missions[i].reward;updateLevel();persist();
+ toast('MISSION COMPLETE • '+missions[i].title+' • +'+missions[i].reward+' credits')
+}
+function checkMissions(){
+ const p=world.progress;
+ for(let i=0;i<missions.length;i++)if(!p.completed.includes(i)&&missions[i].done()){completeMission(i);break}
+ const idx=missions.findIndex((m,i)=>!p.completed.includes(i));
+ $('objectiveText').textContent=idx<0?'All current objectives complete — keep exploring.':missions[idx].desc
+}
+function renderMissions(){
+ updateLevel();
+ const p=world.progress,$s=$('progressSummary'),list=$('missionList');
+ $s.textContent='LEVEL '+p.level+' • '+p.xp+' XP • '+p.reputation+' reputation • '+Math.floor(world.credits)+' credits';
+ list.innerHTML='';
+ missions.forEach((m,i)=>{
+   const done=p.completed.includes(i),active=!done&&i===missions.findIndex((q,j)=>!p.completed.includes(j));
+   const row=document.createElement('div');row.className='missionRow '+(done?'done':active?'active':'');
+   row.innerHTML='<strong>'+(done?'✓ ':active?'▶ ':'')+m.title+'</strong><small>'+m.desc+'</small><div class="missionReward">'+m.reward+' credits • '+m.xp+' XP</div>';
+   list.appendChild(row)
+ })
+}
+$('missionsBtn').onclick=()=>{const p=$('missionsPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'missionsPanel':null);p.classList.toggle('hidden',!open);if(open)renderMissions()};
+$('missionsClose').onclick=()=>$('missionsPanel').classList.add('hidden');
 function renderInventory(){
  const list=$('inventoryList'),items=inventoryCounts();list.innerHTML='';
  const keys=Object.keys(items);
@@ -1431,13 +1584,20 @@ function renderInventory(){
      const btn=document.createElement('button');btn.textContent=world.equippedTool===k?'UNEQUIP':'EQUIP';
      btn.style.cssText='border:1px solid #ffffff22;background:#234334;color:#fff;border-radius:8px;padding:6px 8px;font-size:9px;font-weight:900';
      btn.onclick=()=>setEquippedTool(world.equippedTool===k?null:k);right.appendChild(btn)
+   }else if(k==='Trail Rations'||k==='Med Kit'){
+     const btn=document.createElement('button');btn.textContent='USE';btn.style.cssText='border:1px solid #ffffff22;background:#31445a;color:#fff;border-radius:8px;padding:6px 8px;font-size:9px;font-weight:900';
+     btn.onclick=()=>{
+       if(k==='Trail Rations'){world.playerStats.energy=Math.min(100,world.playerStats.energy+35);consumeItem(k,1);toast('Energy restored')}
+       else{world.playerStats.health=Math.min(100,world.playerStats.health+45);consumeItem(k,1);toast('Health restored')}
+       persist();renderInventory()
+     };right.appendChild(btn)
    }
    row.append(left,right);list.appendChild(row)
  }
 }
 rebuildToolView();
 function closeSidePanels(except=null){
- for(const id of['inventoryPanel','craftPanel','shopPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
+ for(const id of['missionsPanel','inventoryPanel','craftPanel','shopPanel','worldPanel'])if(id!==except)$(id).classList.add('hidden')
 }
 $('inventoryBtn').onclick=()=>{const p=$('inventoryPanel'),open=p.classList.contains('hidden');closeSidePanels(open?'inventoryPanel':null);p.classList.toggle('hidden',!open);if(open)renderInventory()};
 $('inventoryClose').onclick=()=>$('inventoryPanel').classList.add('hidden');
@@ -1449,7 +1609,9 @@ const craftRecipes=[
  {name:'Wood Wall Kit',needs:{Wood:4,Scrap:1},out:'Wood Wall Kit'},
  {name:'Foundation Kit',needs:{Stone:4,Wood:2},out:'Foundation Kit'},
  {name:'Camp Light Kit',needs:{Scrap:3,'Impact Glass':1},out:'Camp Light Kit'},
- {name:'Workbench Kit',needs:{Wood:5,Scrap:3,Stone:2},out:'Workbench Kit'}
+ {name:'Workbench Kit',needs:{Wood:5,Scrap:3,Stone:2},out:'Workbench Kit'},
+ {name:'Field Shelter Kit',needs:{Wood:8,Scrap:3,'Wildlife Hide':2},out:'Field Shelter Kit'},
+ {name:'Signal Beacon Kit',needs:{Scrap:5,'Impact Glass':1,'Lunar Alloy Plate':1},out:'Signal Beacon Kit'}
 ];
 function inventoryQty(name){return inventoryCounts()[name]||0}
 function consumeItem(name,count){
@@ -1472,22 +1634,53 @@ const buildKits=[
  {item:'Wood Wall Kit',type:'Wood Wall'},
  {item:'Foundation Kit',type:'Foundation'},
  {item:'Camp Light Kit',type:'Camp Light'},
- {item:'Workbench Kit',type:'Workbench'}
+ {item:'Workbench Kit',type:'Workbench'},
+ {item:'Field Shelter Kit',type:'Field Shelter'},
+ {item:'Signal Beacon Kit',type:'Signal Beacon'}
 ];
-function placeBuild(type,item){
+let buildMode=null,buildGhost=null;
+function ghostFor(type){
+ const g=new T.Group(),mat=new T.MeshBasicMaterial({color:0x8fe6c1,transparent:true,opacity:.38,depthWrite:false,wireframe:false});
+ if(type==='Wood Wall')g.add(new T.Mesh(new T.BoxGeometry(5,2.7,.28),mat));
+ else if(type==='Foundation')g.add(new T.Mesh(new T.BoxGeometry(5,.3,5),mat));
+ else if(type==='Camp Light'){let p=new T.Mesh(new T.CylinderGeometry(.08,.1,3,8),mat);p.position.y=1.5;g.add(p)}
+ else if(type==='Workbench'){let t=new T.Mesh(new T.BoxGeometry(3,.25,1.2),mat);t.position.y=1.05;g.add(t)}
+ else if(type==='Field Shelter'){let f=new T.Mesh(new T.BoxGeometry(4.8,.18,4.2),mat);f.position.y=.1;let r=new T.Mesh(new T.ConeGeometry(3.2,2.8,4),mat);r.position.y=1.55;r.rotation.y=Math.PI/4;g.add(f,r)}
+ else{let p=new T.Mesh(new T.CylinderGeometry(.08,.12,4.8,8),mat);p.position.y=2.4;g.add(p)}
+ return g
+}
+function cancelBuild(){
+ if(buildGhost){scene.remove(buildGhost);buildGhost=null}
+ buildMode=null;$('buildModeHud').classList.add('hidden')
+}
+function beginBuild(type,item){
  if(moonMode||activeVehicle){toast('Build on foot on Earth');return}
  if(inventoryQty(item)<1){toast('You need '+item);return}
- const dist=5.2,x=player.x-Math.sin(player.yaw)*dist,z=player.z-Math.cos(player.yaw)*dist;
- if(blocked(x,z,1.4)||slopeAt(x,z)>2.2){toast('Cannot build there');return}
- consumeItem(item,1);makeBuildPiece({type,x,z,yaw:player.yaw},true);renderInventory();renderCrafting();toast(type+' placed')
+ cancelBuild();buildMode={type,item,yaw:player.yaw};buildGhost=ghostFor(type);scene.add(buildGhost);
+ $('buildModeName').textContent=type.toUpperCase();$('buildModeHud').classList.remove('hidden');closeSidePanels()
 }
+function updateBuildGhost(){
+ if(!buildMode||!buildGhost)return;
+ const dist=5.2,x=player.x-Math.sin(player.yaw)*dist,z=player.z-Math.cos(player.yaw)*dist,y=H(x,z);
+ buildMode.x=x;buildMode.z=z;buildGhost.position.set(x,y,z);buildGhost.rotation.y=buildMode.yaw;
+ const valid=!blocked(x,z,1.4)&&slopeAt(x,z)<=2.2;
+ buildMode.valid=valid;buildGhost.children.forEach(m=>{if(m.material)m.material.color.set(valid?0x8fe6c1:0xff6f6f)})
+}
+function confirmBuild(){
+ if(!buildMode)return;if(!buildMode.valid){toast('Cannot build there');return}
+ if(inventoryQty(buildMode.item)<1){toast('Build kit missing');cancelBuild();return}
+ consumeItem(buildMode.item,1);makeBuildPiece({type:buildMode.type,x:buildMode.x,z:buildMode.z,yaw:buildMode.yaw},true);
+ toast(buildMode.type+' placed');cancelBuild();renderInventory();renderCrafting();checkMissions()
+}
+$('buildRotate').onclick=()=>{if(buildMode){buildMode.yaw+=Math.PI/2;updateBuildGhost()}};
+$('buildConfirm').onclick=confirmBuild;$('buildCancel').onclick=cancelBuild;
 function renderBuildList(){
  const list=$('buildList');list.innerHTML='';
  for(const bld of buildKits){
    const row=document.createElement('div');row.className='craftRow';
    row.innerHTML='<div><strong>'+bld.type+'</strong><small>'+inventoryQty(bld.item)+' kit(s) available</small></div>';
    const b=document.createElement('button');b.textContent='PLACE';b.disabled=inventoryQty(bld.item)<1;
-   b.onclick=()=>placeBuild(bld.type,bld.item);row.appendChild(b);list.appendChild(row)
+   b.onclick=()=>beginBuild(bld.type,bld.item);row.appendChild(b);list.appendChild(row)
  }
 }
 function renderCrafting(){
@@ -1518,7 +1711,11 @@ const shopBuy=[
  {name:'Salvage Wrench',price:40,desc:'Recover useful scrap'},
  {name:'Geology Scanner',price:90,desc:'Survey equipment'},
  {name:'Repair Kit',price:45,desc:'Vehicle repair equipment'},
- {name:'Trail Rations',price:12,desc:'Emergency supplies'}
+ {name:'Med Kit',price:35,desc:'Restore player health'},
+ {name:'Trail Rations',price:12,desc:'Restore energy'},
+ {name:'Ground Engine Tune',price:140,desc:'Permanent buggy / moon buggy speed upgrade',upgrade:'ground'},
+ {name:'Flight Control Package',price:220,desc:'Permanent aircraft response upgrade',upgrade:'flight'},
+ {name:'High-Beam Lighting',price:90,desc:'Permanent vehicle lighting upgrade',upgrade:'lights'}
 ];
 const sellPrices={Wood:3,Stone:4,Scrap:6,'Lunar Ore':18,'Lunar Rock':8,'Regolith Sample':12,'Impact Glass':30,'Lunar Alloy Plate':42,'Impact Lens':55,'Wood Wall Kit':16,'Foundation Kit':20,'Workbench Kit':35};
 let shopMode='buy';
@@ -1530,8 +1727,14 @@ function renderShop(){
  if(shopMode==='buy'){
    for(const it of shopBuy){
      const row=document.createElement('div');row.className='shopRow';row.innerHTML='<div><strong>'+it.name+'</strong><small>'+it.desc+' • '+it.price+' credits</small></div>';
-     const b=document.createElement('button');b.textContent='BUY';b.disabled=world.credits<it.price;
-     b.onclick=()=>{if(world.credits<it.price)return;world.credits-=it.price;addInventoryItem(it.name,1);persist();renderInventory();renderShop();toast(it.name+' purchased')};
+     const owned=it.upgrade&&world.vehicleUpgrades[it.upgrade]>0;
+     const b=document.createElement('button');b.textContent=owned?'OWNED':'BUY';b.disabled=owned||world.credits<it.price;
+     b.onclick=()=>{
+       if(world.credits<it.price||owned)return;
+       world.credits-=it.price;
+       if(it.upgrade)world.vehicleUpgrades[it.upgrade]=1;else addInventoryItem(it.name,1);
+       persist();renderInventory();renderShop();toast(it.name+' purchased')
+     };
      row.appendChild(b);list.appendChild(row)
    }
  }else{
@@ -1583,6 +1786,19 @@ function scannerResult(){
 $('toolAction').onclick=()=>{
  if(activeVehicle||!world.equippedTool)return;
  const tool=world.equippedTool,a=nearestTownInteraction();
+ toolSwing=1;
+ const threat=nearestThreat();
+ if(threat&&(tool==='Basic Hatchet'||tool==='Heavy Pickaxe'||tool==='Salvage Wrench')){
+   threat.hp-=tool==='Heavy Pickaxe'?2:1;threat.fear=4.5;
+   threat.target=Math.atan2(threat.x-player.x,threat.z-player.z);
+   if(threat.hp<=0){
+     const c=chunks.get(threat.chunk);scene.remove(threat.group);
+     let i=animalAgents.indexOf(threat);if(i>=0)animalAgents.splice(i,1);
+     if(c){i=c.agents.indexOf(threat);if(i>=0)c.agents.splice(i,1)}
+     addInventoryItem('Wildlife Hide',1);toast(threat.kind.toUpperCase()+' repelled • Wildlife Hide collected')
+   }else toast(threat.kind.toUpperCase()+' driven back');
+   persist();renderInventory();return
+ }
  if(a&&a.type==='resource'){
    gatherResourceWithTool(a);refreshUse();return
  }
@@ -1650,8 +1866,26 @@ $('townAction').onclick=()=>{
    toast(lines[a.role]||a.name+': Good to see another explorer.')
  }else if(a.type==='workbench'){
    closeSidePanels('craftPanel');$('craftPanel').classList.remove('hidden');renderCrafting();toast('Workbench ready')
+ }else if(a.type==='shelter'){
+   world.playerStats.health=Math.min(100,world.playerStats.health+25);world.playerStats.energy=Math.min(100,world.playerStats.energy+35);world.playerStats.stamina=100;persist();toast('Rested at shelter')
  }else if(a.type==='resource'){
    gatherResourceWithTool(a)
+ }else if(a.type==='loot'){
+   if(world.lootOpened[a.lootId])return;
+   world.lootOpened[a.lootId]=1;
+   const lunar=(a.realm==='moon'),roll=(Math.abs(Math.sin(a.x*12.13+a.z*7.77))*100)|0;
+   if(lunar){addInventoryItem('Lunar Ore',1+(roll%2));world.moonOre=Math.max(world.moonOre,inventoryQty('Lunar Ore'));addInventoryItem(roll%3?'Impact Glass':'Regolith Sample',1)}
+   else{addInventoryItem(roll%2?'Scrap':'Stone',2);if(roll%4===0)addInventoryItem('Trail Rations',1);world.credits+=10+(roll%25)}
+   persist();renderInventory();toast(lunar?'Lunar cache recovered':'Supply cache recovered')
+ }else if(a.type==='moonSite'){
+   world.progress.moonSites=world.progress.moonSites||{};
+   if(!world.progress.moonSites[a.site])world.progress.xp+=40;
+   world.progress.moonSites[a.site]=1;updateLevel();persist();
+   toast(a.site==='relay'?'Relay wreck logged • corrupted star map recovered':a.site==='drill'?'Abandoned drill logged • deep ore signatures detected':'Cave entrance logged • scanner shows a deep void')
+ }else if(a.type==='poi'){
+   world.progress.earthSites=world.progress.earthSites||{};
+   if(!world.progress.earthSites[a.poi]){world.progress.earthSites[a.poi]=1;world.progress.xp+=35;world.credits+=25;updateLevel();persist()}
+   toast(a.poi==='bunker'?'Station log recovered • +25 credits':'Crash site surveyed • fragments logged')
  }
 };
 
@@ -1747,6 +1981,7 @@ function toast(s){let e=$('toast');e.textContent=s;e.classList.add('show');clear
 function enterMoon(v){
  moonMode=true;
  moonGroup.visible=true;
+ world.progress.reachedMoon=true;persist();checkMissions();
  v.realm='moon';
  v.x=0;v.z=-145;v.worldY=moonH(v.x,v.z)+92;v.alt=92;v.vy=-4;v.speed=Math.min(v.speed||0,28);v.yaw=0;v.pitch=0;v.roll=0;
  v.group.position.set(v.x,v.worldY,v.z);
@@ -1805,6 +2040,8 @@ function updateSky(time,dt=0.016){
  cityGroup.visible=!moonMode&&spaceFactor<0.88;
  buildGroup.visible=!moonMode&&spaceFactor<0.88;
  resourceGroup.visible=!moonMode&&spaceFactor<0.88;
+ lootGroup.visible=!moonMode&&spaceFactor<0.88;
+ poiGroup.visible=!moonMode&&spaceFactor<0.88;
  moonGroup.visible=moonMode;
  for(const ch of chunks.values())ch.root.visible=!moonMode&&spaceFactor<0.88;
  for(const craft of vehicles){
@@ -1822,16 +2059,58 @@ function updateSky(time,dt=0.016){
  if(updateUi)document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
 }
 
-let hudUpdateAt=0,aiAccumulator=0;const cameraLerpTarget=new T.Vector3();
+let hudUpdateAt=0,aiAccumulator=0,damageCooldown=0;const cameraLerpTarget=new T.Vector3();
+function updateSurvival(dt,t){
+ const s=world.playerStats;
+ const moving=Math.hypot(move.x,move.y)>.15&&!activeVehicle&&!sitting;
+ const safe=!moonMode&&((Math.abs(player.x)<50&&Math.abs(player.z)<50)||inCityZone(player.x,player.z))||moonMode&&(Math.abs(player.x)<35&&Math.abs(player.z-18)<38);
+ if(moving&&sprinting){
+   s.stamina=Math.max(0,s.stamina-dt*18);
+   if(s.stamina<4)sprinting=false
+ }else s.stamina=Math.min(100,s.stamina+dt*(safe?18:11));
+ s.energy=Math.max(0,s.energy-dt*(safe?.006:.014));
+ if(s.energy<8)s.health=Math.max(0,s.health-dt*.28);
+ if(worldCtl.weather==='storm'&&!safe&&!moonMode)s.energy=Math.max(0,s.energy-dt*.018);
+ if(safe){s.health=Math.min(100,s.health+dt*.22);s.energy=Math.min(100,s.energy+dt*.025)}
+ damageCooldown=Math.max(0,damageCooldown-dt);
+ if(!activeVehicle&&!moonMode&&damageCooldown<=0){
+   for(const a of animalAgents){
+     if(a.kind==='wolf'&&Math.hypot(player.x-a.x,player.z-a.z)<1.35){
+       s.health=Math.max(0,s.health-7);damageCooldown=1.15;toast('Wolf attack • move away or defend with a tool');break
+     }
+   }
+ }
+ if(s.health<=0){
+   s.health=100;s.stamina=100;s.energy=Math.max(35,s.energy);player.x=-14.5;player.z=-24;activeVehicle=null;sitting=null;toast('You were recovered at the airfield')
+ }
+ $('healthBar').style.width=s.health+'%';$('staminaBar').style.width=s.stamina+'%';$('energyBar').style.width=s.energy+'%'
+}
+function nearestThreat(){
+ let best=null,bd=2.8;
+ for(const a of animalAgents){
+   if(a.kind!=='wolf'&&a.kind!=='boar')continue;
+   const d=Math.hypot(player.x-a.x,player.z-a.z);if(d<bd){bd=d;best=a}
+ }
+ return best
+}
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
- player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);
+ player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();
+ if(audioCtx&&ambientOsc&&ambientGain){
+   const target=moonMode?62:worldCtl.weather==='storm'?42:worldCtl.weather==='rain'?48:52;
+   ambientOsc.frequency.setTargetAtTime(target,audioCtx.currentTime,.8);
+   ambientGain.gain.setTargetAtTime(moonMode?.008:worldCtl.weather==='clear'?.012:.018,audioCtx.currentTime,.8)
+ }
+ if(!activeVehicle&&!sitting&&Math.hypot(move.x,move.y)>.22&&performance.now()-lastStepSfx>(sprinting?260:390)){
+   lastStepSfx=performance.now();sfx(moonMode?95:120,.045,moonMode?.022:.032,'sine')
+ }
+ if(toolSwing>0){toolSwing=Math.max(0,toolSwing-dt*4.8);toolView.rotation.z=-.25+Math.sin((1-toolSwing)*Math.PI)*.9;toolView.rotation.x=-.1-Math.sin((1-toolSwing)*Math.PI)*.45}else{toolView.rotation.z=-.25;toolView.rotation.x=-.1}
 
  if(activeVehicle){
    let v=activeVehicle,f=-move.y,side=move.x;
    if(v.kind==='buggy'||v.kind==='moonbuggy'){
      v.yaw-=lx*dt*1.65;v.yaw+=side*dt*1.25*(0.35+Math.abs(f));
-     let top=v.kind==='moonbuggy'?(sprinting?17:11):(sprinting?12:7.5),
+     let top=(v.kind==='moonbuggy'?(sprinting?17:11):(sprinting?12:7.5))*(1+(world.vehicleUpgrades.ground||0)*.2),
          target=f*top;
      v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*3.2));
      let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
@@ -1868,7 +2147,7 @@ function step(dt,t){
      v.vy+=(lift-v.vy*1.45)*dt;
      if(flightThrottle<0.03&&v.alt<0.1)v.vy=0;
 
-     let drive=Math.max(0.15,flightThrottle)*18,
+     let drive=Math.max(0.15,flightThrottle)*18*(1+(world.vehicleUpgrades.flight||0)*.15),
          fw=Math.sin(v.pitch)*drive,
          strafe=-Math.sin(v.roll)*drive;
      if(v.alt>0.12||flightThrottle>0.52){
@@ -1891,13 +2170,13 @@ function step(dt,t){
 
      let pitchInput=move.y,
          rollInput=move.x,
-         targetPitch=pitchInput*(space?0.52:0.38),
-         targetRoll=-rollInput*(space?0.58:0.42);
+         targetPitch=pitchInput*(space?0.52:0.38)*(1+(world.vehicleUpgrades.flight||0)*.12),
+         targetRoll=-rollInput*(space?0.58:0.42)*(1+(world.vehicleUpgrades.flight||0)*.12);
      v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*3.2));
      v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.4));
      v.yaw+=(-v.roll)*dt*(space?1.25:0.8);
 
-     let maxSpeed=space?170:48,
+     let maxSpeed=(space?170:48)*(1+(world.vehicleUpgrades.flight||0)*.12),
          targetSpeed=flightThrottle*maxSpeed;
      v.speed=T.MathUtils.lerp(v.speed,targetSpeed,Math.min(1,dt*(space?1.35:2.1)));
 
@@ -1929,8 +2208,8 @@ function step(dt,t){
      let onGround=v.alt<0.12,
          pitchInput=move.y,
          rollInput=move.x,
-         targetPitch=pitchInput*0.42,
-         targetRoll=-rollInput*0.58;
+         targetPitch=pitchInput*0.42*(1+(world.vehicleUpgrades.flight||0)*.12),
+         targetRoll=-rollInput*0.58*(1+(world.vehicleUpgrades.flight||0)*.12);
 
      if(onGround){
        targetPitch=Math.max(-0.08,targetPitch);
@@ -1942,7 +2221,7 @@ function step(dt,t){
      }
      v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*2.8));
 
-     let maxSpeed=38,
+     let maxSpeed=38*(1+(world.vehicleUpgrades.flight||0)*.12),
          idle=onGround?0:5.5,
          targetSpeed=idle+flightThrottle*(maxSpeed-idle);
      v.speed=T.MathUtils.lerp(v.speed,targetSpeed,Math.min(1,dt*(onGround?1.6:0.8)));
@@ -2047,7 +2326,7 @@ function step(dt,t){
    }
    if(activeVehicle&&activeVehicle.kind==='ufo'&&!moonMode&&activeVehicle.inSpace){let md=Math.hypot(activeVehicle.x-SPACE_MOON.x,activeVehicle.worldY-SPACE_MOON.y,activeVehicle.z-SPACE_MOON.z);vehicleHud+='MOON '+Math.round(md)+'m • '}
    $('stats').textContent=vehicleHud+(moonMode?'LUNAR SURFACE • '+(world.moonOre||0)+' ore':biome(player.x,player.z)+' • '+Object.keys(world.explored).length+' visited • '+animalAgents.length+' wildlife');
-   refreshUse();
+   checkMissions();refreshUse();
    for(const c of chunks.values())if(c.anomaly&&c.mode==='near'){
      let d=Math.hypot(player.x-c.anomaly.position.x,player.z-c.anomaly.position.z),id='anomaly:'+c.k;
      if(d<(c.d.anomaly==='titan'?35:20)&&!world.discoveries[id]){world.discoveries[id]=c.d.anomaly;toast(c.d.anomaly==='ufo'?'Unidentified craft discovered':c.d.anomaly==='titan'?'Giant entity discovered':'Unknown creature discovered');persist()}
