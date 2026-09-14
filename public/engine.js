@@ -383,7 +383,7 @@ function makeJet(x,z){
  addVehicleLights(g,5.35,1.18,.36,0xffffff,6.2,80);
  g.position.set(x,H(x,z)+.25,z);scene.add(g);vehicles.push({type:'Jet',kind:'jet',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false});g.rotation.y=Math.PI;return g;
 }
-const startColliders=[];
+const startColliders=[],startDoorways=[];
 function startBox(parent,x,y,z,w,h,d,mat,collide=false){
  let m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);
  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);
@@ -446,6 +446,7 @@ function runwayStrip(){
  startBox(g,wallX,y+5.25,hz,.42,1.9,8.0,innerMat,true);
  // visibly open sliding door beside the doorway
  startBox(g,wallX-.18,y+2.0,hz+5.7,.16,4.0,3.2,new T.MeshStandardMaterial({color:0x394449,metalness:.45,roughness:.5}),false);
+ startDoorways.push({x:wallX,z:hz,hx:2.4,hz:4.1});
  // desk and small seating in start room
  startBox(g,-14.2,y+.55,-29.2,4.8,1.1,1.1,innerMat,true);
  startBox(g,-14.8,y+.45,-20.1,2.4,.9,1.2,innerMat,true);
@@ -500,7 +501,7 @@ function runwayStrip(){
 }
 const startBase=runwayStrip();
 
-const cityColliders=[];
+const cityColliders=[],cityDoorways=[];
 function inCityZone(x,z){return x>-190&&x<-64&&z>-70&&z<70}
 function cityMat(color,roughness=0.85,emissive=0){
  return new T.MeshStandardMaterial({color,roughness,emissive,emissiveIntensity:emissive?0.32:0});
@@ -632,6 +633,7 @@ function townShell(parent,cx,cz,w,d,h,mat,label,doorSide='south'){
  cityBox(parent,cx,y+h-.38,frontZ+(doorSide==='south'?wall/2:-wall/2),door,.76,wall,mat,true);
  const porchZ=frontZ+(doorSide==='south'?-1.25:1.25);
  cityBox(parent,cx,y+.06,porchZ,door*1.05,.12,2.6,cityM.concrete,false);
+ cityDoorways.push({x:cx,z:frontZ,hx:door*.62,hz:2.2});
  townText(parent,label,cx,y+h-.95,frontZ+(doorSide==='south'?-0.24:0.24),Math.min(w*.72,9),1.05);
  for(const sx of[-.3,.3]){
    let win=new T.Mesh(new T.BoxGeometry(w*.2,1.5,.08),cityM.glass);
@@ -781,7 +783,7 @@ const resourceGroup=new T.Group();scene.add(resourceGroup);
  ['scrap1','Scrap',-72,25],['scrap2','Scrap',-92,-47],['scrap3','Scrap',-159,-48],['scrap4','Scrap',-176,30]
 ].forEach(q=>makeResourceNode(resourceGroup,...q));
 
-const moonColliders=[],moonMineables=[],moonCollectibles=[];
+const moonColliders=[],moonDoorways=[],moonMineables=[],moonCollectibles=[];
 function moonBox(parent,x,y,z,w,h,d,mat,collide=false){
  let m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);
  m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);
@@ -858,6 +860,7 @@ function makeMoonWorld(){
    let guide=new T.Mesh(new T.BoxGeometry(.55,.035,1.6),new T.MeshBasicMaterial({color:0x7df8ff}));
    guide.position.set(x,by+.13,3.4);g.add(guide)
  }
+ moonDoorways.push({x:0,z:7.1,hx:6.2,hz:3.2});
 
  // Interior control room, bunks, storage and mining lab.
  moonBox(g,-8,by+.65,20,7,1.1,2.2,cityM.blue,true);
@@ -1003,11 +1006,17 @@ function colliderListBlocked(list,x,z,radius){
  }
  return false
 }
+function insideDoorway(list,x,z,radius=.6){
+ return list.some(d=>Math.abs(x-d.x)<d.hx+radius*.25&&Math.abs(z-d.z)<d.hz+radius*.25)
+}
 function blocked(x,z,radius=0.6,ignoreVehicle=null){
  if(moonMode){
-   if(colliderListBlocked(moonColliders,x,z,radius))return true
+   if(!insideDoorway(moonDoorways,x,z,radius)&&colliderListBlocked(moonColliders,x,z,radius))return true
  }else{
-   if(colliderListBlocked(colliders,x,z,radius)||colliderListBlocked(cityColliders,x,z,radius)||colliderListBlocked(startColliders,x,z,radius)||colliderListBlocked(buildColliders,x,z,radius))return true
+   if(colliderListBlocked(colliders,x,z,radius))return true;
+   if(!insideDoorway(cityDoorways,x,z,radius)&&colliderListBlocked(cityColliders,x,z,radius))return true;
+   if(!insideDoorway(startDoorways,x,z,radius)&&colliderListBlocked(startColliders,x,z,radius))return true;
+   if(colliderListBlocked(buildColliders,x,z,radius))return true
  }
  for(const v of vehicles){
    if(v===activeVehicle||v===ignoreVehicle)continue;
@@ -1125,7 +1134,7 @@ function updateAnomalies(dt,t){
  }
 }
 
-let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8),sitting=null;
+let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8),sitting=null,playerJumpY=0,playerJumpV=0;
 let worldCtl={weather:'clear',autoTime:true,time:12};
 function bindPad(el,v){
  let id=null,start={x:0,y:0},stick=el.querySelector('i');
@@ -1138,6 +1147,7 @@ bindPad($('move'),move);bindPad($('look'),look);
 
 $('sprint').addEventListener('pointerdown',()=>{sprinting=true;$('sprint').classList.add('active')});
 ['pointerup','pointercancel','pointerleave'].forEach(ev=>$('sprint').addEventListener(ev,()=>{sprinting=false;$('sprint').classList.remove('active')}));
+$('jump').addEventListener('pointerdown',()=>{if(!activeVehicle&&!sitting&&playerJumpY<=0.02){playerJumpV=5.5;playerJumpY=.03}});
 function nearestVehicle(){
  let best=null,bd=5;
  for(const v of vehicles){
@@ -1206,9 +1216,9 @@ function nearestTownInteraction(){
  return best
 }
 function refreshUse(){
- let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction');
+ let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction'),jump=$('jump');
  if(activeVehicle){
-   pickup.classList.add('hidden');town.classList.add('hidden');
+   pickup.classList.add('hidden');town.classList.add('hidden');jump.classList.add('hidden');
    b.classList.remove('hidden');
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
    const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek';
@@ -1220,7 +1230,7 @@ function refreshUse(){
    else document.querySelector('.engineHead span').textContent='ENGINE';
    return
  }
- fc.classList.add('hidden');mine.classList.add('hidden');$('sprint').classList.remove('hidden');$('sprint').textContent='SPRINT';
+ fc.classList.add('hidden');mine.classList.add('hidden');$('sprint').classList.remove('hidden');$('sprint').textContent='SPRINT';jump.classList.toggle('hidden',!!sitting);
  if(sitting){town.classList.remove('hidden');town.textContent='STAND UP'}else{
    let a=nearestTownInteraction();town.classList.toggle('hidden',!a);if(a)town.textContent=a.label;
  }
@@ -1774,11 +1784,19 @@ function step(dt,t){
  }else{
    player.yaw-=lx*dt*2.45;
    if(!sitting){
+     if(playerJumpY>0||playerJumpV>0){
+       playerJumpV-=13.5*dt;
+       playerJumpY+=playerJumpV*dt;
+       if(playerJumpY<=0){playerJumpY=0;playerJumpV=0}
+     }
      let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
-     let dh=Math.abs(H(nx,nz)-H(player.x,player.z));
-     if(!blocked(nx,nz)&&dh<1.05&&slopeAt(nx,nz)<2.35){player.x=nx;player.z=nz}
-     cameraLerpTarget.set(player.x,H(player.x,player.z)+1.7,player.z)
-   }else cameraLerpTarget.set(player.x,H(player.x,player.z)+1.18,player.z);
+     let dh=Math.abs(H(nx,nz)-H(player.x,player.z)),airborne=playerJumpY>.08;
+     if(!blocked(nx,nz)&&(airborne?dh<1.9:dh<1.15)&&(airborne?slopeAt(nx,nz)<3.4:slopeAt(nx,nz)<2.5)){player.x=nx;player.z=nz}
+     cameraLerpTarget.set(player.x,H(player.x,player.z)+1.7+playerJumpY,player.z)
+   }else{
+     playerJumpY=0;playerJumpV=0;
+     cameraLerpTarget.set(player.x,H(player.x,player.z)+1.18,player.z)
+   }
    camera.position.lerp(cameraLerpTarget,0.24);camera.rotation.set(player.pitch,player.yaw,0);
  }
 
