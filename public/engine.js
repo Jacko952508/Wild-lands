@@ -511,7 +511,7 @@ function step(dt,t){
      if(f<-.2)v.speed=T.MathUtils.lerp(v.speed,-4,Math.min(1,dt*2));
      let nx=v.x+Math.sin(v.yaw)*v.speed*dt,nz=v.z+Math.cos(v.yaw)*v.speed*dt;
      if(v.alt>1||(!blocked(nx,nz,2.0)&&Math.abs(H(nx,nz)-H(v.x,v.z))<1.1)){v.x=nx;v.z=nz}else v.speed*=0.35;
-     let liftReady=v.speed>10;v.alt=T.MathUtils.clamp(v.alt+(liftReady?climbInput*dt*(sprinting?13:8):Math.min(0,climbInput)*dt*5),0,65);
+     let liftReady=v.speed>6;v.alt=T.MathUtils.clamp(v.alt+(liftReady?climbInput*dt*(sprinting?14:10):Math.min(0,climbInput)*dt*5),0,65);
      if(v.alt<0.15)v.alt=0;
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);v.group.rotation.y=v.yaw;v.group.rotation.x=T.MathUtils.lerp(v.group.rotation.x,-climbInput*0.16,Math.min(1,dt*3));v.group.rotation.z=T.MathUtils.lerp(v.group.rotation.z,-side*0.08,Math.min(1,dt*2));
    }
