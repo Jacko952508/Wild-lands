@@ -589,7 +589,7 @@ function makeHeli(x,z){
  const exhaustL=new T.Mesh(new T.CylinderGeometry(.1,.14,.75,8),steel),exhaustR=exhaustL.clone();exhaustL.rotation.x=exhaustR.rotation.x=Math.PI/2;exhaustL.position.set(-.5,2.25,-2.05);exhaustR.position.set(.5,2.25,-2.05);g.add(exhaustL,exhaustR);
  addVehicleLights(g,2.4,1.68,.72,0xf2fbff,5.5,64);
  g.position.set(x,H(x,z),z);scene.add(g);
- const v={type:'Helicopter',kind:'heli',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0,rotorHub,tailRotor,exhaustLocals:[new T.Vector3(-.5,2.25,-2.45),new T.Vector3(.5,2.25,-2.45)],effectClock:0};
+ const v={type:'Helicopter',kind:'heli',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0,hvx:0,hvz:0,yawRate:0,collective:0,rotorHub,tailRotor,exhaustLocals:[new T.Vector3(-.5,2.25,-2.45),new T.Vector3(.5,2.25,-2.45)],effectClock:0};
  vehicles.push(v);return g;
 }
 function makeJet(x,z){
@@ -2619,35 +2619,68 @@ function step(dt,t){
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
      v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
    }else if(v.kind==='heli'){
-     let pitchInput=-move.y,rollInput=move.x;
-     v.yaw+=(-v.roll)*dt*0.9;
-     v.yaw-=lx*dt*0.55;
+     // GTA-style helicopter handling: stick tilts the aircraft, tilt creates
+     // momentum, the camera/look stick yaws independently, and releasing the
+     // stick gradually settles the helicopter back into a hover.
+     const forwardInput=T.MathUtils.clamp(move.y,-1,1),
+           sideInput=T.MathUtils.clamp(move.x,-1,1),
+           upgrade=1+(world.vehicleUpgrades.flight||0)*.12,
+           airborne=v.alt>.08||flightThrottle>.51;
 
-     let targetPitch=pitchInput*0.24,
-         targetRoll=-rollInput*0.32;
-     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,Math.min(1,dt*3.4));
-     v.roll=T.MathUtils.lerp(v.roll,targetRoll,Math.min(1,dt*3.6));
+     const targetPitch=-forwardInput*.34*upgrade,
+           targetRoll=-sideInput*.42*upgrade;
+     v.pitch=T.MathUtils.lerp(v.pitch,targetPitch,1-Math.exp(-dt*4.6));
+     v.roll=T.MathUtils.lerp(v.roll,targetRoll,1-Math.exp(-dt*5.0));
 
-     let collective=(flightThrottle-0.5)*2,
-         lift=collective*8.5;
-     v.vy+=(lift-v.vy*1.45)*dt;
-     if(flightThrottle<0.03&&v.alt<0.1)v.vy=0;
+     // Right-look horizontal input acts like GTA's tail/yaw control.
+     const desiredYawRate=(-lx*1.7)+(-v.roll*.72);
+     v.yawRate=T.MathUtils.lerp(v.yawRate||0,desiredYawRate,1-Math.exp(-dt*4.2));
+     v.yaw+=v.yawRate*dt;
 
-     let drive=Math.max(0.15,flightThrottle)*18*(1+(world.vehicleUpgrades.flight||0)*.15),
-         fw=Math.sin(v.pitch)*drive,
-         strafe=-Math.sin(v.roll)*drive;
-     if(v.alt>0.12||flightThrottle>0.52){
-       v.x+=(Math.sin(v.yaw)*fw+Math.cos(v.yaw)*strafe)*dt;
-       v.z+=(Math.cos(v.yaw)*fw-Math.sin(v.yaw)*strafe)*dt;
+     // 50% is hover. Above/below it gives climb/descent with some inertia.
+     const desiredCollective=(flightThrottle-.5)*2;
+     v.collective=T.MathUtils.lerp(v.collective||0,desiredCollective,1-Math.exp(-dt*3.3));
+     const liftAccel=v.collective*11.5,
+           verticalDamping=v.alt<1.2?2.2:1.35;
+     v.vy+=(liftAccel-v.vy*verticalDamping)*dt;
+     if(!airborne&&flightThrottle<.5){v.vy=0;v.alt=0}
+
+     // Tilt generates acceleration instead of instant translation.
+     // This gives the helicopter the heavy, sweeping GTA-like momentum.
+     const maxAccel=16.5*upgrade,
+           forwardAccel=-Math.sin(v.pitch)*maxAccel,
+           sideAccel=-Math.sin(v.roll)*maxAccel*.9,
+           ax=Math.sin(v.yaw)*forwardAccel+Math.cos(v.yaw)*sideAccel,
+           az=Math.cos(v.yaw)*forwardAccel-Math.sin(v.yaw)*sideAccel,
+           drag=(Math.abs(forwardInput)+Math.abs(sideInput)<.08)?1.75:.72;
+     if(airborne){
+       v.hvx=(v.hvx||0)+ax*dt;v.hvz=(v.hvz||0)+az*dt;
+       const damp=Math.exp(-drag*dt);v.hvx*=damp;v.hvz*=damp;
+       const maxH=27*upgrade,hs=Math.hypot(v.hvx,v.hvz);
+       if(hs>maxH){const q=maxH/hs;v.hvx*=q;v.hvz*=q}
+       const nx=v.x+v.hvx*dt,nz=v.z+v.hvz*dt;
+       if(v.alt>1.1||(!blocked(nx,nz,2.2)&&Math.abs(H(nx,nz)-H(v.x,v.z))<2.2)){v.x=nx;v.z=nz}
+       else{v.hvx*=.25;v.hvz*=.25}
+     }else{
+       v.hvx=T.MathUtils.lerp(v.hvx||0,0,Math.min(1,dt*6));
+       v.hvz=T.MathUtils.lerp(v.hvz||0,0,Math.min(1,dt*6))
      }
 
-     v.alt=T.MathUtils.clamp(v.alt+v.vy*dt,0,55);
-     if(v.alt<=0.02){v.alt=0;v.vy=Math.max(0,v.vy)}
-     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
-     v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+     v.speed=Math.hypot(v.hvx||0,v.hvz||0);
+     v.alt=T.MathUtils.clamp(v.alt+v.vy*dt,0,70);
+     if(v.alt<=0){
+       v.alt=0;
+       if(v.vy<-5.5)toast('Hard helicopter landing');
+       v.vy=0;
+       v.hvx*=.65;v.hvz*=.65
+     }
 
-     let rotor=v.group.getObjectByName('rotor');
-     if(rotor)rotor.rotation.y+=dt*(10+flightThrottle*30);
+     // A touch of aerodynamic bank/yaw at speed makes turns feel less robotic.
+     const speedLean=T.MathUtils.clamp((v.speed||0)/27,0,1);
+     const visualPitch=v.pitch-T.MathUtils.clamp(v.vy*.006,-.04,.04),
+           visualRoll=v.roll-T.MathUtils.clamp(v.yawRate*.05*speedLean,-.08,.08);
+     v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
+     v.group.rotation.set(visualPitch,v.yaw,visualRoll,'XYZ');
    }else if(v.kind==='ufo'){
      let ground=H(v.x,v.z)+1.8;
      if(v.worldY==null)v.worldY=ground+Math.max(0,v.alt||0);
