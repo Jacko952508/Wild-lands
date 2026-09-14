@@ -271,14 +271,156 @@ function runwayStrip(){
 }
 const startBase=runwayStrip();
 
+const cityColliders=[];
+function inCityZone(x,z){return x>68&&x<184&&z>-58&&z<68}
+function cityMat(color,roughness=0.85,emissive=0){
+ return new T.MeshStandardMaterial({color,roughness,emissive,emissiveIntensity:emissive?0.32:0});
+}
+const cityM={
+ road:cityMat(0x303236,0.98),
+ curb:cityMat(0x8c8b83,1),
+ concrete:cityMat(0xaaa69d,0.96),
+ brick:cityMat(0x76504a,0.92),
+ plaster:cityMat(0xb6aa94,0.95),
+ blue:cityMat(0x496579,0.88),
+ dark:cityMat(0x282b2d,0.9),
+ wood:cityMat(0x68482f,0.96),
+ floor:cityMat(0x817666,0.98),
+ glass:new T.MeshPhysicalMaterial({color:0x8bb3c2,transparent:true,opacity:0.46,roughness:0.18,metalness:0.04}),
+ warm:new T.MeshBasicMaterial({color:0xffd98a}),
+ green:cityMat(0x315c39,0.98),
+ red:cityMat(0x8c3e36,0.9),
+ cream:cityMat(0xd3c5a9,0.92)
+};
+function cityBox(parent,x,y,z,w,h,d,mat,collide=false){
+ let m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);
+ m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);
+ if(collide)cityColliders.push({x,z,hx:w/2,hz:d/2});
+ return m
+}
+function cityLamp(parent,x,z){
+ let y=H(x,z),p=cityBox(parent,x,y+2.15,z,0.14,4.3,0.14,cityM.dark,false);
+ let bulb=new T.Mesh(new T.SphereGeometry(0.18,7,5),cityM.warm);bulb.position.set(x,y+4.28,z);parent.add(bulb)
+}
+function cityRoad(parent,x0,z0,x1,z1,width,segments=24){
+ for(let i=0;i<segments;i++){
+   let t=(i+.5)/segments,x=T.MathUtils.lerp(x0,x1,t),z=T.MathUtils.lerp(z0,z1,t),
+       nx=T.MathUtils.lerp(x0,x1,(i+1)/segments),nz=T.MathUtils.lerp(z0,z1,(i+1)/segments),
+       len=Math.hypot(nx-x,z-nz)*2+0.35,ang=Math.atan2(x1-x0,z1-z0);
+   let m=cityBox(parent,x,H(x,z)+0.045,z,width,0.08,len,cityM.road,false);m.rotation.y=ang
+ }
+}
+function furnishRoom(g,cx,cz,w,d,type,y){
+ let add=(x,z,ww,hh,dd,mat,coll=true)=>cityBox(g,cx+x,y+hh/2,cz+z,ww,hh,dd,mat,coll);
+ if(type==='cafe'){
+   add(0,-d*.28,w*.72,1.05,1.1,cityM.wood);
+   for(const x of[-w*.28,w*.05,w*.3]){
+     add(x,d*.08,1.35,.75,1.35,cityM.wood);
+     for(const q of[-.7,.7])add(x+q,d*.08,.38,.72,.38,cityM.dark)
+   }
+ }else if(type==='home'){
+   add(-w*.23,-d*.25,3.4,.65,2.2,cityM.cream);
+   add(w*.24,-d*.28,2.8,.7,1.1,cityM.wood);
+   add(0,d*.15,3.3,.8,1.35,cityM.blue);
+   add(0,d*.31,2.2,.45,.8,cityM.wood)
+ }else if(type==='shop'){
+   add(0,-d*.3,w*.68,1.15,1.0,cityM.dark);
+   for(const x of[-w*.28,0,w*.28])add(x,d*.12,1.0,1.9,d*.28,cityM.wood)
+ }else if(type==='office'){
+   for(const x of[-w*.25,w*.18])for(const z of[-d*.18,d*.16]){
+     add(x,z,2.6,.76,1.25,cityM.wood);
+     add(x,z-.85,.55,.75,.55,cityM.dark)
+   }
+ }else if(type==='clinic'){
+   for(const x of[-w*.23,w*.23])add(x,.08,2.5,.72,4.4,cityM.cream);
+   add(0,-d*.28,w*.62,1.0,1.0,cityM.blue)
+ }else if(type==='library'){
+   for(const x of[-w*.34,w*.34])add(x,0,1.05,2.4,d*.62,cityM.wood);
+   add(0,.12,3.2,.76,1.25,cityM.wood)
+ }else{
+   add(0,-d*.27,w*.64,1.0,1.0,cityM.wood);
+   for(const x of[-w*.28,w*.28])add(x,d*.12,2.3,.7,1.0,cityM.dark)
+ }
+}
+function cityBuilding(parent,cx,cz,w,d,h,mat,type,label){
+ let y=H(cx,cz),wall=.38,door=2.4,frontZ=cz-d/2;
+ cityBox(parent,cx,y+.08,cz,w,.16,d,cityM.floor,false);
+ cityBox(parent,cx,y+h,cz,w,.28,d,cityM.dark,false);
+ cityBox(parent,cx-w/2+wall/2,y+h/2,cz,wall,h,d,mat,true);
+ cityBox(parent,cx+w/2-wall/2,y+h/2,cz,wall,h,d,mat,true);
+ cityBox(parent,cx,y+h/2,cz+d/2-wall/2,w,h,wall,mat,true);
+ let side=(w-door)/2;
+ cityBox(parent,cx-(door/2+side/2),y+h/2,frontZ+wall/2,side,h,wall,mat,true);
+ cityBox(parent,cx+(door/2+side/2),y+h/2,frontZ+wall/2,side,h,wall,mat,true);
+ cityBox(parent,cx,y+h-.42,frontZ+wall/2,door,.84,wall,mat,true);
+
+ for(const sx of[-.28,.28]){
+   let win=new T.Mesh(new T.BoxGeometry(w*.22,1.35,.06),cityM.glass);
+   win.position.set(cx+sx*w,y+2.65,frontZ-.04);parent.add(win)
+ }
+ let sign=cityBox(parent,cx,y+h-.95,frontZ-.18,Math.min(w*.68,8),.68,.18,cityM.dark,false);
+ sign.userData.label=label;
+ let awning=cityBox(parent,cx,y+2.05,frontZ-.78,Math.min(w*.65,7),.12,1.45,type==='cafe'?cityM.red:cityM.blue,false);
+ awning.rotation.x=-.08;
+ furnishRoom(parent,cx,cz,w,d,type,y);
+}
+function makeCity(){
+ let g=new T.Group(),cx=126,cz=8;
+ cityRoad(g,52,-4,75,2,8,9);
+ cityRoad(g,72,2,184,2,10,30);
+ cityRoad(g,124,-52,124,62,9,30);
+ cityRoad(g,78,-47,78,55,7,24);
+ cityRoad(g,170,-46,170,54,7,24);
+
+ for(let x=74;x<=178;x+=13){
+   let stripe=cityBox(g,x,H(x,2)+.09,2,.16,.05,3.7,cityM.cream,false);
+ }
+ for(const z of[-35,39]){
+   for(let x=82;x<=166;x+=14)cityLamp(g,x,z);
+ }
+ for(const x of[88,160]){
+   for(let z=-30;z<=40;z+=18)cityLamp(g,x,z);
+ }
+
+ const buildings=[
+  [92,-20,14,17,5.7,cityM.brick,'cafe','CAFE'],
+  [110,-20,13,17,5.4,cityM.plaster,'shop','GENERAL'],
+  [140,-20,15,18,6.1,cityM.blue,'office','OFFICES'],
+  [160,-20,14,17,5.6,cityM.brick,'library','LIBRARY'],
+  [92,27,14,17,5.5,cityM.plaster,'home','HOUSE'],
+  [111,27,14,17,5.8,cityM.brick,'clinic','CLINIC'],
+  [141,27,15,18,6.0,cityM.plaster,'home','APARTMENTS'],
+  [162,27,14,17,5.7,cityM.blue,'shop','MARKET']
+ ];
+ buildings.forEach(b=>cityBuilding(g,...b));
+
+ let plazaY=H(126,48);
+ cityBox(g,126,plazaY+.05,48,24,.1,16,cityM.concrete,false);
+ let fountain=new T.Mesh(new T.CylinderGeometry(3.1,3.4,.65,20),cityM.concrete);fountain.position.set(126,H(126,48)+.34,48);g.add(fountain);
+ let water=new T.Mesh(new T.CylinderGeometry(2.65,2.65,.08,20),new T.MeshPhysicalMaterial({color:0x4d8da6,transparent:true,opacity:.7,roughness:.2}));water.position.set(126,H(126,48)+.7,48);g.add(water);
+ cityColliders.push({x:126,z:48,hx:3.4,hz:3.4});
+
+ for(const x of[116,136])for(const z of[43,53]){
+   cityBox(g,x,H(x,z)+.38,z,2.3,.75,.58,cityM.wood,true)
+ }
+
+ for(const [x,z] of[[76,-34],[76,34],[178,-33],[178,33],[102,48],[150,49]]){
+   let trunk=cityBox(g,x,H(x,z)+1.5,z,.45,3,.45,cityM.wood,true);
+   let crown=new T.Mesh(new T.IcosahedronGeometry(2.0,1),cityM.green);crown.position.set(x,H(x,z)+4,z);g.add(crown)
+ }
+
+ scene.add(g);return g
+}
+const cityGroup=makeCity();
+
 function createChunk(cx,cz){
  let k=key(cx,cz),d=descriptor(cx,cz),root=new T.Group(),near=new T.Group(),far=new T.Group();
  near.add(terrain(cx,cz,28));far.add(terrain(cx,cz,7));
  for(const q of d.trees){
-   let wx=cx*CH+q[0],wz=cz*CH+q[1];near.add(makeTree(wx,wz,q[2],true));
+   let wx=cx*CH+q[0],wz=cz*CH+q[1];if(!inCityZone(wx,wz))near.add(makeTree(wx,wz,q[2],true));
  }
- for(let i=0;i<d.trees.length;i+=3){let q=d.trees[i],wx=cx*CH+q[0],wz=cz*CH+q[1];far.add(makeTree(wx,wz,q[2],false))}
- for(const q of d.rocks){let wx=cx*CH+q[0],wz=cz*CH+q[1],m=new T.Mesh(new T.DodecahedronGeometry(q[2],0),mats.rock);m.position.set(wx,H(wx,wz)+q[2]*0.55,wz);m.scale.y=0.7;m.castShadow=true;near.add(m)}
+ for(let i=0;i<d.trees.length;i+=3){let q=d.trees[i],wx=cx*CH+q[0],wz=cz*CH+q[1];if(!inCityZone(wx,wz))far.add(makeTree(wx,wz,q[2],false))}
+ for(const q of d.rocks){let wx=cx*CH+q[0],wz=cz*CH+q[1];if(inCityZone(wx,wz))continue;let m=new T.Mesh(new T.DodecahedronGeometry(q[2],0),mats.rock);m.position.set(wx,H(wx,wz)+q[2]*0.55,wz);m.scale.y=0.7;m.castShadow=true;near.add(m)}
  if(d.mark){near.add(landmarkModel(cx,cz,d.mark));addTrail(near,cx,cz,d)}
  let anomaly=null;if(d.anomaly){anomaly=anomalyModel(d.anomaly,cx,cz);near.add(anomaly)}
  root.add(near,far);near.visible=false;far.visible=false;scene.add(root);
@@ -315,13 +457,13 @@ function rebuildColliders(nearSet){
  colliders.length=0;
  for(const k of nearSet){
    let c=chunks.get(k);if(!c)continue;
-   for(const q of c.d.trees){colliders.push({x:c.cx*CH+q[0],z:c.cz*CH+q[1],r:0.58*q[2]})}
-   for(const q of c.d.rocks){colliders.push({x:c.cx*CH+q[0],z:c.cz*CH+q[1],r:0.62*q[2]})}
+   for(const q of c.d.trees){let x=c.cx*CH+q[0],z=c.cz*CH+q[1];if(!inCityZone(x,z))colliders.push({x,z,r:0.58*q[2]})}
+   for(const q of c.d.rocks){let x=c.cx*CH+q[0],z=c.cz*CH+q[1];if(!inCityZone(x,z))colliders.push({x,z,r:0.62*q[2]})}
    if(c.d.mark==='ring')for(let i=0;i<7;i++){let a=i/7*Math.PI*2;colliders.push({x:c.cx*CH+Math.cos(a)*5,z:c.cz*CH+Math.sin(a)*5,r:0.8})}
    if(c.d.mark==='tower')colliders.push({x:c.cx*CH,z:c.cz*CH,r:2.2});
    }
 }
-function blocked(x,z,radius=0.6){for(const c of colliders){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}for(const v of vehicles){if(v===activeVehicle)continue;let dx=x-v.x,dz=z-v.z,rr=(v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5)+radius;if(dx*dx+dz*dz<rr*rr)return true}return false}
+function blocked(x,z,radius=0.6){for(const c of colliders){let dx=x-c.x,dz=z-c.z,rr=c.r+radius;if(dx*dx+dz*dz<rr*rr)return true}for(const c of cityColliders){if(Math.abs(x-c.x)<c.hx+radius&&Math.abs(z-c.z)<c.hz+radius)return true}for(const v of vehicles){if(v===activeVehicle)continue;let dx=x-v.x,dz=z-v.z,rr=(v.kind==='jet'?3.2:v.kind==='heli'?2.4:1.5)+radius;if(dx*dx+dz*dz<rr*rr)return true}return false}
 
 function queueFar(cx,cz){
  let k=key(cx,cz);if(chunks.has(k)||farPending.has(k))return;
@@ -600,6 +742,7 @@ function updateSky(time,dt=0.016){
 
  spacePlanet.visible=spaceFactor>0.18;
  startBase.visible=spaceFactor<0.88;
+ cityGroup.visible=spaceFactor<0.88;
  for(const ch of chunks.values())ch.root.visible=spaceFactor<0.88;
  for(const craft of vehicles)if(craft!==activeVehicle)craft.group.visible=spaceFactor<0.88;
  if(activeVehicle)activeVehicle.group.visible=true;
