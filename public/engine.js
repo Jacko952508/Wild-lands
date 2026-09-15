@@ -2583,6 +2583,7 @@ function refreshUse(){
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
    const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek'||activeVehicle.kind==='dragon';
    fc.classList.toggle('hidden',!flight);
+   $('dragonLand').classList.toggle('hidden',activeVehicle.kind!=='dragon');
    mine.classList.toggle('hidden',activeVehicle.kind!=='mek'&&activeVehicle.kind!=='dragon');mine.textContent=activeVehicle.kind==='dragon'?'BREATHE FIRE':'MINE';
    $('sprint').classList.toggle('hidden',flight&&activeVehicle.kind!=='mek');
    $('sprint').textContent=activeVehicle.kind==='buggy'||activeVehicle.kind==='moonbuggy'||activeVehicle.kind==='mek'?'BOOST':'SPRINT';
@@ -2641,6 +2642,14 @@ function syncEngineUI(){
  $('engineSlider').value=Math.round(flightThrottle*100);
  $('engineValue').textContent=Math.round(flightThrottle*100)+'%';
 }
+$('dragonLand').onclick=()=>{
+ const v=activeVehicle;if(!v||v.kind!=='dragon')return;
+ // Controlled landing mode: kill accumulated swoop energy and descend toward the terrain while preserving steering.
+ v.landing=!v.landing;
+ if(v.landing){flightThrottle=Math.min(flightThrottle,.22);v.swoopEnergy=0;v.speed=Math.min(v.speed,18);toast('Dragon landing');$('dragonLand').textContent='CANCEL LAND'}
+ else{$('dragonLand').textContent='LAND';toast('Landing cancelled')}
+ syncEngineUI();
+};
 function inventoryCounts(){
  const out={};
  for(const [k,v] of Object.entries(world.inventory||{})){
@@ -3438,13 +3447,13 @@ function step(dt,t){
      // Energy flight model: diving converts height into speed; pulling out retains most of that momentum. Repeated swoop/glide cycles can build speed well above normal flapping cruise.
      v.swoopEnergy=v.swoopEnergy||0;const diving=v.pitch<-.08,climbing=v.pitch>.08;
      if(diving)v.swoopEnergy=Math.min(72,v.swoopEnergy+(-v.pitch)*46*dt);else v.swoopEnergy=Math.max(0,v.swoopEnergy-(climbing?5.5:2.2)*dt);
-     const cruise=4+flightThrottle*32,diveBoost=diving?(-v.pitch)*38:0,target=cruise+v.swoopEnergy+diveBoost;
-     v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*(diving?2.1:.72)));
+     const cruise=4+flightThrottle*32,diveBoost=diving?(-v.pitch)*38:0,target=v.landing?Math.min(14,cruise):cruise+v.swoopEnergy+diveBoost;
+     v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*(v.landing?2.8:diving?2.1:.72)));
      const horiz=Math.cos(v.pitch)*v.speed;v.x+=Math.sin(v.yaw)*horiz*dt;v.z+=Math.cos(v.yaw)*horiz*dt;
-     v.vy=T.MathUtils.lerp(v.vy,Math.sin(v.pitch)*v.speed+(flightThrottle-.45)*5,Math.min(1,dt*(diving?2.6:1.8)));v.worldY+=v.vy*dt;
+     const normalVy=Math.sin(v.pitch)*v.speed+(flightThrottle-.45)*5,landingVy=-T.MathUtils.clamp((v.worldY-surface)*.42,1.8,8);v.vy=T.MathUtils.lerp(v.vy,v.landing?landingVy:normalVy,Math.min(1,dt*(v.landing?2.5:diving?2.6:1.8)));v.worldY+=v.vy*dt;
      // Below the cave mouth the dragon is allowed to remain subterranean; once outside, terrain becomes its floor.
-     const inCave=Math.hypot(v.x-DRAGON_CAVE_X,v.z-(DRAGON_CAVE_Z+28))<82&&v.worldY<surface+3;if(!inCave&&v.worldY<surface+.4){v.worldY=surface+.4;v.vy=Math.max(0,v.vy)}
-     v.alt=v.worldY-surface;v.airborne=true;v.stalled=false;v.group.position.set(v.x,v.worldY,v.z);v.group.rotation.set(-v.pitch,v.yaw,v.roll,'XYZ');
+     const inCave=Math.hypot(v.x-DRAGON_CAVE_X,v.z-(DRAGON_CAVE_Z+28))<82&&v.worldY<surface+3;if(!inCave&&v.worldY<surface+.4){v.worldY=surface+.4;v.vy=0;if(v.landing){v.landing=false;v.speed=Math.min(v.speed,4);v.pitch=0;v.roll=0;flightThrottle=0;$('dragonLand').textContent='LAND';syncEngineUI();toast('Dragon landed')}}
+     v.alt=v.worldY-surface;v.airborne=v.worldY>surface+.55;v.stalled=false;v.group.position.set(v.x,v.worldY,v.z);v.group.rotation.set(-v.pitch,v.yaw,v.roll,'XYZ');
    }else if(v.kind==='heli'){
      // GTA-style helicopter handling: stick tilts the aircraft, tilt creates
      // momentum, the camera/look stick yaws independently, and releasing the

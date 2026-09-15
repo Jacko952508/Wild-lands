@@ -56,7 +56,7 @@ input[type=range]{touch-action:pan-x}
 
 #flightControls{position:fixed;left:50%;bottom:calc(106px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:6;width:min(290px,42vw);min-width:200px;padding:9px 12px;border:1px solid #ffffff20;background:#08120ee8;border-radius:13px;backdrop-filter:blur(8px);box-shadow:0 8px 28px #0005}
 #engineControl{display:grid;gap:5px}.engineHead{display:flex;align-items:center;justify-content:space-between;font-size:9px;font-weight:900;letter-spacing:.12em}.engineHead b{font-size:11px;letter-spacing:0}
-#engineSlider{width:100%;height:24px;margin:0;accent-color:#a7e7c4}
+#engineSlider{width:100%;height:24px;margin:0;accent-color:#a7e7c4}#dragonLand{width:100%;margin-top:4px;padding:7px 10px;border:1px solid #ffffff28;border-radius:9px;background:#4c3024;color:#fff;font-size:10px;font-weight:900;letter-spacing:.12em;touch-action:manipulation}#dragonLand:active{transform:scale(.97)}
 
 .sidePanel{position:fixed;right:14px;top:calc(max(12px,env(safe-area-inset-top)) + 96px);z-index:12;width:min(320px,calc(100vw - 28px));max-height:68vh;overflow-y:auto;overflow-x:hidden;padding:14px;padding-bottom:calc(22px + env(safe-area-inset-bottom));border:1px solid #ffffff22;border-radius:18px;background:linear-gradient(180deg,#0a1410f4,#07100df2);box-shadow:0 22px 65px #0009;backdrop-filter:blur(12px)}
 .worldHead{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}.worldHead b{font-size:12px;letter-spacing:.13em}.worldHead button{width:34px;height:34px;border:1px solid #ffffff20;background:#ffffff0b;border-radius:10px;font-size:19px}
