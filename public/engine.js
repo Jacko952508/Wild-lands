@@ -622,8 +622,22 @@ function dragonFire(){
  // Large continuous breath cone: a dense hot core plus a widening orange envelope. It inherits dragon velocity so it remains convincing at high flight speed.
  for(let i=0;i<10;i++){const hot=i<4,spread=.12+i*.055,side=(Math.random()-.5)*spread,vert=(Math.random()-.5)*spread*.7,d=dir.clone().addScaledVector(right,side).add(new T.Vector3(0,vert,0)).normalize(),m=new T.Mesh(hot?dragonFireGeoHot:dragonFireGeoOuter,hot?dragonFireMatHot:dragonFireMatOuter);m.scale.setScalar(hot?.76+Math.random()*.5:.72+Math.random()*.55);m.position.copy(p).addScaledVector(dir,i*.42);scene.add(m);dragonFires.push({m,v:d.multiplyScalar(42+Math.random()*15).add(new T.Vector3(Math.sin(v.yaw)*(v.speed||0)*.35,0,Math.cos(v.yaw)*(v.speed||0)*.35)),life:1.05})}
 }
+let dragonBurnScanAt=0;
 function updateDragonFire(dt){
- if(dragonFireHeld)dragonFire();for(let i=dragonFires.length-1;i>=0;i--){const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);if(f.life<=0){scene.remove(f.m);dragonFires.splice(i,1);continue}for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();lastSyncX=1e9;lastSyncZ=1e9;sync(true);break}}}}
+ if(dragonFireHeld)dragonFire();
+ const now=performance.now(),scanBurn=now-dragonBurnScanAt>(IS_MOBILE?150:90);if(scanBurn)dragonBurnScanAt=now;
+ for(let i=dragonFires.length-1;i>=0;i--){
+   const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);
+   if(f.life<=0){scene.remove(f.m);dragonFires.splice(i,1);continue}
+ }
+ // Tree ignition is a gameplay query, not a particle query. Scan once per short interval using only the leading flame instead of every fire particle every display frame.
+ if(scanBurn&&dragonFires.length){
+   const f=dragonFires[dragonFires.length-1];
+   outer:for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){
+     const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;
+     if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();break outer}
+   }}
+ }
 }
 // Build the large underground lair after the core world has finished initialising.
 // Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
@@ -2235,17 +2249,13 @@ function updateManagedLights(day){
    l.visible=on;if(on)l.intensity=(l.userData.baseIntensity||1)*dark*beamBoost
  }
 }
+let shadowCandidates=null;
 function updateShadowCasters(){
- const now=performance.now();if(now-shadowCullAt<(IS_MOBILE?1200:650))return;shadowCullAt=now;
- const px=player.x,pz=player.z,maxDist=IS_MOBILE?52:72;
- scene.traverse(o=>{
-   if(!o.isMesh)return;
-   if(o.userData.shadowCandidate===undefined)o.userData.shadowCandidate=!!o.castShadow;
-   if(o.isInstancedMesh){if(o.userData.shadowCandidate)o.castShadow=!IS_MOBILE;return}
-   if(!o.userData.shadowCandidate)return;
-   o.getWorldPosition(shadowProbe);
-   o.castShadow=o.visible&&Math.abs(shadowProbe.x-px)<maxDist&&Math.abs(shadowProbe.z-pz)<maxDist
- })
+ const now=performance.now();if(now-shadowCullAt<(IS_MOBILE?1800:850))return;shadowCullAt=now;
+ const px=player.x,pz=player.z,maxDist=IS_MOBILE?48:72;
+ // Avoid traversing the entire world graph repeatedly. Refresh the candidate cache occasionally; newly built chunks are picked up on the next refresh.
+ if(!shadowCandidates||now-(updateShadowCasters.cacheAt||0)>5000){shadowCandidates=[];scene.traverse(o=>{if(o.isMesh&&o.castShadow)shadowCandidates.push(o)});updateShadowCasters.cacheAt=now}
+ for(const o of shadowCandidates){if(!o.parent)continue;if(o.isInstancedMesh){o.castShadow=!IS_MOBILE;continue}o.getWorldPosition(shadowProbe);o.castShadow=o.visible&&Math.abs(shadowProbe.x-px)<maxDist&&Math.abs(shadowProbe.z-pz)<maxDist}
 }
 
 function createChunk(cx,cz){
@@ -2281,7 +2291,7 @@ function queueNearBuild(c){
  nearBuildPending.add(c.k);nearBuildQueue.push(c)
 }
 function processNearBuildQueue(){
- const now=performance.now();if(now-nearBuildAt<(IS_MOBILE?70:45)||!nearBuildQueue.length)return;nearBuildAt=now;
+ const now=performance.now();if(now-nearBuildAt<(IS_MOBILE?125:55)||!nearBuildQueue.length)return;nearBuildAt=now;
  const c=nearBuildQueue.shift();nearBuildPending.delete(c.k);
  if(c.mode!=='near'||chunks.get(c.k)!==c)return;
  ensureNearBuilt(c);c.near.visible=true;c.far.visible=false;queueAnimalLoad(c)
@@ -2292,7 +2302,7 @@ function queueAnimalLoad(c){
  animalLoadPending.add(c.k);animalLoadQueue.push(c)
 }
 function processAnimalLoadQueue(){
- const now=performance.now();if(now-animalLoadAt<90||!animalLoadQueue.length)return;animalLoadAt=now;
+ const now=performance.now();if(now-animalLoadAt<(IS_MOBILE?180:100)||!animalLoadQueue.length)return;animalLoadAt=now;
  const c=animalLoadQueue.shift();animalLoadPending.delete(c.k);
  if(c.mode==='near'&&chunks.get(c.k)===c)loadAnimals(c)
 }
@@ -2376,7 +2386,7 @@ function queueFar(cx,cz,target='far'){
 }
 let farBuildAt=0;
 function processFarQueue(){
- const now=performance.now();if(now-farBuildAt<55||!farQueue.length)return;farBuildAt=now;
+ const now=performance.now();if(now-farBuildAt<(IS_MOBILE?105:60)||!farQueue.length)return;farBuildAt=now;
  let cc=chunkOf(player.x,player.z),job=farQueue.shift();farPending.delete(job.k);
  if(job.generation!==syncGeneration)return;
  if(chunks.has(job.k))return;
@@ -3809,14 +3819,14 @@ function step(dt,t){
    }
  }
  updateSky(t,dt);
- saveTimer+=dt;if(saveTimer>8){saveTimer=0;for(const c of chunks.values())if(c.agents.length)world.animalState[c.k]=c.agents.map(a=>({x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(3)}));persist()}
+ saveTimer+=dt;if(saveTimer>(IS_MOBILE?18:10)){saveTimer=0;for(const c of chunks.values())if(c.agents.length)world.animalState[c.k]=c.agents.map(a=>({x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(3)}));persist()}
 }
 
 sync(true);
 // Build the now-optimised single-shell cavern immediately after the core world exists. This keeps the cave mouth/roof visible from long range instead of popping in only after the player reaches it.
 try{ensureDragonCave()}catch(e){console.error('Dragon cave world init',e)}
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
-let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0,lastFrameAt=0,fpsUiAt=0,fpsUiFrames=0,fpsUiStart=last;
+let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0,lastFrameAt=0,fpsUiAt=0,fpsUiFrames=0,fpsUiStart=last,maintenanceSlot=0;
 function loop(now){
  requestAnimationFrame(loop);
 
@@ -3825,7 +3835,10 @@ function loop(now){
  lastFrameAt=now;
 
  let rawDt=(now-last)/1000,dt=Math.min(0.04,rawDt);last=now;let t=now/1000;
- step(dt,t-start);processFarQueue();processNearBuildQueue();processAnimalLoadQueue();updateShadowCasters();
+ step(dt,t-start);
+ // Stagger non-visual maintenance so chunk generation, animal spawning and shadow culling cannot all spike the same frame on mobile.
+ maintenanceSlot=(maintenanceSlot+1)&3;
+ if(maintenanceSlot===0)processFarQueue();else if(maintenanceSlot===1)processNearBuildQueue();else if(maintenanceSlot===2)processAnimalLoadQueue();else updateShadowCasters();
 
  const shadows=renderer.shadowMap.enabled&&world.ui.shadows!==false&&world.ui.graphicsQuality!=='performance',
        shadowInterval=world.ui.graphicsQuality==='high'?(IS_MOBILE?300:165):(IS_MOBILE?450:240);
