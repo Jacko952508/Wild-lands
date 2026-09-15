@@ -597,9 +597,10 @@ function updateDragonFire(dt){
 }
 // Build the large underground lair after the core world has finished initialising.
 // Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
-// Keep the heavy cavern geometry off the mobile startup path. The hangar teleport exists immediately;
-// the cavern finishes building just after the first playable frame.
-setTimeout(()=>{try{makeDragonCave()}catch(e){console.error('Dragon cave init',e)}},1200);
+// Dragon cavern is part of the same game file, but is created only when the player actually uses the hangar teleporter.
+// This keeps all cave code/assets local while removing cave construction entirely from startup.
+let dragonCaveBuilt=false;
+function ensureDragonCave(){if(dragonCaveBuilt)return true;try{makeDragonCave();dragonCaveBuilt=true;return true}catch(e){console.error('Dragon cave init',e);return false}}
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
  for(const sx of[-spread,spread]){
@@ -3003,6 +3004,7 @@ $('townAction').onclick=()=>{
  else if(a.type==='dragonTeleport'){
    activeVehicle=null;robotSpectatorMode=false;
    if(a.destination==='cave'){
+     if(!ensureDragonCave()){toast('Dragon Cavern failed to initialise');return}
      const floorY=H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31;player.x=DRAGON_CAVE_X+10;player.z=DRAGON_CAVE_Z+50;player.yaw=Math.PI;playerGroundY=floorY+.2;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Dragon Cavern • deep underground')
    }else{
      player.x=-13.4;player.z=-19.4;player.yaw=0;playerGroundY=START_PLATEAU;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Returned to hangar')
