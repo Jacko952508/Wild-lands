@@ -575,7 +575,9 @@ function dragonFire(){
 function updateDragonFire(dt){
  if(dragonFireHeld)dragonFire();for(let i=dragonFires.length-1;i>=0;i--){const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);f.m.material.opacity=Math.max(0,f.life*1.3);if(f.life<=0){scene.remove(f.m);f.m.geometry.dispose();f.m.material.dispose();dragonFires.splice(i,1);continue}for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();lastSyncX=1e9;lastSyncZ=1e9;sync(true);break}}}}
 }
-makeDragonCave();
+// Build the large underground lair after the core world has finished initialising.
+// Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
+setTimeout(()=>{try{makeDragonCave()}catch(e){console.error('Dragon cave init',e)}},900);
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
  for(const sx of[-spread,spread]){
