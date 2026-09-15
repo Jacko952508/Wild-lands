@@ -568,13 +568,20 @@ function makeDragon(x,z,worldY){
  g.position.set(x,worldY==null?H(x,z)+.3:worldY,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0,caveY:worldY};vehicles.push(v);dragon=v;return v
 }
 function makeDragonCave(){
- const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x171514,roughness:1}),rock2=new T.MeshStandardMaterial({color:0x302925,roughness:1}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=H(cx,cz),floorY=surface-31;
+ const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x292622,roughness:1,flatShading:true}),rock2=new T.MeshStandardMaterial({color:0x403832,roughness:.96,flatShading:true}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=H(cx,cz),floorY=surface-31;
+ // Rebuilt cave: one continuous spline-driven passage rather than the old pile-of-boulders shell.
+ // Elliptical rings form a coherent tunnel wall/ceiling; the lower arc is omitted so the separate walkable floor remains clear.
+ const cavePath=new T.CatmullRomCurve3([new T.Vector3(cx,surface-1,DRAGON_CAVE_MOUTH_Z-3),new T.Vector3(cx,surface-5,DRAGON_CAVE_MOUTH_Z+10),new T.Vector3(cx-2,surface-13,cz-9),new T.Vector3(cx+2,surface-23,cz+2),new T.Vector3(cx,floorY+5,cz+15),new T.Vector3(cx+3,floorY+6,cz+38),new T.Vector3(cx,floorY+7,cz+66)],false,'centripetal');
+ const rings=30,sides=14,verts=[],inds=[];
+ for(let r=0;r<=rings;r++){const t=r/rings,p=cavePath.getPoint(t),tan=cavePath.getTangent(t).normalize(),right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),tan).normalize();if(right.lengthSq()<.1)right.set(1,0,0);const up=new T.Vector3().crossVectors(tan,right).normalize(),rw=7.4+Math.sin(t*Math.PI)*5.2+Math.sin(t*19)*.55,rh=5.7+Math.sin(t*Math.PI)*4.4;for(let s=0;s<sides;s++){const a=s/sides*Math.PI*2,jitter=.82+hash(r,s,811)*.28,off=right.clone().multiplyScalar(Math.cos(a)*rw*jitter).add(up.clone().multiplyScalar(Math.sin(a)*rh*jitter));verts.push(p.x+off.x,p.y+off.y,p.z+off.z)}}
+ for(let r=0;r<rings;r++)for(let s=0;s<sides;s++){const n=(s+1)%sides,a=r*sides+s,b=r*sides+n,c=(r+1)*sides+n,d=(r+1)*sides+s;inds.push(a,c,b,a,d,c)}
+ const tunnelGeo=new T.BufferGeometry();tunnelGeo.setAttribute('position',new T.Float32BufferAttribute(verts,3));tunnelGeo.setIndex(inds);tunnelGeo.computeVertexNormals();const tunnel=new T.Mesh(tunnelGeo,rock);g.add(tunnel);
  // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
  const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
- for(let i=0;i<15;i++){const a=Math.PI*i/14,b=new T.Mesh(new T.DodecahedronGeometry(2.7+(i%3)*.5,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*10.5,mouthY+Math.sin(a)*8.5,mouthZ);b.scale.set(1.25,1.1,1.55);g.add(b)}
+ // Entrance lip uses a few embedded rocks only; the actual cave is the continuous tunnel mesh behind it.
+ for(let i=0;i<9;i++){const a=Math.PI*i/8,b=new T.Mesh(new T.DodecahedronGeometry(1.7+(i%3)*.35,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*8.2,mouthY+Math.sin(a)*6.5,mouthZ);b.scale.set(1.35,.9,1.7);g.add(b)}
  // A literal black opening behind the rock arch makes the entrance impossible to confuse with ordinary terrain.
- const portal=new T.Mesh(new T.CircleGeometry(8.15,32),new T.MeshBasicMaterial({color:0x020101,side:T.DoubleSide}));portal.position.set(cx,mouthY+4.15,mouthZ+1.15);g.add(portal);
- const throat=new T.Mesh(new T.CylinderGeometry(7.7,7.7,22,24,1,true),new T.MeshStandardMaterial({color:0x100b09,roughness:1,side:T.BackSide}));throat.rotation.x=Math.PI/2;throat.position.set(cx,mouthY+3.8,mouthZ+10.5);g.add(throat);
+ // No fake black disc or cylinder throat: the opening now exposes the actual continuous cave interior.
  const mouthGlow=new T.PointLight(0xff5a16,9.5,64,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ-1);g.add(mouthGlow);
  const emberMat=new T.MeshBasicMaterial({color:0xff6a19});for(const sx of[-1,1]){const e=new T.Mesh(new T.ConeGeometry(.42,1.8,8),emberMat);e.position.set(cx+sx*7.4,mouthY+.9,mouthZ-.6);g.add(e)}
  townText(g,'DRAGON CAVERN',cx,mouthY+10.7,mouthZ-.7,9.8,1.35);
@@ -583,13 +590,11 @@ function makeDragonCave(){
  // the procedural overworld has been removed above it, so there is no second map floor clipping through the cave.
  const rampStart=mouthZ+1,rampEnd=cz+3,rampLen=rampEnd-rampStart,rampMid=(rampStart+rampEnd)/2,rampDrop=30;
  const ramp=new T.Mesh(new T.BoxGeometry(15,.65,rampLen+3),rock2);ramp.position.set(cx,mouthY-rampDrop/2-.25,rampMid);ramp.rotation.x=-Math.atan2(rampDrop,rampLen);g.add(ramp);
- // Rock ribs frame the descent without sealing its centre.
- for(let j=0;j<9;j++){const t=j/8,zz=T.MathUtils.lerp(rampStart,rampEnd,t),yy=T.MathUtils.lerp(mouthY-1,floorY+3,t);for(const sx of[-1,1]){const b=new T.Mesh(new T.DodecahedronGeometry(2.5+(j%3)*.35,0),j%2?rock:rock2);b.position.set(cx+sx*8.1,yy+2.2,zz);b.scale.set(1.15,1.25,1.4);g.add(b)}}
- // Huge underground vault, rough stone shell, with an unobstructed central flight corridor back to the tunnel.
- for(let j=0;j<7;j++)for(let i=0;i<18;i++){const a=i/18*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(4.2+(i+j)%3*.65,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*(17+j*.45),floorY+8+Math.sin(a)*11,cz+29+j*5.5);b.scale.set(1.25,1.1,1.7);g.add(b)}
- // The shaft is now a true vertical void through the terrain, with its own rock walls and a completely separate cavern floor 31m below the world surface.
- const shaft=new T.Mesh(new T.CylinderGeometry(11.3,12.8,31,32,1,true),new T.MeshStandardMaterial({color:0x211b18,roughness:1,side:T.BackSide}));shaft.position.set(cx,surface-15.5,cz);g.add(shaft);
- for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=11.6+(i%3)*.7,b=new T.Mesh(new T.DodecahedronGeometry(2.2+(i%2)*.55,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*r,surface-.8,cz+Math.sin(a)*r);b.scale.set(1.25,.8,1.25);g.add(b)}
+ // The former repeated rock ribs, circular vault rings and vertical cylinder have been deleted.
+ // A single organic terminal chamber joins the spline tunnel, giving the dragon a readable lair without geometric repetition.
+ const chamber=new T.Mesh(new T.SphereGeometry(1,28,18),new T.MeshStandardMaterial({color:0x302a26,roughness:1,side:T.BackSide,flatShading:true}));chamber.scale.set(18,10.5,24);chamber.position.set(cx+2,floorY+8,cz+57);g.add(chamber);
+ // Sparse formations break the silhouette while keeping a broad navigable path.
+ for(let i=0;i<14;i++){const a=i/14*Math.PI*2,r=13+hash(i,17,91)*3,b=new T.Mesh(new T.DodecahedronGeometry(1.2+hash(i,8,92)*1.5,0),i%2?rock:rock2);b.position.set(cx+2+Math.cos(a)*r,floorY+1+hash(i,5,93)*4,cz+57+Math.sin(a)*r*1.45);b.scale.set(1,1.6,1);g.add(b)}
  const floor=new T.Mesh(new T.PlaneGeometry(38,84,1,1),rock2);floor.rotation.x=-Math.PI/2;floor.position.set(cx,floorY,cz+32);g.add(floor);
  const shaftFloor=new T.Mesh(new T.CircleGeometry(12.7,32),rock2);shaftFloor.rotation.x=-Math.PI/2;shaftFloor.position.set(cx,floorY+.02,cz);g.add(shaftFloor);
  // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
