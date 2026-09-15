@@ -581,7 +581,9 @@ function makeDragonCave(){
  // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
  const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
  // Entrance lip uses a few embedded rocks only; the actual cave is the continuous tunnel mesh behind it.
- for(let i=0;i<9;i++){const a=Math.PI*i/8,b=new T.Mesh(new T.DodecahedronGeometry(1.7+(i%3)*.35,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*8.2,mouthY+Math.sin(a)*6.5,mouthZ);b.scale.set(1.35,.9,1.7);g.add(b)}
+ // Keep the entrance visually framed but leave a huge unobstructed central portal. Side pillars and a high crown replace the old low polygon arch that protruded into the player's route.
+ for(const sx of[-1,1])for(let i=0;i<3;i++){const b=new T.Mesh(new T.DodecahedronGeometry(1.8+i*.18,0),i%2?rock:rock2);b.position.set(cx+sx*(9.2+i*.45),mouthY+1.2+i*2.1,mouthZ+1+i*.25);b.scale.set(1.35,1.1,1.45);g.add(b)}
+ for(let i=0;i<5;i++){const b=new T.Mesh(new T.DodecahedronGeometry(1.65+(i%2)*.25,0),i%2?rock2:rock);b.position.set(cx+(i-2)*3.1,mouthY+9.3+Math.abs(i-2)*.35,mouthZ+1.5);b.scale.set(1.2,.85,1.35);g.add(b)}
  // A literal black opening behind the rock arch makes the entrance impossible to confuse with ordinary terrain.
  // No fake black disc or cylinder throat: the opening now exposes the actual continuous cave interior.
  const mouthGlow=new T.PointLight(0xff5a16,9.5,64,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ-1);g.add(mouthGlow);
@@ -2314,6 +2316,8 @@ function insideDoorway(list,x,z,radius=.6){
  return list.some(d=>Math.abs(x-d.x)<d.hx+radius*.25&&Math.abs(z-d.z)<d.hz+radius*.25)
 }
 function blocked(x,z,radius=0.6,ignoreVehicle=null){
+ // The cave descent is its own navigation volume. Procedural rocks/trees and unrelated surface/start-area colliders must never form invisible walls across the excavated route.
+ if(!moonMode&&dragonCaveActive&&Math.abs(x-DRAGON_CAVE_X)<11.5&&z>DRAGON_CAVE_MOUTH_Z-12&&z<DRAGON_CAVE_Z+78)return false;
  if(moonMode){
    if(!insideDoorway(moonDoorways,x,z,radius)&&colliderListBlocked(moonColliders,x,z,radius))return true
  }else{
@@ -3634,7 +3638,9 @@ function step(dt,t){
      const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<11&&nz>DRAGON_CAVE_MOUTH_Z-11?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
      // Walkable slopes slow naturally as they get steeper. True cliffs remain
      // blocked, preventing the player from stepping through the terrain skin.
-     const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade;
+     const inCaveWalk=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<11.5&&nz>DRAGON_CAVE_MOUTH_Z-12&&nz<DRAGON_CAVE_Z+78;
+     // Inside the authored cave route, caveGroundH is authoritative. Do not re-block downhill movement using overworld step/slope limits.
+     const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=inCaveWalk||(!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade);
      if(walkable){
        const uphillSlow=rise>0&&!airborne?T.MathUtils.clamp(1-rise/.95,.38,1):1;
        player.x+=dx*uphillSlow;player.z+=dz*uphillSlow
