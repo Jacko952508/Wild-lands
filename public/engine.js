@@ -129,7 +129,7 @@ let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
 if(!player)player={x:-13.25,z:-24,yaw:-Math.PI/2,pitch:0};
 // Intro-screen repair v55: once per existing save, place the player at the briefing display so the intended opening is actually seen.
-try{if(!localStorage.getItem('wi_intro_screenfix_v55')){player.x=-13.25;player.z=-24;player.yaw=-Math.PI/2;player.pitch=0;localStorage.setItem('wi_intro_screenfix_v55','1')}}catch(e){}
+try{if(!localStorage.getItem('wi_intro_screenfix_v56')){player.x=-13.25;player.z=-24;player.yaw=-Math.PI/2;player.pitch=0;localStorage.setItem('wi_intro_screenfix_v56','1')}}catch(e){}
 // v54 intro alignment: repair the briefing-room view for existing saves that are already at the airfield spawn.
 // Never teleport a player back from elsewhere in the world.
 try{if(localStorage.getItem('wi_intro_align_v54')!=='1'&&player.x>-30&&player.x<1&&player.z>-40&&player.z<-8){player.x=-13.25;player.z=-24;player.yaw=Math.PI/2;player.pitch=0;localStorage.setItem('wi_intro_align_v54','1')}}catch(e){}
@@ -847,7 +847,7 @@ function runwayStrip(){
  startBox(g,-14.2,y+.55,-29.2,4.8,1.1,1.1,innerMat,true);
  startBox(g,-14.8,y+.45,-20.1,2.4,.9,1.2,innerMat,true);
  startBox(g,-12.5,y+.45,-20.1,1.0,.9,1.0,innerMat,true);
- makeWelcomeScreen(g,-17.68,y+3.2,-24);
+ makeWelcomeScreen(g,-17.05,y+3.2,-24);
 
  // High-output hangar flood lighting.
  for(const z of[-34,-28,-22,-16,-12]){
