@@ -1146,7 +1146,16 @@ const cityGroup=makeCity();
 // ---------------------------------------------------------------------------
 world.robotArena=world.robotArena||{lastA:null,lastB:null,trophies:[],matches:0,winsA:0,winsB:0};
 const robotArenaGroup=new T.Group(),robotArenaLights=[],robotCabinets=[],robotDebris=[];
-let robotScoreCanvas=null,robotScoreCtx=null,robotScoreTexture=null,robotScoreAt=0;
+let robotScoreCanvas=null,robotScoreCtx=null,robotScoreTexture=null,robotScoreAt=0,
+    robotTerminalScreen=null,robotFeedCameraIndex=0,robotFeedAt=0,robotBossPending=false,robotSpectatorMode=false;
+const robotFeedTarget=new T.WebGLRenderTarget(IS_MOBILE?384:512,IS_MOBILE?216:288,{minFilter:T.LinearFilter,magFilter:T.LinearFilter,depthBuffer:true}),
+      robotFeedCamera=new T.PerspectiveCamera(58,16/9,.1,260);
+const robotFeedPositions=[
+ {name:'NORTH',p:new T.Vector3(140,ARENA_LEVEL+11,-31),look:new T.Vector3(140,ARENA_LEVEL+3,0)},
+ {name:'SOUTH',p:new T.Vector3(140,ARENA_LEVEL+11,31),look:new T.Vector3(140,ARENA_LEVEL+3,0)},
+ {name:'SIDE',p:new T.Vector3(171,ARENA_LEVEL+8,0),look:new T.Vector3(140,ARENA_LEVEL+3,0)},
+ {name:'OVERHEAD',p:new T.Vector3(140,ARENA_LEVEL+34,2),look:new T.Vector3(140,ARENA_LEVEL+1,0)}
+];
 scene.add(robotArenaGroup);
 
 const robotPartSets={
@@ -1334,6 +1343,17 @@ function makeRobotArena(){
  for(const x of[120,160])startBox(g,x,y+.3,0,.16,.025,35,cyan,false);
  // Spectator stands.
  for(const z of[-31,31])for(let i=0;i<4;i++){startBox(g,cx,y+.55+i*.55,z+(z<0?-i*1.5:i*1.5),82-i*4,.6,2.0,concrete,false)}
+ // Boss-match viewing deck. The player is teleported here and gets an elevated
+ // first-person spectator viewpoint while retaining normal look controls.
+ startBox(g,140,y+6.8,-30,18,.45,8,black,false);
+ for(const x of[131.2,148.8])startBox(g,x,y+4.2,-30,.45,8.4,8,steel,false);
+ const rail=startBox(g,140,y+8.15,-25.9,18,.18,.18,cyan,false);
+ const glassRail=new T.Mesh(new T.BoxGeometry(17.5,2.8,.12),glass);glassRail.position.set(140,y+7.0,-25.8);g.add(glassRail);
+ const bossConsole=startBox(g,140,y+7.35,-31.5,4.6,1.1,1.4,steel,false);
+ const bossButton=new T.Mesh(new T.BoxGeometry(1.15,.22,.75),new T.MeshBasicMaterial({color:0xff755f}));bossButton.position.set(140,y+8.02,-31.15);g.add(bossButton);
+ townText(g,'BOSS VIEWING DECK',140,y+10.1,-34.15,11,1.05);
+ addTownInteraction('robotBossStart',140,-30.5,'START BOSS MATCH');
+ addTownInteraction('robotBossExit',133.5,-30.5,'RETURN TO DESIGN LAB');
  // Structural arches and premium lighting.
  for(const x of[102,116,140,164,178]){
    startBox(g,x,y+7,-34,.6,14,.6,steel,false);startBox(g,x,y+7,34,.6,14,.6,steel,false);
@@ -1354,7 +1374,8 @@ function makeRobotArena(){
  townText(g,'ROBOT DESIGN LAB',rx,y+6.15,rz-rd/2-.27,9.5,1.1);
  // In-game design terminal.
  const desk=startBox(g,95.5,y+.72,-27,1.25,1.44,5.0,steel,true);
- const screen=new T.Mesh(new T.PlaneGeometry(3.3,2.0),new T.MeshBasicMaterial({color:0x7ffaff}));screen.position.set(94.82,y+2.65,-27);screen.rotation.y=Math.PI/2;g.add(screen);
+ const screenMat=new T.MeshBasicMaterial({map:robotFeedTarget.texture,color:0xffffff});
+ robotTerminalScreen=new T.Mesh(new T.PlaneGeometry(3.3,1.856),screenMat);robotTerminalScreen.position.set(94.82,y+2.65,-27);robotTerminalScreen.rotation.y=Math.PI/2;g.add(robotTerminalScreen);
  const screenFrame=startBox(g,94.88,y+2.65,-27,.18,2.35,3.7,black,false);
  addTownInteraction('robotTerminal',93,-27,'USE ROBOT DESIGN TERMINAL');
  // Victory gallery along the north-west concourse.
@@ -1411,16 +1432,31 @@ function statMarkup(c){
 function renderRobotDesigner(){
  $('robotAFields').innerHTML=robotFieldMarkup('A');$('robotBFields').innerHTML=robotFieldMarkup('B');
  $('robotAStats').innerHTML=statMarkup(robotUiA);$('robotBStats').innerHTML=statMarkup(robotUiB);
- $('robotMatchStatus').textContent=robotMatch?'MATCH IN PROGRESS':'NO MATCH ACTIVE';
+ $('robotMatchStatus').textContent=robotMatch?'MATCH IN PROGRESS':robotBossPending?'BOSS MATCH ARMED':'NO MATCH ACTIVE';
  $('robotPanel').querySelectorAll('select[data-side]').forEach(sel=>sel.onchange=()=>{
    const cfg=sel.dataset.side==='A'?robotUiA:robotUiB;cfg[sel.dataset.part]=+sel.value;renderRobotDesigner()
- })
+ });
+ $('robotPanel').querySelectorAll('#robotCameraButtons button').forEach(b=>b.classList.toggle('active',+b.dataset.cam===robotFeedCameraIndex))
 }
 function openRobotDesigner(){closeSidePanels('robotPanel');$('robotPanel').classList.remove('hidden');renderRobotDesigner()}
 $('robotClose').onclick=()=>$('robotPanel').classList.add('hidden');
 $('randomA').onclick=()=>{robotUiA=randomRobotConfig();renderRobotDesigner()};
 $('randomB').onclick=()=>{robotUiB=randomRobotConfig();renderRobotDesigner()};
 $('randomBoth').onclick=()=>{robotUiA=randomRobotConfig();robotUiB=randomRobotConfig();renderRobotDesigner()};
+$('robotCameraButtons').onclick=e=>{const b=e.target.closest('button[data-cam]');if(!b)return;robotFeedCameraIndex=+b.dataset.cam;renderRobotDesigner();updateRobotFeed(true)};
+function saveRobotBuilds(){world.robotArena.lastA=normalRobotConfig(robotUiA);world.robotArena.lastB=normalRobotConfig(robotUiB);persist()}
+function teleportRobotLab(){
+ robotSpectatorMode=false;robotBossPending=false;activeVehicle=null;sitting=null;playerJumpY=0;playerJumpV=0;
+ player.x=96;player.z=-27;player.yaw=-Math.PI/2;playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);
+ $('robotPanel').classList.add('hidden');refreshUse();toast('Returned to Robot Design Lab')
+}
+function teleportRobotStand(){
+ saveRobotBuilds();robotBossPending=true;robotSpectatorMode=true;activeVehicle=null;sitting=null;playerJumpY=0;playerJumpV=0;
+ player.x=140;player.z=-30.5;player.yaw=0;playerGroundY=ARENA_LEVEL+6.8;camera.position.set(player.x,playerGroundY+1.7,player.z);
+ $('robotPanel').classList.add('hidden');refreshUse();toast('BOSS MATCH ARMED • use the red arena console to start')
+}
+$('bossRobotMatch').onclick=()=>{if(robotMatch){toast('A match is already active');return}teleportRobotStand()};
+$('robotTeleportBack').onclick=teleportRobotLab;
 
 function robotDamage(attacker,defender){
  const w=attacker.weapon,arm=robotPartSets.armour[defender.config.armour],
@@ -1439,10 +1475,9 @@ function combatEffect(pos,type){
  const col=type==='shock'?0x71eaff:type==='heat'?0xff783d:type==='energy'?0x9fffff:type==='explosive'?0xffbf62:0xffe1a5;
  for(let i=0;i<(IS_MOBILE?3:5);i++)spawnVehicleParticle(pos,col,.12+Math.random()*.16,.35+.2*Math.random(),.9,.45)
 }
-function startRobotBattle(){
- if(robotMatch)return;
- $('robotPanel').classList.add('hidden');
- world.robotArena.lastA=normalRobotConfig(robotUiA);world.robotArena.lastB=normalRobotConfig(robotUiB);persist();
+function startRobotBattle(mode='screen'){
+ if(robotMatch){toast('A match is already active');return}
+ $('robotPanel').classList.add('hidden');saveRobotBuilds();robotBossPending=false;
  const aCfg=normalRobotConfig(robotUiA),bCfg=normalRobotConfig(robotUiB),a=makeCombatRobot(aCfg,0),b=makeCombatRobot(bCfg,1);
  a.position.set(119,ARENA_LEVEL+.3,0);b.position.set(161,ARENA_LEVEL+.3,0);a.rotation.y=Math.PI/2;b.rotation.y=-Math.PI/2;robotArenaGroup.add(a,b);
  const sa=robotStats(aCfg),sb=robotStats(bCfg);
@@ -1452,9 +1487,9 @@ function startRobotBattle(){
    b:{group:b,config:bCfg,stats:sb,weapon:sb.weapon,hp:sb.hp,cool:1.25,stun:0,burn:0,heat:0},
    winner:null,loser:null,endT:0
  };
- world.robotArena.matches++;sfx(180,.15,.08,'sawtooth');toast(robotName(aCfg)+' VS '+robotName(bCfg)+' • MATCH START')
+ world.robotArena.matches++;sfx(180,.15,.08,'sawtooth');updateRobotFeed(true);toast(robotName(aCfg)+' VS '+robotName(bCfg)+' • '+(mode==='boss'?'BOSS MATCH START':'SCREEN MATCH START'))
 }
-$('startRobotMatch').onclick=startRobotBattle;
+$('startRobotMatch').onclick=()=>startRobotBattle('screen');
 
 function attackRobot(att,def,t){
  const w=att.weapon,ap=att.group.position,dp=def.group.position,d=ap.distanceTo(dp);if(d>w.range||att.cool>0||att.stun>0)return;
@@ -1506,6 +1541,19 @@ function updateRobotScoreboard(force=false){
    c.textAlign='center';c.fillStyle='#ffffff';c.font='bold 18px Arial';c.fillText(robotMatch.phase==='fight'?'LIVE MATCH':'VICTORY SEQUENCE',384,155)
  }
  robotScoreTexture.needsUpdate=true
+}
+function updateRobotFeed(force=false){
+ if(!robotTerminalScreen||!robotArenaGroup.visible)return;
+ const now=performance.now();if(!force&&now-robotFeedAt<(IS_MOBILE?90:66))return;robotFeedAt=now;
+ const c=robotFeedPositions[robotFeedCameraIndex]||robotFeedPositions[0],look=c.look.clone();
+ if(robotMatch){
+   const ap=robotMatch.a.group.position,bp=robotMatch.b.group.position;
+   look.set((ap.x+bp.x)*.5,ARENA_LEVEL+3.1,(ap.z+bp.z)*.5)
+ }
+ robotFeedCamera.position.copy(c.p);robotFeedCamera.lookAt(look);
+ const vis=robotTerminalScreen.visible;robotTerminalScreen.visible=false;
+ const old=renderer.getRenderTarget();renderer.setRenderTarget(robotFeedTarget);renderer.render(scene,robotFeedCamera);renderer.setRenderTarget(old);
+ robotTerminalScreen.visible=vis
 }
 function updateRobotArena(dt,t){
  updateRobotScoreboard();
@@ -2267,7 +2315,7 @@ $('use').onclick=()=>{
    if(v.kind==='ufo'&&v.alt>8){toast('Land the UFO before exiting');return}
    if(v.kind==='mek'&&v.alt>1.2){toast('Land the MEK before exiting');return}
    const exit=findSafeExit(v);
-   activeVehicle=null;$('flightControls').classList.add('hidden');$('mine').classList.add('hidden');
+   activeVehicle=null;robotSpectatorMode=false;$('flightControls').classList.add('hidden');$('mine').classList.add('hidden');
    flightThrottle=0;move.x=0;move.y=0;look.x=0;look.y=0;
    player.x=exit.x;player.z=exit.z;player.yaw=v.yaw;playerGroundY=H(player.x,player.z);
    camera.position.set(player.x,playerGroundY+1.7,player.z);
@@ -2275,7 +2323,7 @@ $('use').onclick=()=>{
  }
  let v=nearestVehicle();if(!v)return;
  if(v.kind==='ufoCandidate')v=activateUfo(v);
- activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;
+ robotSpectatorMode=false;activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;
  if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo'||v.kind==='mek'){
    $('flightControls').classList.remove('hidden');
    if(v.kind==='mek')flightThrottle=0;
@@ -2675,6 +2723,8 @@ $('townAction').onclick=()=>{
  const a=nearestTownInteraction();if(!a)return;
  if(a.type==='shop'){openShop();toast('Westside Supply opened')}
  else if(a.type==='robotTerminal'){openRobotDesigner();toast('Robot Combat Design Lab online')}
+ else if(a.type==='robotBossStart'){if(!robotBossPending){toast('Configure both robots in the Design Lab first');return}startRobotBattle('boss')}
+ else if(a.type==='robotBossExit'){teleportRobotLab()}
  else if(a.type==='bench'){
    sitting={x:a.x,z:a.z,yaw:a.yaw||0,exitYaw:player.yaw};
    move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;
@@ -2854,7 +2904,7 @@ function renderMap(){
 }
 $('travel').onclick=()=>{
  if(!mapSelected)return;
- activeVehicle=null;refreshUse();player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;player.yaw=0;
+ activeVehicle=null;robotSpectatorMode=false;robotBossPending=false;refreshUse();player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;player.yaw=0;
  $('panel').classList.add('hidden');lastSyncX=1e9;lastSyncZ=1e9;sync(true);
  if(blocked(player.x,player.z)){outer:for(let r=3;r<=18;r+=3)for(let i=0;i<16;i++){let a=i/16*Math.PI*2,x=mapSelected.cx*CH+Math.cos(a)*r,z=mapSelected.cz*CH+Math.sin(a)*r;if(!blocked(x,z)&&Math.abs(H(x,z)-H(player.x,player.z))<3){player.x=x;player.z=z;break outer}}}
  playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);persist();toast('Fast travel complete');
@@ -2977,7 +3027,7 @@ function updateSurvival(dt,t){
    }
  }
  if(s.health<=0){
-   s.health=100;s.stamina=100;s.energy=Math.max(35,s.energy);player.x=-14.5;player.z=-24;playerGroundY=H(player.x,player.z);activeVehicle=null;sitting=null;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('You were recovered at the airfield')
+   s.health=100;s.stamina=100;s.energy=Math.max(35,s.energy);player.x=-14.5;player.z=-24;playerGroundY=H(player.x,player.z);activeVehicle=null;robotSpectatorMode=false;robotBossPending=false;sitting=null;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('You were recovered at the airfield')
  }
  $('healthBar').style.width=s.health+'%';$('staminaBar').style.width=s.stamina+'%';$('energyBar').style.width=s.energy+'%';
  const danger=$('dangerVignette');if(danger)danger.style.opacity=String(T.MathUtils.clamp((45-s.health)/45,0,.72))
@@ -3215,7 +3265,13 @@ function step(dt,t){
    camera.lookAt(v.x,h+1.1-ly*1.5,v.z);
  }else{
    player.yaw-=lx*dt*2.45;
-   if(!sitting){
+   if(robotSpectatorMode){
+     const sx=T.MathUtils.clamp(move.x,-1,1),sf=T.MathUtils.clamp(move.y,-1,1),walk=2.2*dt;
+     player.x=T.MathUtils.clamp(player.x+Math.cos(player.yaw)*sx*walk+Math.sin(player.yaw)*sf*walk,132,148);
+     player.z=T.MathUtils.clamp(player.z-Math.sin(player.yaw)*sx*walk+Math.cos(player.yaw)*sf*walk,-33,-27);
+     playerGroundY=ARENA_LEVEL+6.8;playerJumpY=0;playerJumpV=0;
+     cameraLerpTarget.set(player.x,playerGroundY+1.7,player.z)
+   }else if(!sitting){
      if(playerJumpY>0||playerJumpV>0){
        playerJumpV-=13.5*dt;
        playerJumpY+=playerJumpV*dt;
@@ -3309,7 +3365,7 @@ function loop(now){
        shadowInterval=world.ui.graphicsQuality==='high'?(IS_MOBILE?220:145):(IS_MOBILE?320:210);
  if(shadows&&now-shadowAt>shadowInterval){shadowAt=now;renderer.shadowMap.needsUpdate=true}
 
- renderer.render(scene,camera);
+ renderer.render(scene,camera);updateRobotFeed();
 
  fpsUiFrames++;
  if(now-fpsUiStart>600){

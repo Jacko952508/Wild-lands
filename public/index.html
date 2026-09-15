@@ -118,8 +118,15 @@
     <section class="robotSide"><h3>ROBOT A</h3><div id="robotAFields"></div><div class="robotStats" id="robotAStats"></div><button id="randomA">RANDOMISE A</button></section>
     <section class="robotSide"><h3>ROBOT B</h3><div id="robotBFields"></div><div class="robotStats" id="robotBStats"></div><button id="randomB">RANDOMISE B</button></section>
   </div>
-  <div class="robotActions"><button id="randomBoth">RANDOMISE BOTH</button><button id="startRobotMatch">START MATCH</button></div>
-  <div class="robotHint">Build both machines, or randomise them and watch the simulation. Weapons, armour, cores and mobility types counter each other.</div>
+  <div class="robotCameraPanel">
+    <span>LIVE ARENA CAMERA</span>
+    <div id="robotCameraButtons">
+      <button data-cam="0">NORTH</button><button data-cam="1">SOUTH</button><button data-cam="2">SIDE</button><button data-cam="3">OVERHEAD</button>
+    </div>
+  </div>
+  <div class="robotActions"><button id="randomBoth">RANDOMISE BOTH</button><button id="startRobotMatch">START SCREEN MATCH</button></div>
+  <div class="robotActions bossActions"><button id="bossRobotMatch">BOSS MATCH MODE</button><button id="robotTeleportBack">RETURN TO LAB</button></div>
+  <div class="robotHint">SCREEN MATCH starts immediately and is shown on the in-world design computer. BOSS MATCH MODE saves both builds and teleports you to the arena viewing stand; start the fight there using the arena control button.</div>
 </div>
 
 <div id="missionBanner" class="hidden"><span>MISSION COMPLETE</span><b id="missionBannerTitle">OBJECTIVE</b><small id="missionBannerReward">+0 XP</small></div>
