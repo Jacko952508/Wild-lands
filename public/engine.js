@@ -578,22 +578,25 @@ function makeDragonCave(){
  // Elliptical rings form a coherent tunnel wall/ceiling; the lower arc is omitted so the separate walkable floor remains clear.
  // Roof begins only after the player has entered the naturally carved ravine; it then closes overhead progressively.
  const cavePath=new T.CatmullRomCurve3([new T.Vector3(cx,H(cx,DRAGON_CAVE_MOUTH_Z+8)+5,DRAGON_CAVE_MOUTH_Z+8),new T.Vector3(cx,H(cx,DRAGON_CAVE_MOUTH_Z+20)+6,DRAGON_CAVE_MOUTH_Z+20),new T.Vector3(cx-1,H(cx,cz-2)+7,cz-2),new T.Vector3(cx+1,floorY+7,cz+18),new T.Vector3(cx,floorY+8,cz+42),new T.Vector3(cx+2,floorY+8,cz+68)],false,'centripetal');
- const rings=44,sides=20,verts=[],inds=[];
- // Stable radial noise: adjacent rings share almost the same profile, avoiding the twisted/self-crossing polygons that caused black shards and see-through seams.
- for(let r=0;r<=rings;r++){const t=r/rings,p=cavePath.getPoint(t),tan=cavePath.getTangent(t).normalize(),right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),tan).normalize();if(right.lengthSq()<.1)right.set(1,0,0);const up=new T.Vector3().crossVectors(tan,right).normalize(),rw=8.2+Math.sin(t*Math.PI)*5.6,rh=6.4+Math.sin(t*Math.PI)*4.6;for(let s=0;s<sides;s++){const a=s/sides*Math.PI*2,noise=1+Math.sin(a*3+t*5.5)*.055+Math.sin(a*5-t*3.2)*.035,off=right.clone().multiplyScalar(Math.cos(a)*rw*noise).add(up.clone().multiplyScalar(Math.sin(a)*rh*noise));verts.push(p.x+off.x,p.y+off.y,p.z+off.z)}}
- for(let r=0;r<rings;r++)for(let s=0;s<sides;s++){const n=(s+1)%sides,a=r*sides+s,b=r*sides+n,c=(r+1)*sides+n,d=(r+1)*sides+s;inds.push(a,b,c,a,c,d)}
+ const rings=44,sides=20,row=sides+1,verts=[],inds=[];
+ // The cave mesh is now ONLY the walls and roof. The sculpted terrain remains the single walkable floor, so there is no second surface to clip through or get caught on.
+ // Each cross-section runs continuously from the right floor edge, over the roof, to the left floor edge; no hidden underside is generated.
+ for(let r=0;r<=rings;r++){const t=r/rings,p=cavePath.getPoint(t),tan=cavePath.getTangent(t).normalize(),right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),tan).normalize();if(right.lengthSq()<.1)right.set(1,0,0);const up=new T.Vector3().crossVectors(tan,right).normalize(),rw=8.2+Math.sin(t*Math.PI)*5.6,rh=6.4+Math.sin(t*Math.PI)*4.6;for(let s=0;s<=sides;s++){const a=s/sides*Math.PI,noise=1+Math.sin(a*3+t*5.5)*.045+Math.sin(a*5-t*3.2)*.025,off=right.clone().multiplyScalar(Math.cos(a)*rw*noise).add(up.clone().multiplyScalar(Math.sin(a)*rh*noise));verts.push(p.x+off.x,p.y+off.y,p.z+off.z)}}
+ for(let r=0;r<rings;r++)for(let s=0;s<sides;s++){const a=r*row+s,b=a+1,d=(r+1)*row+s,c=d+1;inds.push(a,b,c,a,c,d)}
  const tunnelGeo=new T.BufferGeometry();tunnelGeo.setAttribute('position',new T.Float32BufferAttribute(verts,3));tunnelGeo.setIndex(inds);tunnelGeo.computeVertexNormals();const tunnel=new T.Mesh(tunnelGeo,rock);g.add(tunnel);
  // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
  const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
  // Clean natural entrance: nothing is placed across the player's route. The sculpted ravine itself is the mouth, and the tunnel roof begins farther inside.
- const mouthGlow=new T.PointLight(0xff5a16,9.5,64,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ-1);g.add(mouthGlow);
+ // Permanent entrance facade: a broad half-ring of rock follows the carved opening but never crosses the walking path. It reads as a cave from the airfield instead of an empty terrain cut.
+ const mouthArch=new T.Mesh(new T.TorusGeometry(8.1,2.25,10,32,Math.PI),rock2);mouthArch.rotation.z=0;mouthArch.position.set(cx,mouthY+.35,mouthZ+1.4);g.add(mouthArch);
+ const mouthGlow=new T.PointLight(0xff5a16,8.5,72,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ+2);g.add(mouthGlow);
  const emberMat=new T.MeshBasicMaterial({color:0xff6a19});for(const sx of[-1,1]){const e=new T.Mesh(new T.ConeGeometry(.42,1.8,8),emberMat);e.position.set(cx+sx*7.4,mouthY+.9,mouthZ-.6);g.add(e)}
  townText(g,'DRAGON CAVERN',cx,mouthY+10.7,mouthZ-.7,9.8,1.35);
  townInteractions.push({x:cx,z:mouthZ-4,type:'cityInfo',label:'DRAGON CAVERN',message:'Dragon Cavern • descend through the glowing stone mouth'});
  // No separate ramp mesh. The actual world terrain is sculpted into the descent and deep floor by earthH(), eliminating overlapping floors and collision seams.
  // The former repeated rock ribs, circular vault rings and vertical cylinder have been deleted.
  // A single organic terminal chamber joins the spline tunnel, giving the dragon a readable lair without geometric repetition.
- const chamber=new T.Mesh(new T.SphereGeometry(1,36,24),rock);chamber.scale.set(20,12.5,27);chamber.position.set(cx+2,floorY+9.5,cz+57);g.add(chamber);
+ const chamber=new T.Mesh(new T.SphereGeometry(1,36,18,0,Math.PI*2,0,Math.PI*.62),rock);chamber.scale.set(20,12.5,27);chamber.position.set(cx+2,floorY+9.5,cz+57);g.add(chamber);
  // Layered wall shelves and sparse formations add depth without intersecting the walkable centre or producing floating shards.
  for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=16.2+hash(i,17,91)*1.8,b=new T.Mesh(new T.DodecahedronGeometry(1.1+hash(i,8,92)*1.25,1),i%3===0?rockWarm:i%2?rock:rock2);b.position.set(cx+2+Math.cos(a)*r,floorY+1.2+hash(i,5,93)*3.2,cz+57+Math.sin(a)*r*1.48);b.scale.set(1.5,1.25,1.7);g.add(b)}
  for(let i=0;i<9;i++){const shelf=new T.Mesh(new T.BoxGeometry(4+hash(i,2,72)*3,.55,2.2+hash(i,3,73)*2),i%2?rockWarm:rock2);const sx=i%2?-1:1;shelf.position.set(cx+sx*(12.8+hash(i,5,74)*2.2),floorY+2.3+(i%3)*2.1,cz+24+i*5.2);shelf.rotation.y=(hash(i,6,75)-.5)*.55;g.add(shelf)}
@@ -3696,6 +3699,8 @@ function step(dt,t){
 }
 
 sync(true);
+// Build the now-optimised single-shell cavern immediately after the core world exists. This keeps the cave mouth/roof visible from long range instead of popping in only after the player reaches it.
+try{ensureDragonCave()}catch(e){console.error('Dragon cave world init',e)}
 camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
 let last=performance.now(),start=performance.now()/1000-240,shadowAt=0,perfAt=last,perfFrames=0,perfTotal=0,lastFrameAt=0,fpsUiAt=0,fpsUiFrames=0,fpsUiStart=last;
 function loop(now){
