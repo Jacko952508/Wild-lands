@@ -613,15 +613,16 @@ function makeDragonCave(){
  townInteractions.push({x:returnX,z:returnZ,type:'dragonTeleport',label:'RETURN TO HANGAR',destination:'hangar',realm:'earth'});
  const glow=new T.PointLight(0xff3d0a,4.5,55,1.5);glow.position.set(cx-7,floorY+4,cz+40);g.add(glow);scene.add(g);makeDragon(cx+5,cz+62,floorY+1.8)
 }
+const dragonFireGeoHot=new T.SphereGeometry(.56,7,5),dragonFireGeoOuter=new T.SphereGeometry(.92,7,5),dragonFireMatHot=new T.MeshBasicMaterial({color:0xffdf5a,transparent:true,opacity:.96}),dragonFireMatOuter=new T.MeshBasicMaterial({color:0xff4b08,transparent:true,opacity:.78});
 function dragonFire(){
  if(!activeVehicle||activeVehicle.kind!=='dragon')return;const v=activeVehicle,now=performance.now();if(now-v.fireClock<48)return;v.fireClock=now;
  const dir=new T.Vector3(Math.sin(v.yaw)*Math.cos(v.pitch),Math.sin(v.pitch),Math.cos(v.yaw)*Math.cos(v.pitch)).normalize(),right=new T.Vector3(Math.cos(v.yaw),0,-Math.sin(v.yaw));
  const p=v.group.position.clone().add(new T.Vector3(0,3.25,0)).addScaledVector(dir,4.2);
  // Large continuous breath cone: a dense hot core plus a widening orange envelope. It inherits dragon velocity so it remains convincing at high flight speed.
- for(let i=0;i<10;i++){const hot=i<4,spread=.12+i*.055,side=(Math.random()-.5)*spread,vert=(Math.random()-.5)*spread*.7,d=dir.clone().addScaledVector(right,side).add(new T.Vector3(0,vert,0)).normalize(),m=new T.Mesh(new T.SphereGeometry(hot?.42+Math.random()*.28:.65+Math.random()*.5,7,5),new T.MeshBasicMaterial({color:hot?0xffdf5a:0xff4b08,transparent:true,opacity:hot?.96:.78}));m.position.copy(p).addScaledVector(dir,i*.42);scene.add(m);dragonFires.push({m,v:d.multiplyScalar(42+Math.random()*15).add(new T.Vector3(Math.sin(v.yaw)*(v.speed||0)*.35,0,Math.cos(v.yaw)*(v.speed||0)*.35)),life:1.05})}
+ for(let i=0;i<10;i++){const hot=i<4,spread=.12+i*.055,side=(Math.random()-.5)*spread,vert=(Math.random()-.5)*spread*.7,d=dir.clone().addScaledVector(right,side).add(new T.Vector3(0,vert,0)).normalize(),m=new T.Mesh(hot?dragonFireGeoHot:dragonFireGeoOuter,hot?dragonFireMatHot:dragonFireMatOuter);m.scale.setScalar(hot?.76+Math.random()*.5:.72+Math.random()*.55);m.position.copy(p).addScaledVector(dir,i*.42);scene.add(m);dragonFires.push({m,v:d.multiplyScalar(42+Math.random()*15).add(new T.Vector3(Math.sin(v.yaw)*(v.speed||0)*.35,0,Math.cos(v.yaw)*(v.speed||0)*.35)),life:1.05})}
 }
 function updateDragonFire(dt){
- if(dragonFireHeld)dragonFire();for(let i=dragonFires.length-1;i>=0;i--){const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);f.m.material.opacity=Math.max(0,f.life*1.3);if(f.life<=0){scene.remove(f.m);f.m.geometry.dispose();f.m.material.dispose();dragonFires.splice(i,1);continue}for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();lastSyncX=1e9;lastSyncZ=1e9;sync(true);break}}}}
+ if(dragonFireHeld)dragonFire();for(let i=dragonFires.length-1;i>=0;i--){const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);if(f.life<=0){scene.remove(f.m);dragonFires.splice(i,1);continue}for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();lastSyncX=1e9;lastSyncZ=1e9;sync(true);break}}}}
 }
 // Build the large underground lair after the core world has finished initialising.
 // Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
@@ -1821,9 +1822,10 @@ function updateRobotScoreboard(force=false){
 }
 function updateRobotFeed(force=false){
  if(!robotTerminalScreen||!robotArenaGroup.visible)return;
- const labNear=Math.hypot(player.x-93,player.z+27)<26,panelOpen=!$('robotPanel').classList.contains('hidden');
- if(!force&&!labNear&&!panelOpen)return;
- const now=performance.now();if(!force&&now-robotFeedAt<(IS_MOBILE?140:80))return;robotFeedAt=now;
+ const panelOpen=!$('robotPanel').classList.contains('hidden');
+ // Mobile Safari can visibly flash the main canvas while rapidly swapping the shared WebGL context to an off-screen render target. Only render CCTV when the player is actually using its UI; otherwise retain the last frame on the physical monitor.
+ if(!force&&!panelOpen)return;
+ const now=performance.now();if(!force&&now-robotFeedAt<(IS_MOBILE?180:90))return;robotFeedAt=now;
  const c=robotFeedPositions[robotFeedCameraIndex]||robotFeedPositions[0],look=c.look.clone();
  if(robotMatch){
    const ap=robotMatch.a.group.position,bp=robotMatch.b.group.position;
@@ -2217,7 +2219,8 @@ function createChunk(cx,cz){
 
  // Keep one terrain mesh per chunk for both LOD modes. This preserves
  // identical ground topology while avoiding two full terrain meshes per chunk.
- const ground=terrain(cx,cz,20);root.add(ground);
+ // A modestly denser heightfield improves silhouettes, slopes and cave edges without adding extra draw calls.
+ const ground=terrain(cx,cz,IS_MOBILE?24:28);root.add(ground);
  // Far chunks build only their cheap representation. Detailed vegetation,
  // landmarks and anomaly geometry are created lazily when the chunk becomes near.
  addFarTrees(far,d,cx,cz);
