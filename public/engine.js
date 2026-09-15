@@ -152,7 +152,8 @@ const TOWN_LEVEL=earthRawH(-126,8);
 const ARENA_LEVEL=earthRawH(132,0);
 // Dragon cave entrance is deliberately beside the south end of the runway, not hidden out in procedural terrain.
 // Keep the cavern completely clear of the runway geometry. The entrance sits east of the airfield in ordinary terrain, with a long walkable descent.
-const DRAGON_CAVE_X=58,DRAGON_CAVE_Z=88,DRAGON_CAVE_MOUTH_Z=58;
+// Dragon Cavern v2: isolated from the runway/arena. The overworld heightfield itself forms the walkable entrance ravine.
+const DRAGON_CAVE_X=46,DRAGON_CAVE_Z=132,DRAGON_CAVE_MOUTH_Z=96;
 function earthH(x,z){
   const raw=earthRawH(x,z),edge=Math.max(Math.abs(x),Math.abs(z));
   if(edge<=46)return START_PLATEAU;
@@ -170,9 +171,16 @@ function earthH(x,z){
   if(ad<=0)return ARENA_LEVEL;
   if(ad<12)return T.MathUtils.lerp(ARENA_LEVEL,raw,smooth(ad/12));
 
-  // Keep the cave approach readable and walkable from the runway edge.
-  const caveD=Math.hypot(x-DRAGON_CAVE_X,z-DRAGON_CAVE_MOUTH_Z);
-  if(caveD<13)return T.MathUtils.lerp(START_PLATEAU,raw,smooth(T.MathUtils.clamp((caveD-7)/6,0,1)));
+  // Dragon Cavern v2 — carve the WALKABLE route into the actual terrain heightfield.
+  // This removes the old contradiction where the rendered cave floor and overworld collision were two different surfaces.
+  const cx=DRAGON_CAVE_X,mouth=DRAGON_CAVE_MOUTH_Z,deep=DRAGON_CAVE_Z+8,dx=Math.abs(x-cx);
+  if(dx<15&&z>mouth-16&&z<DRAGON_CAVE_Z+82){
+    const edgeBlend=smooth(T.MathUtils.clamp((15-dx)/5,0,1));
+    let target=raw;
+    if(z<deep){let t=smooth(T.MathUtils.clamp((z-(mouth-16))/(deep-(mouth-16)),0,1));target=T.MathUtils.lerp(raw,earthRawH(cx,DRAGON_CAVE_Z)-31,t)}
+    else target=earthRawH(cx,DRAGON_CAVE_Z)-31;
+    return T.MathUtils.lerp(raw,target,edgeBlend)
+  }
   return raw
 }
 function moonRawH(x,z){
@@ -329,13 +337,8 @@ function terrain(cx,cz,seg){
  // Dragon Cavern entrance is real missing topology, not a dark decal. Remove every terrain triangle that touches
  // the walk-in opening/ramp corridor, then widen into the underground shaft. Testing only triangle centroids left
  // large faces spanning the opening on mobile LOD, which is why the screenshots still showed a solid map floor.
- if(!moonMode&&g.index){
-   const src=Array.from(g.index.array),cut=[];
-   // Cut a generous continuous trench from BEFORE the mouth all the way to the deep chamber. The old cut began almost exactly at the cave trigger, leaving a terrain triangle 'lip' that the player collision hit before cave mode could take over.
-   const inCaveCut=(i)=>{const x=worldX[i],z=worldZ[i],shaft=Math.hypot(x-DRAGON_CAVE_X,z-DRAGON_CAVE_Z)<15.5,ramp=Math.abs(x-DRAGON_CAVE_X)<13&&z>DRAGON_CAVE_MOUTH_Z-12&&z<DRAGON_CAVE_Z+16;return shaft||ramp};
-   for(let k=0;k<src.length;k+=3){const a=src[k],b=src[k+1],c=src[k+2];if(!inCaveCut(a)&&!inCaveCut(b)&&!inCaveCut(c))cut.push(a,b,c)}
-   g.setIndex(cut)
- }
+ // Dragon Cavern v2 does not delete terrain triangles. earthH() sculpts one continuous ravine/floor,
+ // so rendering, walking collision and camera grounding all agree on the same surface.
  g.computeVertexNormals();
  const mesh=new T.Mesh(g,terrainMaterial);
  mesh.position.set(cx*CH,0,cz*CH);mesh.receiveShadow=seg>12;return mesh
@@ -570,40 +573,29 @@ function makeDragon(x,z,worldY){
  g.position.set(x,worldY==null?H(x,z)+.3:worldY,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0,caveY:worldY};vehicles.push(v);dragon=v;return v
 }
 function makeDragonCave(){
- const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x292622,roughness:1,flatShading:true}),rock2=new T.MeshStandardMaterial({color:0x403832,roughness:.96,flatShading:true}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=H(cx,cz),floorY=surface-31;
+ const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x292622,roughness:1,flatShading:true,side:T.BackSide}),rock2=new T.MeshStandardMaterial({color:0x403832,roughness:.96,flatShading:true}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=earthRawH(cx,DRAGON_CAVE_MOUTH_Z-18),floorY=dragonCaveFloor();
  // Rebuilt cave: one continuous spline-driven passage rather than the old pile-of-boulders shell.
  // Elliptical rings form a coherent tunnel wall/ceiling; the lower arc is omitted so the separate walkable floor remains clear.
- const cavePath=new T.CatmullRomCurve3([new T.Vector3(cx,surface-1,DRAGON_CAVE_MOUTH_Z-3),new T.Vector3(cx,surface-5,DRAGON_CAVE_MOUTH_Z+10),new T.Vector3(cx-2,surface-13,cz-9),new T.Vector3(cx+2,surface-23,cz+2),new T.Vector3(cx,floorY+5,cz+15),new T.Vector3(cx+3,floorY+6,cz+38),new T.Vector3(cx,floorY+7,cz+66)],false,'centripetal');
+ // Roof begins only after the player has entered the naturally carved ravine; it then closes overhead progressively.
+ const cavePath=new T.CatmullRomCurve3([new T.Vector3(cx,H(cx,DRAGON_CAVE_MOUTH_Z+8)+5,DRAGON_CAVE_MOUTH_Z+8),new T.Vector3(cx,H(cx,DRAGON_CAVE_MOUTH_Z+20)+6,DRAGON_CAVE_MOUTH_Z+20),new T.Vector3(cx-1,H(cx,cz-2)+7,cz-2),new T.Vector3(cx+1,floorY+7,cz+18),new T.Vector3(cx,floorY+8,cz+42),new T.Vector3(cx+2,floorY+8,cz+68)],false,'centripetal');
  const rings=30,sides=14,verts=[],inds=[];
  for(let r=0;r<=rings;r++){const t=r/rings,p=cavePath.getPoint(t),tan=cavePath.getTangent(t).normalize(),right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),tan).normalize();if(right.lengthSq()<.1)right.set(1,0,0);const up=new T.Vector3().crossVectors(tan,right).normalize(),rw=7.4+Math.sin(t*Math.PI)*5.2+Math.sin(t*19)*.55,rh=5.7+Math.sin(t*Math.PI)*4.4;for(let s=0;s<sides;s++){const a=s/sides*Math.PI*2,jitter=.82+hash(r,s,811)*.28,off=right.clone().multiplyScalar(Math.cos(a)*rw*jitter).add(up.clone().multiplyScalar(Math.sin(a)*rh*jitter));verts.push(p.x+off.x,p.y+off.y,p.z+off.z)}}
  for(let r=0;r<rings;r++)for(let s=0;s<sides;s++){const n=(s+1)%sides,a=r*sides+s,b=r*sides+n,c=(r+1)*sides+n,d=(r+1)*sides+s;inds.push(a,c,b,a,d,c)}
  const tunnelGeo=new T.BufferGeometry();tunnelGeo.setAttribute('position',new T.Float32BufferAttribute(verts,3));tunnelGeo.setIndex(inds);tunnelGeo.computeVertexNormals();const tunnel=new T.Mesh(tunnelGeo,rock);g.add(tunnel);
  // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
  const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
- // Entrance lip uses a few embedded rocks only; the actual cave is the continuous tunnel mesh behind it.
- // Keep the entrance visually framed but leave a huge unobstructed central portal. Side pillars and a high crown replace the old low polygon arch that protruded into the player's route.
- for(const sx of[-1,1])for(let i=0;i<3;i++){const b=new T.Mesh(new T.DodecahedronGeometry(1.8+i*.18,0),i%2?rock:rock2);b.position.set(cx+sx*(9.2+i*.45),mouthY+1.2+i*2.1,mouthZ+1+i*.25);b.scale.set(1.35,1.1,1.45);g.add(b)}
- for(let i=0;i<5;i++){const b=new T.Mesh(new T.DodecahedronGeometry(1.65+(i%2)*.25,0),i%2?rock2:rock);b.position.set(cx+(i-2)*3.1,mouthY+9.3+Math.abs(i-2)*.35,mouthZ+1.5);b.scale.set(1.2,.85,1.35);g.add(b)}
- // A literal black opening behind the rock arch makes the entrance impossible to confuse with ordinary terrain.
- // No fake black disc or cylinder throat: the opening now exposes the actual continuous cave interior.
+ // Clean natural entrance: nothing is placed across the player's route. The sculpted ravine itself is the mouth, and the tunnel roof begins farther inside.
  const mouthGlow=new T.PointLight(0xff5a16,9.5,64,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ-1);g.add(mouthGlow);
  const emberMat=new T.MeshBasicMaterial({color:0xff6a19});for(const sx of[-1,1]){const e=new T.Mesh(new T.ConeGeometry(.42,1.8,8),emberMat);e.position.set(cx+sx*7.4,mouthY+.9,mouthZ-.6);g.add(e)}
  townText(g,'DRAGON CAVERN',cx,mouthY+10.7,mouthZ-.7,9.8,1.35);
  townInteractions.push({x:cx,z:mouthZ-4,type:'cityInfo',label:'DRAGON CAVERN',message:'Dragon Cavern • descend through the glowing stone mouth'});
- // Build a physical descending floor through the terrain opening. This is the surface the player actually walks on;
- // the procedural overworld has been removed above it, so there is no second map floor clipping through the cave.
- // The descent starts several metres OUTSIDE the terrain cut, so the surface and cave floor overlap rather than meeting at a razor-thin boundary. A broad, shallow first section prevents the player's capsule/ground sampler catching on an edge.
- const rampStart=mouthZ-10,rampEnd=cz+14,rampLen=rampEnd-rampStart,rampMid=(rampStart+rampEnd)/2,rampTopY=H(cx,rampStart)-.08,rampBottomY=floorY+.12,rampDrop=rampTopY-rampBottomY;
- const ramp=new T.Mesh(new T.BoxGeometry(21,.9,rampLen+7),rock2);ramp.position.set(cx,(rampTopY+rampBottomY)/2-.4,rampMid);ramp.rotation.x=-Math.atan2(rampDrop,rampLen);g.add(ramp);
- // Flat landing bridges the final ramp centimetres into the cavern floor so there is no second collision seam at the bottom.
- const landing=new T.Mesh(new T.BoxGeometry(21,.7,14),rock2);landing.position.set(cx,floorY-.22,rampEnd+5);g.add(landing);
+ // No separate ramp mesh. The actual world terrain is sculpted into the descent and deep floor by earthH(), eliminating overlapping floors and collision seams.
  // The former repeated rock ribs, circular vault rings and vertical cylinder have been deleted.
  // A single organic terminal chamber joins the spline tunnel, giving the dragon a readable lair without geometric repetition.
  const chamber=new T.Mesh(new T.SphereGeometry(1,28,18),new T.MeshStandardMaterial({color:0x302a26,roughness:1,side:T.BackSide,flatShading:true}));chamber.scale.set(18,10.5,24);chamber.position.set(cx+2,floorY+8,cz+57);g.add(chamber);
  // Sparse formations break the silhouette while keeping a broad navigable path.
  for(let i=0;i<14;i++){const a=i/14*Math.PI*2,r=13+hash(i,17,91)*3,b=new T.Mesh(new T.DodecahedronGeometry(1.2+hash(i,8,92)*1.5,0),i%2?rock:rock2);b.position.set(cx+2+Math.cos(a)*r,floorY+1+hash(i,5,93)*4,cz+57+Math.sin(a)*r*1.45);b.scale.set(1,1.6,1);g.add(b)}
- const floor=new T.Mesh(new T.PlaneGeometry(38,84,1,1),rock2);floor.rotation.x=-Math.PI/2;floor.position.set(cx,floorY,cz+32);g.add(floor);
- const shaftFloor=new T.Mesh(new T.CircleGeometry(12.7,32),rock2);shaftFloor.rotation.x=-Math.PI/2;shaftFloor.position.set(cx,floorY+.02,cz);g.add(shaftFloor);
+ // No artificial floor planes: the sculpted terrain itself continues through the chamber, so there is nothing for the camera/player to clip between.
  // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
  const lavaPts=[];for(let i=0;i<8;i++)lavaPts.push(new T.Vector3(cx-10+Math.sin(i*.9)*2.2,floorY+.12,cz+10+i*8));const lavaCurve=new T.CatmullRomCurve3(lavaPts),stream=new T.Mesh(new T.TubeGeometry(lavaCurve,48,1.25,8,false),lava);g.add(stream);
  // Torch sconces alternate along both walls. Each has a visible flame and local warm light.
@@ -630,15 +622,9 @@ function updateDragonFire(dt){
 // Dragon cavern is part of the same game file, but is created only when the player actually uses the hangar teleporter.
 // This keeps all cave code/assets local while removing cave construction entirely from startup.
 let dragonCaveBuilt=false,dragonCaveActive=false;
-function dragonCaveFloor(){return H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31}
-function caveGroundH(x,z){
- if(!dragonCaveActive)return H(x,z);
- const dx=Math.abs(x-DRAGON_CAVE_X),mouth=DRAGON_CAVE_MOUTH_Z-10,rampEnd=DRAGON_CAVE_Z+14;
- // Collision follows the same broad physical ramp from its surface overlap to the independent cavern floor. Smoothstep removes the abrupt height discontinuity at both ends.
- if(dx<10&&z>=mouth&&z<rampEnd){let t=T.MathUtils.clamp((z-mouth)/(rampEnd-mouth),0,1);t=smooth(t);return T.MathUtils.lerp(H(DRAGON_CAVE_X,mouth)-.12,dragonCaveFloor()+.12,t)}
- if(dx<19&&z>=rampEnd&&z<DRAGON_CAVE_Z+76)return dragonCaveFloor()+.12;
- return H(x,z)
-}
+function dragonCaveFloor(){return earthRawH(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31}
+// v2 has one source of truth: the terrain heightfield IS the cave path/floor.
+function caveGroundH(x,z){return H(x,z)}
 function ensureDragonCave(){if(dragonCaveBuilt)return true;try{makeDragonCave();dragonCaveBuilt=true;return true}catch(e){console.error('Dragon cave init',e);return false}}
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
@@ -2317,7 +2303,7 @@ function insideDoorway(list,x,z,radius=.6){
 }
 function blocked(x,z,radius=0.6,ignoreVehicle=null){
  // The cave descent is its own navigation volume. Procedural rocks/trees and unrelated surface/start-area colliders must never form invisible walls across the excavated route.
- if(!moonMode&&dragonCaveActive&&Math.abs(x-DRAGON_CAVE_X)<11.5&&z>DRAGON_CAVE_MOUTH_Z-12&&z<DRAGON_CAVE_Z+78)return false;
+ if(!moonMode&&dragonCaveActive&&Math.abs(x-DRAGON_CAVE_X)<12&&z>DRAGON_CAVE_MOUTH_Z-20&&z<DRAGON_CAVE_Z+82)return false;
  if(moonMode){
    if(!insideDoorway(moonDoorways,x,z,radius)&&colliderListBlocked(moonColliders,x,z,radius))return true
  }else{
@@ -3634,11 +3620,11 @@ function step(dt,t){
      let f=move.y,side=move.x,baseSpeed=(sprinting?8:4.5),step=baseSpeed*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*step,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*step,nx=player.x+dx,nz=player.z+dz;
      // Crossing the exposed mouth naturally enters cave mode; the player can now walk down rather than teleport through solid terrain.
      // Enter cave-ground mode before reaching the terrain opening. This overlap is intentional: there is never a frame where movement samples the missing overworld floor while still using overworld collision.
-     if(!dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<10&&nz>DRAGON_CAVE_MOUTH_Z-11&&nz<DRAGON_CAVE_Z+15){ensureDragonCave();dragonCaveActive=true}
+     if(!dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<12&&nz>DRAGON_CAVE_MOUTH_Z-20&&nz<DRAGON_CAVE_Z+82){ensureDragonCave();dragonCaveActive=true}
      const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<11&&nz>DRAGON_CAVE_MOUTH_Z-11?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
      // Walkable slopes slow naturally as they get steeper. True cliffs remain
      // blocked, preventing the player from stepping through the terrain skin.
-     const inCaveWalk=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<11.5&&nz>DRAGON_CAVE_MOUTH_Z-12&&nz<DRAGON_CAVE_Z+78;
+     const inCaveWalk=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<12&&nz>DRAGON_CAVE_MOUTH_Z-20&&nz<DRAGON_CAVE_Z+82;
      // Inside the authored cave route, caveGroundH is authoritative. Do not re-block downhill movement using overworld step/slope limits.
      const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=inCaveWalk||(!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade);
      if(walkable){
