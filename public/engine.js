@@ -2134,7 +2134,15 @@ function updateAnomalies(dt,t){
  }
 }
 
-let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8),sitting=null,playerJumpY=0,playerJumpV=0;
+let move={x:0,y:0},look={x:0,y:0},sprinting=false,flightThrottle=0,lookSensitivity=T.MathUtils.clamp(world.ui.lookSensitivity||1,.55,1.8),sitting=null,playerJumpY=0,playerJumpV=0,playerGroundY=H(player.x,player.z);
+function cameraSurfaceY(x,z){
+ // Sample around the camera footprint instead of only its exact centre. This
+ // prevents the first-person camera from cutting through steep terrain while
+ // it is smoothing between elevations.
+ let h=H(x,z);
+ for(const ox of[-.28,.28])for(const oz of[-.28,.28])h=Math.max(h,H(x+ox,z+oz));
+ return h
+}
 let worldCtl={weather:'clear',autoTime:true,time:12};
 function bindPad(el,v){
  let id=null,start={x:0,y:0},stick=el.querySelector('i');
@@ -2261,8 +2269,8 @@ $('use').onclick=()=>{
    const exit=findSafeExit(v);
    activeVehicle=null;$('flightControls').classList.add('hidden');$('mine').classList.add('hidden');
    flightThrottle=0;move.x=0;move.y=0;look.x=0;look.y=0;
-   player.x=exit.x;player.z=exit.z;player.yaw=v.yaw;
-   camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
+   player.x=exit.x;player.z=exit.z;player.yaw=v.yaw;playerGroundY=H(player.x,player.z);
+   camera.position.set(player.x,playerGroundY+1.7,player.z);
    toast('Exited '+v.type);refreshUse();return
  }
  let v=nearestVehicle();if(!v)return;
@@ -2659,7 +2667,7 @@ function standFromBench(){
  if(!spot)spot={x:b.x+Math.sin((b.yaw||0)+Math.PI)*3.6,z:b.z+Math.cos((b.yaw||0)+Math.PI)*3.6};
  sitting=null;move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;
  player.x=spot.x;player.z=spot.z;player.yaw=b.exitYaw??player.yaw;
- camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);
+ playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);
  refreshUse();toast('Stood up')
 }
 $('townAction').onclick=()=>{
@@ -2849,7 +2857,7 @@ $('travel').onclick=()=>{
  activeVehicle=null;refreshUse();player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;player.yaw=0;
  $('panel').classList.add('hidden');lastSyncX=1e9;lastSyncZ=1e9;sync(true);
  if(blocked(player.x,player.z)){outer:for(let r=3;r<=18;r+=3)for(let i=0;i<16;i++){let a=i/16*Math.PI*2,x=mapSelected.cx*CH+Math.cos(a)*r,z=mapSelected.cz*CH+Math.sin(a)*r;if(!blocked(x,z)&&Math.abs(H(x,z)-H(player.x,player.z))<3){player.x=x;player.z=z;break outer}}}
- camera.position.set(player.x,H(player.x,player.z)+1.7,player.z);persist();toast('Fast travel complete');
+ playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);persist();toast('Fast travel complete');
 };
 
 let toastTimer;
@@ -2969,7 +2977,7 @@ function updateSurvival(dt,t){
    }
  }
  if(s.health<=0){
-   s.health=100;s.stamina=100;s.energy=Math.max(35,s.energy);player.x=-14.5;player.z=-24;activeVehicle=null;sitting=null;toast('You were recovered at the airfield')
+   s.health=100;s.stamina=100;s.energy=Math.max(35,s.energy);player.x=-14.5;player.z=-24;playerGroundY=H(player.x,player.z);activeVehicle=null;sitting=null;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('You were recovered at the airfield')
  }
  $('healthBar').style.width=s.health+'%';$('staminaBar').style.width=s.stamina+'%';$('energyBar').style.width=s.energy+'%';
  const danger=$('dangerVignette');if(danger)danger.style.opacity=String(T.MathUtils.clamp((45-s.health)/45,0,.72))
@@ -3213,15 +3221,31 @@ function step(dt,t){
        playerJumpY+=playerJumpV*dt;
        if(playerJumpY<=0){playerJumpY=0;playerJumpV=0}
      }
-     let f=move.y,side=move.x,s=(sprinting?8:4.5)*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*s,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*s,nx=player.x+dx,nz=player.z+dz;
-     let dh=Math.abs(H(nx,nz)-H(player.x,player.z)),airborne=playerJumpY>.08;
-     if(!blocked(nx,nz)&&(airborne?dh<1.9:dh<1.15)&&(airborne?slopeAt(nx,nz)<3.4:slopeAt(nx,nz)<2.5)){player.x=nx;player.z=nz}
-     cameraLerpTarget.set(player.x,H(player.x,player.z)+1.7+playerJumpY,player.z)
+     let f=move.y,side=move.x,baseSpeed=(sprinting?8:4.5),step=baseSpeed*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*step,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*step,nx=player.x+dx,nz=player.z+dz;
+     const hereH=H(player.x,player.z),nextH=H(nx,nz),rise=nextH-hereH,grade=slopeAt(nx,nz),airborne=playerJumpY>.08;
+     // Walkable slopes slow naturally as they get steeper. True cliffs remain
+     // blocked, preventing the player from stepping through the terrain skin.
+     const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade;
+     if(walkable){
+       const uphillSlow=rise>0&&!airborne?T.MathUtils.clamp(1-rise/.95,.38,1):1;
+       player.x+=dx*uphillSlow;player.z+=dz*uphillSlow
+     }
+     const groundNow=H(player.x,player.z);
+     // Track the ground quickly uphill and smoothly downhill. This keeps hill
+     // traversal stable without the old vertical camera lag exposing voids.
+     const groundRate=groundNow>playerGroundY?18:10;
+     playerGroundY=T.MathUtils.lerp(playerGroundY,groundNow,1-Math.exp(-dt*groundRate));
+     cameraLerpTarget.set(player.x,playerGroundY+1.7+playerJumpY,player.z)
    }else{
-     playerJumpY=0;playerJumpV=0;
-     cameraLerpTarget.set(player.x,H(player.x,player.z)+1.18,player.z)
+     playerJumpY=0;playerJumpV=0;playerGroundY=T.MathUtils.lerp(playerGroundY,H(player.x,player.z),1-Math.exp(-dt*14));
+     cameraLerpTarget.set(player.x,playerGroundY+1.18,player.z)
    }
-   camera.position.lerp(cameraLerpTarget,0.24);camera.rotation.set(player.pitch,player.yaw,0);
+   camera.position.lerp(cameraLerpTarget,1-Math.exp(-dt*17));
+   // Absolute safety clamp: never let the view camera sit below the rendered
+   // terrain, even after a sharp crest, jump landing or sudden elevation jump.
+   const minCamY=cameraSurfaceY(camera.position.x,camera.position.z)+(sitting?.5:.72);
+   if(camera.position.y<minCamY)camera.position.y=minCamY;
+   camera.rotation.set(player.pitch,player.yaw,0);
  }
 
  let cc=chunkOf(player.x,player.z);
@@ -3315,12 +3339,12 @@ document.oncontextmenu=e=>e.preventDefault();document.addEventListener('selectst
 window.__world={
  state:()=>({near:[...chunks.values()].filter(c=>c.mode==='near').length,far:[...chunks.values()].filter(c=>c.mode==='far').length,cached:chunks.size,animals:animalAgents.length,explored:Object.keys(world.explored).length,pos:{x:player.x,z:player.z},seed}),
  chunk:(x,z)=>JSON.parse(JSON.stringify(descriptor(x,z))),
- teleportChunk:(cx,cz)=>{activeVehicle=null;player.x=cx*CH;player.z=cz*CH;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
+ teleportChunk:(cx,cz)=>{activeVehicle=null;player.x=cx*CH;player.z=cz*CH;playerGroundY=H(player.x,player.z);lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  mapOpen:()=>openMap(),
  animals:()=>animalAgents.slice(0,8).map(a=>({kind:a.kind,x:+a.x.toFixed(2),z:+a.z.toFixed(2),dir:+a.dir.toFixed(2)})),
  vehicles:()=>vehicles.map(v=>{let nose=v.group.localToWorld(new T.Vector3(0,0,2)),tail=v.group.localToWorld(new T.Vector3(0,0,-2));return{type:v.type,x:+v.x.toFixed(2),z:+v.z.toFixed(2),alt:+v.alt.toFixed(2),speed:+(v.speed||0).toFixed(2),pitch:+(v.pitch||0).toFixed(3),roll:+(v.roll||0).toFixed(3),vy:+(v.vy||0).toFixed(2),stalled:!!v.stalled,noseY:+nose.y.toFixed(2),tailY:+tail.y.toFixed(2),active:v===activeVehicle}}),
  anomalies:()=>[...chunks.values()].filter(c=>c.anomaly&&c.mode==='near').map(c=>({type:c.d.anomaly,x:+c.anomaly.position.x.toFixed(1),z:+c.anomaly.position.z.toFixed(1)})),
- teleport:(x,z)=>{player.x=x;player.z=z;activeVehicle=null;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
+ teleport:(x,z)=>{player.x=x;player.z=z;playerGroundY=H(player.x,player.z);activeVehicle=null;lastSyncX=1e9;lastSyncZ=1e9;sync(true);return window.__world.state()},
  setMove:(x,y)=>{move.x=x;move.y=y},setLook:(x,y)=>{look.x=x;look.y=y},
  enterNearest:()=>{let v=nearestVehicle();if(v){activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;refreshUse();return v.type}return null},
  findAnomaly:(r=12)=>{let c=chunkOf(player.x,player.z);for(let z=c.cz-r;z<=c.cz+r;z++)for(let x=c.cx-r;x<=c.cx+r;x++){let d=descriptor(x,z);if(d.anomaly)return{x,z,type:d.anomaly}}return null},
