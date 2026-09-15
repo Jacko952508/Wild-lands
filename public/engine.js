@@ -1237,8 +1237,8 @@ function updateCityTraffic(dt,t){
    const horizontal=Math.abs(dx)>Math.abs(dz),signalGreen=horizontal?cycle<.48:cycle>.58;
    if(c.t>.86&&!signalGreen)c.t=Math.min(c.t,.88);else c.t+=dt*c.speed/len;
    if(c.t>=1){c.t-=1;c.index=(c.index+1)%r.length}
-   const aa=r[c.index%r.length],bb=r[(c.index+1)%r.length],x=T.MathUtils.lerp(aa[0],bb[0],c.t),z=T.MathUtils.lerp(aa[1],bb[1],c.t);
-   c.g.position.set(x,H(x,z)+.03,z);c.g.rotation.y=Math.atan2(bb[0]-aa[0],bb[1]-aa[1])
+   const aa=r[c.index%r.length],bb=r[(c.index+1)%r.length],x=T.MathUtils.lerp(aa[0],bb[0],c.t),z=T.MathUtils.lerp(aa[1],bb[1],c.t),targetYaw=Math.atan2(bb[0]-aa[0],bb[1]-aa[1]);
+   c.g.position.set(x,H(x,z)+.03,z);if(c.yaw==null)c.yaw=targetYaw;let yd=((targetYaw-c.yaw+Math.PI*3)%(Math.PI*2))-Math.PI;c.yaw+=T.MathUtils.clamp(yd,-dt*2.8,dt*2.8);c.g.rotation.y=c.yaw
  }
 }
 
@@ -1247,7 +1247,8 @@ function updateCityTraffic(dt,t){
 // A self-contained expansion on the opposite side of the runway from West Town.
 // ---------------------------------------------------------------------------
 world.robotArena=world.robotArena||{lastA:null,lastB:null,trophies:[],matches:0,winsA:0,winsB:0};
-const robotArenaGroup=new T.Group(),robotArenaLights=[],robotCabinets=[],robotDebris=[];
+const robotArenaGroup=new T.Group(),robotArenaLights=[],robotCabinets=[],robotDebris=[],robotShotPool=[];
+const robotShotGeo=new T.SphereGeometry(1,6,4);for(let i=0;i<(IS_MOBILE?14:22);i++){const m=new T.Mesh(robotShotGeo,new T.MeshBasicMaterial({color:0xffffff,transparent:true,opacity:0,depthWrite:false}));m.visible=false;m.userData.life=0;robotArenaGroup.add(m);robotShotPool.push(m)}let robotShotCursor=0;
 let robotScoreCanvas=null,robotScoreCtx=null,robotScoreTexture=null,robotScoreAt=0,
     robotTerminalScreen=null,robotFeedCameraIndex=0,robotFeedAt=0,robotBossPending=false,robotSpectatorMode=false;
 const robotFeedTarget=new T.WebGLRenderTarget(IS_MOBILE?384:512,IS_MOBILE?216:288,{minFilter:T.LinearFilter,magFilter:T.LinearFilter,depthBuffer:true}),
@@ -1334,6 +1335,9 @@ const robotPartSets={
   {name:'Experimental Core',energy:15,heat:-5,power:6,stability:-2}
  ]
 };
+const robotColours=[
+ {name:'Crimson',a:0xa84032,b:0x934032},{name:'Solar Orange',a:0xd46d2f,b:0xb85f2e},{name:'Magenta',a:0xa84586,b:0x88457d},{name:'Gold',a:0xb6922f,b:0x9f7e31},{name:'Violet',a:0x8055a8,b:0x665099},{name:'Cobalt',a:0x365d9f,b:0x31518d},{name:'Cyan',a:0x2f8a85,b:0x327973},{name:'Emerald',a:0x3e8c55,b:0x36784b},{name:'Ice',a:0x7f9fb4,b:0x668ba5},{name:'Graphite',a:0x555c63,b:0x41484e}
+];
 const robotWeapons=[
  {name:'Spinning Saw',type:'kinetic',damage:15,range:3.2,cooldown:.72,heat:4,desc:'Shreds light armour'},
  {name:'Crushing Hammer',type:'kinetic',damage:23,range:3.5,cooldown:1.35,heat:3,stun:.28,desc:'Huge impact and stun'},
@@ -1350,13 +1354,13 @@ const robotWeapons=[
 function randomRobotConfig(){
  const o={};
  for(const k of Object.keys(robotPartSets))o[k]=Math.floor(Math.random()*10);
- o.weapon=Math.floor(Math.random()*10);
+ o.weapon=Math.floor(Math.random()*10);o.color=Math.floor(Math.random()*10);
  return o
 }
 function normalRobotConfig(c){
  c=c||{};const o={};
  for(const k of Object.keys(robotPartSets))o[k]=T.MathUtils.clamp(Number(c[k])||0,0,9)|0;
- o.weapon=T.MathUtils.clamp(Number(c.weapon)||0,0,9)|0;return o
+ o.weapon=T.MathUtils.clamp(Number(c.weapon)||0,0,9)|0;o.color=T.MathUtils.clamp(Number(c.color)||0,0,9)|0;return o
 }
 function robotStats(c){
  c=normalRobotConfig(c);
@@ -1377,8 +1381,7 @@ function robotMaterial(hex){return new T.MeshStandardMaterial({color:hex,roughne
 
 function makeCombatRobot(c,team=0,mini=false){
  c=normalRobotConfig(c);
- const palettesA=[0xa84032,0xd46d2f,0x9c3e75,0xb6922f,0x7d4132,0xc64d5a,0x8055a8,0xb65d28,0x8f6b35,0xd57c54],palettesB=[0x365d9f,0x2f8a85,0x4f6fb8,0x3e8c55,0x5a55a8,0x2b7894,0x55748b,0x3c82b5,0x50714d,0x527cc2],
-       chosen=(team?palettesB:palettesA)[(c.head+c.torso+c.armour+c.weapon)%10],
+ const chosen=team?robotColours[c.color].b:robotColours[c.color].a,
        g=new T.Group(),primary=robotMaterial(chosen),dark=robotMaterial(0x20262b),steel=robotMaterial(c.armour===3?0x9aa6ad:c.armour===5?0x745f4d:0x737d83),
        glowColor=team?([0x75b9ff,0x74ffd8,0x9aa4ff][c.core%3]):([0xffa66d,0xff6f91,0xffd46e][c.core%3]),
        glow=new T.MeshStandardMaterial({color:glowColor,emissive:glowColor,emissiveIntensity:.72,roughness:.25});
@@ -1526,6 +1529,8 @@ function robotFieldMarkup(side){
    const opts=robotPartSets[k].map((p,i)=>'<option value="'+i+'" '+(cfg[k]===i?'selected':'')+'>'+p.name+'</option>').join('');
    rows.push('<label class="robotField"><span>'+k.toUpperCase()+'</span><select data-side="'+side+'" data-part="'+k+'">'+opts+'</select></label>')
  }
+ const copts=robotColours.map((c,i)=>'<option value="'+i+'" '+(cfg.color===i?'selected':'')+'>'+c.name+'</option>').join('');
+ rows.push('<label class="robotField"><span>COLOUR</span><select data-side="'+side+'" data-part="color">'+copts+'</select></label>');
  const wopts=robotWeapons.map((w,i)=>'<option value="'+i+'" '+(cfg.weapon===i?'selected':'')+'>'+w.name+'</option>').join('');
  rows.push('<label class="robotField"><span>WEAPON</span><select data-side="'+side+'" data-part="weapon">'+wopts+'</select></label>');return rows.join('')
 }
@@ -1602,9 +1607,24 @@ function startRobotBattle(mode='screen'){
 }
 $('startRobotMatch').onclick=()=>startRobotBattle('screen');
 
+function spawnRobotShot(att,def,w){
+ if(w.range<5)return;
+ const m=robotShotPool[robotShotCursor++%robotShotPool.length],from=att.group.position.clone().add(new T.Vector3(0,3.8,0)),to=def.group.position.clone().add(new T.Vector3(0,3.1,0));
+ const col=w.type==='shock'?0x66eeff:w.type==='heat'?0xff7d35:w.type==='energy'?0x9efcff:w.type==='explosive'?0xffc34d:w.type==='ballistic'?0xffe4a7:0xffffff;
+ m.material.color.setHex(col);m.material.opacity=.95;m.visible=true;m.position.copy(from);
+ m.scale.setScalar(w.type==='explosive'?.28:w.type==='heat'?.18:.11);
+ m.userData.life=w.type==='explosive'?.42:.22;m.userData.max=m.userData.life;m.userData.from=from;m.userData.to=to
+}
+function updateRobotShots(dt){
+ for(const m of robotShotPool){
+   if(!m.visible)continue;m.userData.life-=dt;
+   const q=1-Math.max(0,m.userData.life)/m.userData.max;m.position.lerpVectors(m.userData.from,m.userData.to,q);m.material.opacity=Math.max(0,m.userData.life/m.userData.max);
+   if(m.userData.life<=0)m.visible=false
+ }
+}
 function attackRobot(att,def,t){
  const w=att.weapon,ap=att.group.position,dp=def.group.position,d=ap.distanceTo(dp);if(d>w.range||att.cool>0||att.stun>0)return;
- att.cool=Math.max(.14,(w.cooldown+(att.stats.cooldown||0))*(1+att.heat*.012));
+ att.cool=Math.max(.14,(w.cooldown+(att.stats.cooldown||0))*(1+att.heat*.012));spawnRobotShot(att,def,w);
  const miss=T.MathUtils.clamp((w.miss||0)+def.stats.dodge-(att.config.head===1||att.config.head===3?0.05:0),0,.45);
  if(Math.random()<miss){combatEffect(dp,'ballistic');return}
  const dmg=robotDamage(att,def);def.hp-=dmg;def.recoil=Math.min(1,(def.recoil||0)+.35+dmg*.012);att.attackAnim=1;
@@ -1672,7 +1692,7 @@ function updateRobotFeed(force=false){
  renderer.setClearColor(oldClear,oldAlpha);scene.background=oldBg;scene.fog=oldFog;robotTerminalScreen.visible=vis
 }
 function updateRobotArena(dt,t){
- updateRobotScoreboard();
+ updateRobotScoreboard();updateRobotShots(dt);
  // Lightweight weapon idle animation even outside battles.
  if(robotMatch&&robotMatch.phase==='fight'){
    robotMatch.time+=dt;
@@ -2091,6 +2111,7 @@ function loadAnimals(c){
  let saved=world.animalState[c.k]||[];
  c.d.animals.forEach((q,i)=>{
    let st=saved[i],x=st?st.x:c.cx*CH+q[0],z=st?st.z:c.cz*CH+q[1],dir=st?st.dir:hash(c.cx*9+i,c.cz*7-i,200)*Math.PI*2;
+   if(inCityZone(x,z)||inStartClearZone(x,z))return;
    let g=animalModel(q[2]);g.position.set(x,H(x,z),z);scene.add(g);
    let a={chunk:c.k,index:i,kind:q[2],group:g,x,z,homeX:c.cx*CH+q[0],homeZ:c.cz*CH+q[1],dir,target:dir,speed:q[2]==='fox'?1.35:q[2]==='wolf'?1.2:q[2]==='deer'?1.0:0.72,stateT:2+hash(c.cx+i,c.cz-i,201)*5,phase:hash(c.cx-i,c.cz+i,202)*6.28,hp:q[2]==='boar'?4:q[2]==='wolf'?3:2,fear:0};
    c.agents.push(a);animalAgents.push(a);
@@ -2143,7 +2164,7 @@ function blocked(x,z,radius=0.6,ignoreVehicle=null){
    if(!insideDoorway(moonDoorways,x,z,radius)&&colliderListBlocked(moonColliders,x,z,radius))return true
  }else{
    if(colliderListBlocked(colliders,x,z,radius))return true;
-   if(!insideDoorway(cityDoorways,x,z,radius)&&colliderListBlocked(cityColliders,x,z,radius))return true;
+   if(inCityZone(x,z)&&!insideDoorway(cityDoorways,x,z,radius)&&colliderListBlocked(cityColliders,x,z,radius))return true;
    if(!insideDoorway(startDoorways,x,z,radius)&&colliderListBlocked(startColliders,x,z,radius))return true;
    if(colliderListBlocked(buildColliders,x,z,radius))return true
  }
@@ -2263,6 +2284,7 @@ function updateTownHumans(t){
  for(const h of townHumans){
    const u=h.userData,p=u.phase||0,dt=.033;
    const d=Math.hypot(player.x-h.position.x,player.z-h.position.z);
+   if(d>145){h.visible=false;continue}else h.visible=true;
    let walking=false;
    if(u.wander&&d>4.5){
      u.moveT-=dt;
@@ -3120,7 +3142,7 @@ function updateSky(time,dt=0.016){
  }
  const earthScene=!moonMode&&spaceFactor<0.88,
        airfieldNear=Math.hypot(player.x,player.z)<340,
-       townNear=Math.hypot(player.x+230,player.z)<300,
+       townNear=Math.hypot(player.x+126,player.z-6)<240,
       arenaNear=Math.hypot(player.x-132,player.z)<390;
  startBase.visible=earthScene&&airfieldNear;
  cityGroup.visible=earthScene&&townNear;
