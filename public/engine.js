@@ -2283,8 +2283,8 @@ function updateAnimals(dt,t){
 function updateTownHumans(t){
  for(const h of townHumans){
    const u=h.userData,p=u.phase||0,dt=.033;
-   const d=Math.hypot(player.x-h.position.x,player.z-h.position.z);
-   if(d>145){h.visible=false;continue}else h.visible=true;
+   const d=Math.hypot(player.x-h.position.x,player.z-h.position.z),humanCull=IS_MOBILE?88:145;
+   if(d>humanCull){h.visible=false;continue}else h.visible=true;
    let walking=false;
    if(u.wander&&d>4.5){
      u.moveT-=dt;
