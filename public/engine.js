@@ -150,6 +150,8 @@ function earthRawH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0
 const START_PLATEAU=earthRawH(0,0);
 const TOWN_LEVEL=earthRawH(-126,8);
 const ARENA_LEVEL=earthRawH(132,0);
+// Dragon cave entrance is deliberately beside the south end of the runway, not hidden out in procedural terrain.
+const DRAGON_CAVE_X=49,DRAGON_CAVE_Z=34,DRAGON_CAVE_MOUTH_Z=41;
 function earthH(x,z){
   const raw=earthRawH(x,z),edge=Math.max(Math.abs(x),Math.abs(z));
   if(edge<=46)return START_PLATEAU;
@@ -166,6 +168,10 @@ function earthH(x,z){
   const ax=Math.max(0,72-x,x-194),az=Math.max(0,Math.abs(z)-72),ad=Math.max(ax,az);
   if(ad<=0)return ARENA_LEVEL;
   if(ad<12)return T.MathUtils.lerp(ARENA_LEVEL,raw,smooth(ad/12));
+
+  // Keep the cave approach readable and walkable from the runway edge.
+  const caveD=Math.hypot(x-DRAGON_CAVE_X,z-DRAGON_CAVE_MOUTH_Z);
+  if(caveD<13)return T.MathUtils.lerp(START_PLATEAU,raw,smooth(T.MathUtils.clamp((caveD-7)/6,0,1)));
   return raw
 }
 function moonRawH(x,z){
@@ -552,7 +558,14 @@ function makeDragon(x,z,worldY){
  g.position.set(x,worldY==null?H(x,z)+.3:worldY,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0,caveY:worldY};vehicles.push(v);dragon=v;return v
 }
 function makeDragonCave(){
- const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x171514,roughness:1}),rock2=new T.MeshStandardMaterial({color:0x302925,roughness:1}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=24,cz=76,surface=H(cx,cz),floorY=surface-31;
+ const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x171514,roughness:1}),rock2=new T.MeshStandardMaterial({color:0x302925,roughness:1}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=H(cx,cz),floorY=surface-31;
+ // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
+ const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
+ for(let i=0;i<15;i++){const a=Math.PI*i/14,b=new T.Mesh(new T.DodecahedronGeometry(2.7+(i%3)*.5,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*10.5,mouthY+Math.sin(a)*8.5,mouthZ);b.scale.set(1.25,1.1,1.55);g.add(b)}
+ const mouthGlow=new T.PointLight(0xff5a16,7.5,58,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ+3);g.add(mouthGlow);
+ const emberMat=new T.MeshBasicMaterial({color:0xff6a19});for(const sx of[-1,1]){const e=new T.Mesh(new T.ConeGeometry(.42,1.8,8),emberMat);e.position.set(cx+sx*7.4,mouthY+.9,mouthZ-.6);g.add(e)}
+ townText(g,'DRAGON CAVERN',cx,mouthY+10.7,mouthZ-.7,9.8,1.35);
+ townInteractions.push({x:cx,z:mouthZ-4,type:'cityInfo',label:'DRAGON CAVERN',message:'Dragon Cavern • descend through the glowing stone mouth'});
  // A descending stone throat leads to a genuinely subterranean chamber ~30m below terrain.
  for(let j=0;j<9;j++){const zz=cz-26+j*6,yy=surface-2-j*3.55;for(let i=0;i<12;i++){const a=i/12*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(3.1+(i%3)*.45,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*9.2,yy+Math.sin(a)*7.1,zz);b.scale.z=1.35;g.add(b)}}
  // Huge underground vault, rough stone shell, with an unobstructed central flight corridor back to the tunnel.
@@ -3137,7 +3150,8 @@ function renderMap(){
    if(d&&d.mark)b.classList.add('landmark');
    if(d&&d.anomaly)b.classList.add('anomaly');
    if(x===0&&z===0)b.classList.add('airfield');
-   b.title=regionName(x,z)+' · '+x+', '+z;
+   if(x===1&&z===0){b.classList.add('landmark');b.title='Dragon Cavern · runway east'}
+   else b.title=regionName(x,z)+' · '+x+', '+z;
    b.disabled=!isExplored;
    if(isExplored)b.onclick=()=>{mapSelected={cx:x,cz:z};renderMap()};
    grid.appendChild(b);
@@ -3145,6 +3159,7 @@ function renderMap(){
  if(mapSelected){
    let k=key(mapSelected.cx,mapSelected.cz),d=world.saved[k],label=regionName(mapSelected.cx,mapSelected.cz)+' · '+mapSelected.cx+', '+mapSelected.cz+' • '+biome(mapSelected.cx*CH,mapSelected.cz*CH);
    if(mapSelected.cx===0&&mapSelected.cz===0)label+=' • Airfield';
+   if(mapSelected.cx===1&&mapSelected.cz===0)label+=' • Dragon Cavern';
    if(d&&d.mark)label+=' • '+(d.mark==='ring'?'Stone Ring':'Lookout Tower');
    if(d&&d.anomaly)label+=' • Unexplained signal';
    $('mapInfo').textContent=label;$('travel').disabled=false;
@@ -3357,7 +3372,7 @@ function step(dt,t){
      const horiz=Math.cos(v.pitch)*v.speed;v.x+=Math.sin(v.yaw)*horiz*dt;v.z+=Math.cos(v.yaw)*horiz*dt;
      v.vy=T.MathUtils.lerp(v.vy,Math.sin(v.pitch)*v.speed+(flightThrottle-.45)*5,Math.min(1,dt*1.8));v.worldY+=v.vy*dt;
      // Below the cave mouth the dragon is allowed to remain subterranean; once outside, terrain becomes its floor.
-     const inCave=Math.hypot(v.x-24,v.z-110)<78&&v.worldY<surface+3;if(!inCave&&v.worldY<surface+.4){v.worldY=surface+.4;v.vy=Math.max(0,v.vy)}
+     const inCave=Math.hypot(v.x-DRAGON_CAVE_X,v.z-(DRAGON_CAVE_Z+34))<78&&v.worldY<surface+3;if(!inCave&&v.worldY<surface+.4){v.worldY=surface+.4;v.vy=Math.max(0,v.vy)}
      v.alt=v.worldY-surface;v.airborne=true;v.stalled=false;v.group.position.set(v.x,v.worldY,v.z);v.group.rotation.set(-v.pitch,v.yaw,v.roll,'XYZ');
    }else if(v.kind==='heli'){
      // GTA-style helicopter handling: stick tilts the aircraft, tilt creates
