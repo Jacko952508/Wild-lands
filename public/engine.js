@@ -127,7 +127,7 @@ if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalS
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
-if(!player)player={x:-14.5,z:-24,yaw:Math.PI/2,pitch:-0.03};
+if(!player)player={x:-13.25,z:-24,yaw:-Math.PI/2,pitch:0};
 
 const seed=world.seed;
 const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
@@ -760,21 +760,40 @@ function startBox(parent,x,y,z,w,h,d,mat,collide=false){
  if(collide)startColliders.push({x,z,hx:w/2,hz:d/2});
  return m
 }
+let welcomeDisplay=null;
 function makeWelcomeScreen(parent,x,y,z){
- const cv=document.createElement('canvas');cv.width=512;cv.height=256;
- const ctx=cv.getContext('2d');
- ctx.fillStyle='#061014';ctx.fillRect(0,0,512,256);
- ctx.strokeStyle='#76f7ff';ctx.lineWidth=8;ctx.strokeRect(8,8,496,240);
- ctx.fillStyle='#9ffcff';ctx.textAlign='center';ctx.font='bold 35px Arial';
- ctx.fillText('WELCOME TO THE GAME',256,92);
- ctx.font='bold 29px Arial';ctx.fillText('GO EXPLORE!',256,150);
- ctx.font='18px Arial';ctx.fillStyle='#c8ffff';ctx.fillText('AIRFIELD // BASE ONLINE',256,202);
- const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;
- const mat=new T.MeshStandardMaterial({map:tex,emissive:0x103c42,emissiveIntensity:1.4,roughness:.28});
- const scr=new T.Mesh(new T.PlaneGeometry(5.4,2.7),mat);
+ const cv=document.createElement('canvas');cv.width=768;cv.height=432;
+ const ctx=cv.getContext('2d'),tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;tex.minFilter=T.LinearFilter;
+ const mat=new T.MeshBasicMaterial({map:tex,toneMapped:false});
+ const scr=new T.Mesh(new T.PlaneGeometry(7.15,4.02),mat);
  scr.position.set(x,y,z);scr.rotation.y=Math.PI/2;parent.add(scr);
- const glow=new T.PointLight(0x72efff,1.6,8);glow.position.set(x+1,y,z);parent.add(glow);
+ // Thin physical bezel: from the spawn point it reads as a full-screen menu until the player moves.
+ const bezel=new T.MeshStandardMaterial({color:0x071015,metalness:.8,roughness:.22});
+ startBox(parent,x-.035,y+2.12,z,0.13,.12,7.48,bezel,false);startBox(parent,x-.035,y-2.12,z,0.13,.12,7.48,bezel,false);
+ startBox(parent,x-.035,y,z-3.68,.13,4.35,.12,bezel,false);startBox(parent,x-.035,y,z+3.68,.13,4.35,.12,bezel,false);
+ welcomeDisplay={cv,ctx,tex,last:-1};drawWelcomeScreen(0,true);
  return scr
+}
+function drawWelcomeScreen(t,force=false){
+ if(!welcomeDisplay)return;const d=welcomeDisplay,frame=Math.floor(t*12);if(!force&&frame===d.last)return;d.last=frame;
+ const c=d.ctx,w=d.cv.width,h=d.cv.height,pulse=.5+.5*Math.sin(t*2.4),scan=(t*85)%h;
+ let g=c.createLinearGradient(0,0,w,h);g.addColorStop(0,'#02070b');g.addColorStop(.48,'#071a22');g.addColorStop(1,'#020609');c.fillStyle=g;c.fillRect(0,0,w,h);
+ // animated topographic/radar field
+ c.save();c.globalAlpha=.18;c.strokeStyle='#55eaff';c.lineWidth=1;
+ for(let r=35;r<390;r+=38){c.beginPath();for(let a=0;a<=Math.PI*2+.1;a+=.12){const rr=r+Math.sin(a*5+t*1.4+r)*7,x=w*.5+Math.cos(a)*rr,y=h*.54+Math.sin(a)*rr*.42;a?c.lineTo(x,y):c.moveTo(x,y)}c.stroke()}
+ c.globalAlpha=.12;for(let x=0;x<w;x+=48){c.beginPath();c.moveTo(x,0);c.lineTo(x,h);c.stroke()}for(let y=0;y<h;y+=48){c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke()}c.restore();
+ c.fillStyle='rgba(80,235,255,.08)';c.fillRect(0,scan,w,3);c.fillStyle='rgba(80,235,255,.025)';c.fillRect(0,scan-24,w,48);
+ c.textAlign='center';c.shadowColor='#63efff';c.shadowBlur=14+8*pulse;c.fillStyle='#e9fdff';c.font='900 55px Arial';c.fillText('WILDLANDS',w/2,92);c.font='700 20px Arial';c.fillStyle='#78efff';c.fillText('I M M U T A B L E',w/2,124);c.shadowBlur=0;
+ const phase=(t%12);let title,lines;
+ if(phase<3.2){title='SYSTEM WAKE';lines=['WILDERNESS LINK ESTABLISHED','AIRFIELD HABITAT ONLINE','MOVE TO BREAK THE INTERFACE'];}
+ else if(phase<6.3){title='HOW TO MOVE';lines=['LEFT THUMB  •  WALK / STRAFE','RIGHT SIDE  •  LOOK AROUND','SPRINT  •  HOLD WHILE MOVING'];}
+ else if(phase<9.2){title='SURVIVE + EXPLORE';lines=['INTERACT WITH VEHICLES, PEOPLE & OBJECTS','CRAFT • BUILD • COMPLETE MISSIONS','THE WORLD CONTINUES BEYOND THIS ROOM'];}
+ else{title='YOU ARE ALREADY IN THE GAME';lines=['THIS IS NOT A MENU','TURN AROUND • WALK OUT • EXPLORE','YOUR JOURNEY STARTS NOW'];}
+ c.fillStyle='rgba(2,12,17,.82)';c.fillRect(112,158,w-224,178);c.strokeStyle=`rgba(104,241,255,${.45+.3*pulse})`;c.lineWidth=2;c.strokeRect(112,158,w-224,178);
+ c.fillStyle='#8df4ff';c.font='800 22px Arial';c.fillText(title,w/2,196);c.font='600 17px Arial';c.fillStyle='#d7fbff';lines.forEach((s,i)=>c.fillText(s,w/2,235+i*31));
+ c.font='700 14px Arial';c.fillStyle=`rgba(132,246,255,${.55+.4*pulse})`;c.fillText('NO START BUTTON REQUIRED  //  MOVE WHEN READY',w/2,386);
+ c.textAlign='left';c.font='12px monospace';c.fillStyle='#58b9c4';c.fillText('AIRFIELD NODE 01',22,26);c.textAlign='right';c.fillText('LIVE WORLD // '+String(Math.floor(t)%1000).padStart(3,'0'),w-22,26);
+ d.tex.needsUpdate=true
 }
 function runwayStrip(){
  let g=new T.Group(),y=START_PLATEAU;
@@ -3179,6 +3198,8 @@ function updateSky(time,dt=0.016){
    sun.intensity=Math.max(sun.intensity,0.18+spaceFactor*0.55);
  }
  for(const l of flashingRunwayLights){const pulse=.28+.72*(.5+.5*Math.sin(time*5.2-l.phase));l.mesh.material.opacity=pulse;l.mesh.scale.setScalar(.85+pulse*.5)}
+ // The briefing-room display is a real in-world animated canvas, not a DOM/menu overlay.
+ if(startBase.visible&&Math.hypot(player.x+14.5,player.z+24)<42)drawWelcomeScreen(time);
  updateManagedLights(day);
  if(updateUi)document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
 }
