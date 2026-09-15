@@ -577,7 +577,7 @@ function makeDragonCave(){
  // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
  const lavaPts=[];for(let i=0;i<8;i++)lavaPts.push(new T.Vector3(cx-10+Math.sin(i*.9)*2.2,floorY+.12,cz+10+i*8));const lavaCurve=new T.CatmullRomCurve3(lavaPts),stream=new T.Mesh(new T.TubeGeometry(lavaCurve,48,1.25,8,false),lava);g.add(stream);
  // Torch sconces alternate along both walls. Each has a visible flame and local warm light.
- const flameMat=new T.MeshBasicMaterial({color:0xffa126});for(let i=0;i<8;i++)for(const sx of[-1,1]){const z=cz+8+i*8,y=floorY+3.2;const pole=new T.Mesh(new T.CylinderGeometry(.07,.1,1.3,6),dark);pole.position.set(cx+sx*13.5,y,z);pole.rotation.z=sx*.5;g.add(pole);const flame=new T.Mesh(new T.ConeGeometry(.24,.75,7),flameMat);flame.position.set(cx+sx*13.15,y+.72,z);g.add(flame);if(i%2===0){const l=new T.PointLight(0xff7628,2.8,15,1.8);l.position.copy(flame.position);g.add(l)}}
+ const torchMetal=new T.MeshStandardMaterial({color:0x24130d,roughness:.8,metalness:.25}),flameMat=new T.MeshBasicMaterial({color:0xffa126});for(let i=0;i<8;i++)for(const sx of[-1,1]){const z=cz+8+i*8,y=floorY+3.2;const pole=new T.Mesh(new T.CylinderGeometry(.07,.1,1.3,6),torchMetal);pole.position.set(cx+sx*13.5,y,z);pole.rotation.z=sx*.5;g.add(pole);const flame=new T.Mesh(new T.ConeGeometry(.24,.75,7),flameMat);flame.position.set(cx+sx*13.15,y+.72,z);g.add(flame);if(i%2===0){const l=new T.PointLight(0xff7628,2.8,15,1.8);l.position.copy(flame.position);g.add(l)}}
  // Stalactites/stalagmites and a raised dragon roost at the deepest end.
  for(let i=0;i<20;i++){const x=cx-14+hash(i,4,7)*28,z=cz+8+hash(i,9,11)*58,h=1.5+hash(i,12,3)*4;const s=new T.Mesh(new T.ConeGeometry(.35+hash(i,6,2)*.7,h,7),i%2?rock:rock2);s.position.set(x,floorY+h*.5,z);g.add(s)}
  const roost=new T.Mesh(new T.CylinderGeometry(6.5,8,1.8,12),rock2);roost.position.set(cx+5,floorY+.9,cz+62);g.add(roost);
@@ -923,7 +923,6 @@ function runwayStrip(){
  const tpCore=new T.Mesh(new T.CircleGeometry(1.18,32),new T.MeshBasicMaterial({color:0x321008}));tpCore.rotation.x=-Math.PI/2;tpCore.position.set(-13.4,y+.12,-17.2);g.add(tpCore);
  const tpLight=new T.PointLight(0xff5a16,4.5,13,1.7);tpLight.position.set(-13.4,y+1.2,-17.2);g.add(tpLight);
  townText(g,'DRAGON CAVE',-13.4,y+2.9,-17.5,4.7,.72);
- townInteractions.push({x:-13.4,z:-17.2,type:'dragonTeleport',label:'TELEPORT TO DRAGON CAVE',destination:'cave'});
 
  // High-output hangar flood lighting.
  for(const z of[-34,-28,-22,-16,-12]){
@@ -1072,6 +1071,8 @@ function cityBuilding(parent,cx,cz,w,d,h,mat,type,label){
  furnishRoom(parent,cx,cz,w,d,type,y);
 }
 const townInteractions=[],townHumans=[];
+// Register the hangar teleporter only after the interaction registry exists.
+townInteractions.push({x:-13.4,z:-17.2,type:'dragonTeleport',label:'TELEPORT TO DRAGON CAVE',destination:'cave'});
 function townText(parent,text,x,y,z,w=7,h=1.15){
  const cv=document.createElement('canvas');cv.width=512;cv.height=96;const ctx=cv.getContext('2d');
  ctx.fillStyle='#151b1d';ctx.fillRect(0,0,512,96);ctx.strokeStyle='#8fe6c1';ctx.lineWidth=5;ctx.strokeRect(3,3,506,90);
