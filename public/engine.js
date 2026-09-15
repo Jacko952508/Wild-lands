@@ -324,7 +324,10 @@ function terrain(cx,cz,seg){
    terrainColorTmp.multiplyScalar(.91+hash(wx*.3,wz*.3,9)*.11);
    colors[i*3]=terrainColorTmp.r;colors[i*3+1]=terrainColorTmp.g;colors[i*3+2]=terrainColorTmp.b
  }
- g.setAttribute('color',new T.BufferAttribute(colors,3));g.computeVertexNormals();
+ g.setAttribute('color',new T.BufferAttribute(colors,3));
+ // Real Dragon Cavern opening: remove terrain triangles over the shaft instead of drawing cave geometry underneath an intact map floor.
+ if(!moonMode&&g.index){const src=Array.from(g.index.array),cut=[];for(let k=0;k<src.length;k+=3){const a=src[k],b=src[k+1],c=src[k+2],mx=(worldX[a]+worldX[b]+worldX[c])/3,mz=(worldZ[a]+worldZ[b]+worldZ[c])/3;if(Math.hypot(mx-DRAGON_CAVE_X,mz-DRAGON_CAVE_Z)>11.5)cut.push(a,b,c)}g.setIndex(cut)}
+ g.computeVertexNormals();
  const mesh=new T.Mesh(g,terrainMaterial);
  mesh.position.set(cx*CH,0,cz*CH);mesh.receiveShadow=seg>12;return mesh
 }
@@ -573,7 +576,11 @@ function makeDragonCave(){
  for(let j=0;j<9;j++){const zz=cz-26+j*6,yy=surface-2-j*3.55;for(let i=0;i<12;i++){const a=i/12*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(3.1+(i%3)*.45,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*9.2,yy+Math.sin(a)*7.1,zz);b.scale.z=1.35;g.add(b)}}
  // Huge underground vault, rough stone shell, with an unobstructed central flight corridor back to the tunnel.
  for(let j=0;j<7;j++)for(let i=0;i<18;i++){const a=i/18*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(4.2+(i+j)%3*.65,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*(17+j*.45),floorY+8+Math.sin(a)*11,cz+29+j*5.5);b.scale.set(1.25,1.1,1.7);g.add(b)}
- const floor=new T.Mesh(new T.PlaneGeometry(35,68,1,1),rock2);floor.rotation.x=-Math.PI/2;floor.position.set(cx,floorY,cz+42);g.add(floor);
+ // The shaft is now a true vertical void through the terrain, with its own rock walls and a completely separate cavern floor 31m below the world surface.
+ const shaft=new T.Mesh(new T.CylinderGeometry(11.3,12.8,31,32,1,true),new T.MeshStandardMaterial({color:0x211b18,roughness:1,side:T.BackSide}));shaft.position.set(cx,surface-15.5,cz);g.add(shaft);
+ for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=11.6+(i%3)*.7,b=new T.Mesh(new T.DodecahedronGeometry(2.2+(i%2)*.55,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*r,surface-.8,cz+Math.sin(a)*r);b.scale.set(1.25,.8,1.25);g.add(b)}
+ const floor=new T.Mesh(new T.PlaneGeometry(38,84,1,1),rock2);floor.rotation.x=-Math.PI/2;floor.position.set(cx,floorY,cz+32);g.add(floor);
+ const shaftFloor=new T.Mesh(new T.CircleGeometry(12.7,32),rock2);shaftFloor.rotation.x=-Math.PI/2;shaftFloor.position.set(cx,floorY+.02,cz);g.add(shaftFloor);
  // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
  const lavaPts=[];for(let i=0;i<8;i++)lavaPts.push(new T.Vector3(cx-10+Math.sin(i*.9)*2.2,floorY+.12,cz+10+i*8));const lavaCurve=new T.CatmullRomCurve3(lavaPts),stream=new T.Mesh(new T.TubeGeometry(lavaCurve,48,1.25,8,false),lava);g.add(stream);
  // Torch sconces alternate along both walls. Each has a visible flame and local warm light.
@@ -599,7 +606,9 @@ function updateDragonFire(dt){
 // Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
 // Dragon cavern is part of the same game file, but is created only when the player actually uses the hangar teleporter.
 // This keeps all cave code/assets local while removing cave construction entirely from startup.
-let dragonCaveBuilt=false;
+let dragonCaveBuilt=false,dragonCaveActive=false;
+function dragonCaveFloor(){return H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31}
+function caveGroundH(x,z){return dragonCaveActive&&Math.abs(x-DRAGON_CAVE_X)<19&&z>DRAGON_CAVE_Z-13&&z<DRAGON_CAVE_Z+76?dragonCaveFloor():H(x,z)}
 function ensureDragonCave(){if(dragonCaveBuilt)return true;try{makeDragonCave();dragonCaveBuilt=true;return true}catch(e){console.error('Dragon cave init',e);return false}}
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
@@ -3007,9 +3016,9 @@ $('townAction').onclick=()=>{
    activeVehicle=null;robotSpectatorMode=false;
    if(a.destination==='cave'){
      if(!ensureDragonCave()){toast('Dragon Cavern failed to initialise');return}
-     const floorY=H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31;player.x=DRAGON_CAVE_X+10;player.z=DRAGON_CAVE_Z+50;player.yaw=Math.PI;playerGroundY=floorY+.2;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Dragon Cavern • deep underground')
+     dragonCaveActive=true;const floorY=dragonCaveFloor();player.x=DRAGON_CAVE_X;player.z=DRAGON_CAVE_Z+12;player.yaw=0;playerGroundY=floorY+.2;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Dragon Cavern • 31m below the surface')
    }else{
-     player.x=-13.4;player.z=-19.4;player.yaw=0;playerGroundY=START_PLATEAU;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Returned to hangar')
+     dragonCaveActive=false;player.x=-13.4;player.z=-19.4;player.yaw=0;playerGroundY=START_PLATEAU;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Returned to hangar')
    }
    persist();refreshUse()
  }
@@ -3591,7 +3600,7 @@ function step(dt,t){
        if(playerJumpY<=0){playerJumpY=0;playerJumpV=0}
      }
      let f=move.y,side=move.x,baseSpeed=(sprinting?8:4.5),step=baseSpeed*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*step,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*step,nx=player.x+dx,nz=player.z+dz;
-     const hereH=H(player.x,player.z),nextH=H(nx,nz),rise=nextH-hereH,grade=slopeAt(nx,nz),airborne=playerJumpY>.08;
+     const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
      // Walkable slopes slow naturally as they get steeper. True cliffs remain
      // blocked, preventing the player from stepping through the terrain skin.
      const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade;
@@ -3599,14 +3608,14 @@ function step(dt,t){
        const uphillSlow=rise>0&&!airborne?T.MathUtils.clamp(1-rise/.95,.38,1):1;
        player.x+=dx*uphillSlow;player.z+=dz*uphillSlow
      }
-     const groundNow=H(player.x,player.z);
+     const groundNow=caveGroundH(player.x,player.z);
      // Track the ground quickly uphill and smoothly downhill. This keeps hill
      // traversal stable without the old vertical camera lag exposing voids.
      const groundRate=groundNow>playerGroundY?18:10;
      playerGroundY=T.MathUtils.lerp(playerGroundY,groundNow,1-Math.exp(-dt*groundRate));
      cameraLerpTarget.set(player.x,playerGroundY+1.7+playerJumpY,player.z)
    }else{
-     playerJumpY=0;playerJumpV=0;playerGroundY=T.MathUtils.lerp(playerGroundY,H(player.x,player.z),1-Math.exp(-dt*14));
+     playerJumpY=0;playerJumpV=0;playerGroundY=T.MathUtils.lerp(playerGroundY,caveGroundH(player.x,player.z),1-Math.exp(-dt*14));
      cameraLerpTarget.set(player.x,playerGroundY+1.18,player.z)
    }
    camera.position.lerp(cameraLerpTarget,1-Math.exp(-dt*17));
