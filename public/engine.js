@@ -138,7 +138,8 @@ try{if(localStorage.getItem('wi_intro_align_v54')!=='1'&&player.x>-30&&player.x<
 const seed=world.seed;
 const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
 let currentChunk='',saveTimer=0,lastSyncX=1e9,lastSyncZ=1e9,syncGeneration=0,exploredCount=Object.keys(world.explored).length;
-let mapView={cx:0,cz:0},mapSelected=null;
+let mapView={cx:0,cz:0},mapSelected=null,mapRealm='earth';
+world.moonExplored=world.moonExplored||{};
 
 function key(x,z){return x+','+z}
 function chunkOf(x,z){return {cx:Math.floor((x+CH/2)/CH),cz:Math.floor((z+CH/2)/CH)}}
@@ -3204,9 +3205,28 @@ $('timeSlider').addEventListener('input',e=>{worldCtl.time=+e.target.value;world
 $('autoTime').onclick=()=>{worldCtl.autoTime=!worldCtl.autoTime;$('autoTime').textContent='AUTO TIME: '+(worldCtl.autoTime?'ON':'OFF')};
 document.querySelectorAll('.weatherButtons button').forEach(b=>b.onclick=()=>{worldCtl.weather=b.dataset.weather;document.querySelectorAll('.weatherButtons button').forEach(x=>x.classList.toggle('active',x===b))});
 
+function lunarMapCell(x,z){return Math.floor(x/30)+','+Math.floor(z/30)}
+function lunarCellCenter(cx,cz){return{x:cx*30+15,z:cz*30+15}}
+function lunarRegionName(cx,cz){
+ const names=['Tranquility Reach','Tycho Highlands','Mare Umbra','Artemis Ridge','Kepler Dustlands','Copernicus Basin','Aitken Expanse','Selene Flats'];
+ return names[Math.floor(hash(cx,cz,931)*names.length)]
+}
+function lunarLandmarkAt(cx,cz){
+ const c=lunarCellCenter(cx,cz),near=(x,z,r)=>Math.hypot(c.x-x,c.z-z)<r;
+ if(near(0,18,30))return'Lunar Outpost';
+ if(near(-42,54,24))return'Research Station';
+ if(near(74,62,25))return'Lunar Observatory';
+ if(near(88,-54,25))return'Crystal Field';
+ if(near(-82,-66,25))return'Mining Basin';
+ return''
+}
 function openMap(){
- if(moonMode){toast('Earth map unavailable on the Moon');return}
- let c=chunkOf(player.x,player.z);mapView={cx:c.cx,cz:c.cz};mapSelected=null;$('panel').classList.remove('hidden');renderMap();
+ mapRealm=moonMode?'moon':'earth';
+ if(mapRealm==='moon'){
+   const c={cx:Math.floor(player.x/30),cz:Math.floor(player.z/30)};mapView=c;
+   world.moonExplored[lunarMapCell(player.x,player.z)]=1;
+ }else{let c=chunkOf(player.x,player.z);mapView={cx:c.cx,cz:c.cz}}
+ mapSelected=null;$('panel').classList.remove('hidden');renderMap();
 }
 $('map').onclick=openMap;
 $('close').onclick=()=>$('panel').classList.add('hidden');
@@ -3214,42 +3234,57 @@ $('mapN').onclick=()=>{mapView.cz-=4;renderMap()};
 $('mapS').onclick=()=>{mapView.cz+=4;renderMap()};
 $('mapW').onclick=()=>{mapView.cx-=4;renderMap()};
 $('mapE').onclick=()=>{mapView.cx+=4;renderMap()};
-$('mapHome').onclick=()=>{let c=chunkOf(player.x,player.z);mapView={cx:c.cx,cz:c.cz};mapSelected=null;renderMap()};
+$('mapHome').onclick=()=>{
+ if(mapRealm==='moon')mapView={cx:Math.floor(player.x/30),cz:Math.floor(player.z/30)};
+ else{let c=chunkOf(player.x,player.z);mapView={cx:c.cx,cz:c.cz}}
+ mapSelected=null;renderMap()
+};
 
 function renderMap(){
  let grid=$('mapgrid');grid.innerHTML='';
- let pc=chunkOf(player.x,player.z);
+ const lunar=mapRealm==='moon';
+ const pc=lunar?{cx:Math.floor(player.x/30),cz:Math.floor(player.z/30)}:chunkOf(player.x,player.z);
  for(let z=mapView.cz-6;z<=mapView.cz+6;z++)for(let x=mapView.cx-6;x<=mapView.cx+6;x++){
-   let k=key(x,z),isExplored=!!world.explored[k],d=world.saved[k],b=document.createElement('button');
-   b.className='cell '+(isExplored?'explored':'unexplored');
-   let mb=biome(x*CH,z*CH),mh=H(x*CH,z*CH),mc={alpine:'#87908c',highland:'#68735f',pine:'#355946',forest:'#456b48',meadow:'#78945e',woodland:'#5f7a56'}[mb];b.style.background=mc;b.style.filter=isExplored?'none':'brightness(.38) saturate(.65)';b.style.boxShadow='inset 0 '+Math.round(T.MathUtils.clamp(mh,-8,28)/6)+'px 0 #ffffff0b';
-   if(x===pc.cx&&z===pc.cz)b.classList.add('current');
-   if(mapSelected&&x===mapSelected.cx&&z===mapSelected.cz)b.classList.add('selected');
-   if(d&&d.mark)b.classList.add('landmark');
-   if(d&&d.anomaly)b.classList.add('anomaly');
-   if(x===0&&z===0)b.classList.add('airfield');
-   const dragonMapChunk=chunkOf(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z);
-   if(x===dragonMapChunk.cx&&z===dragonMapChunk.cz){b.classList.add('landmark');b.title='Dragon Cavern · '+dragonMapChunk.cx+', '+dragonMapChunk.cz}
-   else b.title=regionName(x,z)+' · '+x+', '+z;
-   b.disabled=!isExplored;
-   if(isExplored)b.onclick=()=>{mapSelected={cx:x,cz:z};renderMap()};
-   grid.appendChild(b);
+   const k=key(x,z),b=document.createElement('button');
+   if(lunar){
+     const lk=x+','+z,c=lunarCellCenter(x,z),mh=moonH(c.x,c.z),landmark=lunarLandmarkAt(x,z),isExplored=!!world.moonExplored[lk]||!!landmark;
+     b.className='cell '+(isExplored?'explored':'unexplored');
+     const shade=Math.round(T.MathUtils.clamp(48+mh*2.2,44,112));b.style.background='rgb('+shade+','+shade+','+Math.min(128,shade+7)+')';
+     b.style.filter=isExplored?'none':'brightness(.32)';b.style.boxShadow='inset 0 '+Math.round(T.MathUtils.clamp(mh,-6,18)/5)+'px 0 #ffffff18';
+     if(landmark)b.classList.add(landmark==='Lunar Outpost'?'airfield':'landmark');
+     if(x===pc.cx&&z===pc.cz)b.classList.add('current');
+     if(mapSelected&&x===mapSelected.cx&&z===mapSelected.cz)b.classList.add('selected');
+     b.title=(landmark?landmark+' · ':'')+lunarRegionName(x,z)+' · '+x+', '+z;
+     b.disabled=!isExplored;if(isExplored)b.onclick=()=>{mapSelected={cx:x,cz:z};renderMap()};
+   }else{
+     let isExplored=!!world.explored[k],d=world.saved[k];b.className='cell '+(isExplored?'explored':'unexplored');
+     let mb=biome(x*CH,z*CH),mh=H(x*CH,z*CH),mc={alpine:'#87908c',highland:'#68735f',pine:'#355946',forest:'#456b48',meadow:'#78945e',woodland:'#5f7a56'}[mb];b.style.background=mc;b.style.filter=isExplored?'none':'brightness(.38) saturate(.65)';b.style.boxShadow='inset 0 '+Math.round(T.MathUtils.clamp(mh,-8,28)/6)+'px 0 #ffffff0b';
+     if(x===pc.cx&&z===pc.cz)b.classList.add('current');if(mapSelected&&x===mapSelected.cx&&z===mapSelected.cz)b.classList.add('selected');
+     if(d&&d.mark)b.classList.add('landmark');if(d&&d.anomaly)b.classList.add('anomaly');if(x===0&&z===0)b.classList.add('airfield');
+     const dragonMapChunk=chunkOf(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z);
+     if(x===dragonMapChunk.cx&&z===dragonMapChunk.cz){b.classList.add('landmark');b.title='Dragon Cavern · '+dragonMapChunk.cx+', '+dragonMapChunk.cz}else b.title=regionName(x,z)+' · '+x+', '+z;
+     b.disabled=!isExplored;if(isExplored)b.onclick=()=>{mapSelected={cx:x,cz:z};renderMap()};
+   }
+   grid.appendChild(b)
  }
  if(mapSelected){
-   let k=key(mapSelected.cx,mapSelected.cz),d=world.saved[k],label=regionName(mapSelected.cx,mapSelected.cz)+' · '+mapSelected.cx+', '+mapSelected.cz+' • '+biome(mapSelected.cx*CH,mapSelected.cz*CH);
-   if(mapSelected.cx===0&&mapSelected.cz===0)label+=' • Airfield';
-   const dragonMapChunk=chunkOf(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z);if(mapSelected.cx===dragonMapChunk.cx&&mapSelected.cz===dragonMapChunk.cz)label+=' • Dragon Cavern';
-   if(d&&d.mark)label+=' • '+(d.mark==='ring'?'Stone Ring':'Lookout Tower');
-   if(d&&d.anomaly)label+=' • Unexplained signal';
-   $('mapInfo').textContent=label;$('travel').disabled=false;
- }else{$('mapInfo').textContent='No region selected';$('travel').disabled=true}
+   if(lunar){const c=lunarCellCenter(mapSelected.cx,mapSelected.cz),lm=lunarLandmarkAt(mapSelected.cx,mapSelected.cz);$('mapInfo').textContent='MOON • '+lunarRegionName(mapSelected.cx,mapSelected.cz)+' · '+mapSelected.cx+', '+mapSelected.cz+(lm?' • '+lm:'')+' • elevation '+Math.round(moonH(c.x,c.z))+'m'}
+   else{let k=key(mapSelected.cx,mapSelected.cz),d=world.saved[k],label=regionName(mapSelected.cx,mapSelected.cz)+' · '+mapSelected.cx+', '+mapSelected.cz+' • '+biome(mapSelected.cx*CH,mapSelected.cz*CH);if(mapSelected.cx===0&&mapSelected.cz===0)label+=' • Airfield';const dragonMapChunk=chunkOf(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z);if(mapSelected.cx===dragonMapChunk.cx&&mapSelected.cz===dragonMapChunk.cz)label+=' • Dragon Cavern';if(d&&d.mark)label+=' • '+(d.mark==='ring'?'Stone Ring':'Lookout Tower');if(d&&d.anomaly)label+=' • Unexplained signal';$('mapInfo').textContent=label}
+   $('travel').disabled=false;
+ }else{$('mapInfo').textContent=lunar?'MOON MAP • select a discovered sector':'No region selected';$('travel').disabled=true}
 }
 $('travel').onclick=()=>{
  if(!mapSelected)return;
- activeVehicle=null;robotSpectatorMode=false;robotBossPending=false;refreshUse();player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;player.yaw=0;
- $('panel').classList.add('hidden');lastSyncX=1e9;lastSyncZ=1e9;sync(true);
+ activeVehicle=null;robotSpectatorMode=false;robotBossPending=false;sitting=null;move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;player.yaw=0;
+ $('panel').classList.add('hidden');
+ if(mapRealm==='moon'){
+   const c=lunarCellCenter(mapSelected.cx,mapSelected.cz);player.x=c.x;player.z=c.z;
+   if(blocked(player.x,player.z)){outer:for(let r=3;r<=18;r+=3)for(let i=0;i<16;i++){let a=i/16*Math.PI*2,x=c.x+Math.cos(a)*r,z=c.z+Math.sin(a)*r;if(!blocked(x,z)){player.x=x;player.z=z;break outer}}}
+   playerGroundY=moonH(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);world.moonExplored[lunarMapCell(player.x,player.z)]=1;$('region').textContent='LUNAR SURFACE';persist();toast('Lunar fast travel complete');refreshUse();return
+ }
+ player.x=mapSelected.cx*CH;player.z=mapSelected.cz*CH;lastSyncX=1e9;lastSyncZ=1e9;sync(true);
  if(blocked(player.x,player.z)){outer:for(let r=3;r<=18;r+=3)for(let i=0;i<16;i++){let a=i/16*Math.PI*2,x=mapSelected.cx*CH+Math.cos(a)*r,z=mapSelected.cz*CH+Math.sin(a)*r;if(!blocked(x,z)&&Math.abs(H(x,z)-H(player.x,player.z))<3){player.x=x;player.z=z;break outer}}}
- playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);persist();toast('Fast travel complete');
+ playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);persist();toast('Fast travel complete');refreshUse();
 };
 
 let toastTimer;
@@ -3360,6 +3395,7 @@ function updateSky(time,dt=0.016){
 
 let hudUpdateAt=0,aiAccumulator=0,damageCooldown=0;const cameraLerpTarget=new T.Vector3();
 function updateSurvival(dt,t){
+ if(moonMode){const mk=lunarMapCell(player.x,player.z);if(!world.moonExplored[mk]){world.moonExplored[mk]=1;persist()}}
  const s=world.playerStats;
  const moving=Math.hypot(move.x,move.y)>.15&&!activeVehicle&&!sitting;
  const safe=!moonMode&&((Math.abs(player.x)<50&&Math.abs(player.z)<50)||inCityZone(player.x,player.z)||(player.x>72&&player.x<194&&Math.abs(player.z)<72))||moonMode&&(Math.abs(player.x)<35&&Math.abs(player.z-18)<38);
