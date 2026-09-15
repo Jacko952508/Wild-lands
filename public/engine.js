@@ -573,14 +573,15 @@ function makeDragon(x,z,worldY){
  g.position.set(x,worldY==null?H(x,z)+.3:worldY,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0,caveY:worldY};vehicles.push(v);dragon=v;return v
 }
 function makeDragonCave(){
- const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x292622,roughness:1,flatShading:true,side:T.BackSide}),rock2=new T.MeshStandardMaterial({color:0x403832,roughness:.96,flatShading:true}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=earthRawH(cx,DRAGON_CAVE_MOUTH_Z-18),floorY=dragonCaveFloor();
+ const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x292622,roughness:1,flatShading:true,side:T.DoubleSide}),rock2=new T.MeshStandardMaterial({color:0x403832,roughness:.96,flatShading:true,side:T.DoubleSide}),rockWarm=new T.MeshStandardMaterial({color:0x59483a,roughness:.92,flatShading:true,side:T.DoubleSide}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=DRAGON_CAVE_X,cz=DRAGON_CAVE_Z,surface=earthRawH(cx,DRAGON_CAVE_MOUTH_Z-18),floorY=dragonCaveFloor();
  // Rebuilt cave: one continuous spline-driven passage rather than the old pile-of-boulders shell.
  // Elliptical rings form a coherent tunnel wall/ceiling; the lower arc is omitted so the separate walkable floor remains clear.
  // Roof begins only after the player has entered the naturally carved ravine; it then closes overhead progressively.
  const cavePath=new T.CatmullRomCurve3([new T.Vector3(cx,H(cx,DRAGON_CAVE_MOUTH_Z+8)+5,DRAGON_CAVE_MOUTH_Z+8),new T.Vector3(cx,H(cx,DRAGON_CAVE_MOUTH_Z+20)+6,DRAGON_CAVE_MOUTH_Z+20),new T.Vector3(cx-1,H(cx,cz-2)+7,cz-2),new T.Vector3(cx+1,floorY+7,cz+18),new T.Vector3(cx,floorY+8,cz+42),new T.Vector3(cx+2,floorY+8,cz+68)],false,'centripetal');
- const rings=30,sides=14,verts=[],inds=[];
- for(let r=0;r<=rings;r++){const t=r/rings,p=cavePath.getPoint(t),tan=cavePath.getTangent(t).normalize(),right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),tan).normalize();if(right.lengthSq()<.1)right.set(1,0,0);const up=new T.Vector3().crossVectors(tan,right).normalize(),rw=7.4+Math.sin(t*Math.PI)*5.2+Math.sin(t*19)*.55,rh=5.7+Math.sin(t*Math.PI)*4.4;for(let s=0;s<sides;s++){const a=s/sides*Math.PI*2,jitter=.82+hash(r,s,811)*.28,off=right.clone().multiplyScalar(Math.cos(a)*rw*jitter).add(up.clone().multiplyScalar(Math.sin(a)*rh*jitter));verts.push(p.x+off.x,p.y+off.y,p.z+off.z)}}
- for(let r=0;r<rings;r++)for(let s=0;s<sides;s++){const n=(s+1)%sides,a=r*sides+s,b=r*sides+n,c=(r+1)*sides+n,d=(r+1)*sides+s;inds.push(a,c,b,a,d,c)}
+ const rings=44,sides=20,verts=[],inds=[];
+ // Stable radial noise: adjacent rings share almost the same profile, avoiding the twisted/self-crossing polygons that caused black shards and see-through seams.
+ for(let r=0;r<=rings;r++){const t=r/rings,p=cavePath.getPoint(t),tan=cavePath.getTangent(t).normalize(),right=new T.Vector3().crossVectors(new T.Vector3(0,1,0),tan).normalize();if(right.lengthSq()<.1)right.set(1,0,0);const up=new T.Vector3().crossVectors(tan,right).normalize(),rw=8.2+Math.sin(t*Math.PI)*5.6,rh=6.4+Math.sin(t*Math.PI)*4.6;for(let s=0;s<sides;s++){const a=s/sides*Math.PI*2,noise=1+Math.sin(a*3+t*5.5)*.055+Math.sin(a*5-t*3.2)*.035,off=right.clone().multiplyScalar(Math.cos(a)*rw*noise).add(up.clone().multiplyScalar(Math.sin(a)*rh*noise));verts.push(p.x+off.x,p.y+off.y,p.z+off.z)}}
+ for(let r=0;r<rings;r++)for(let s=0;s<sides;s++){const n=(s+1)%sides,a=r*sides+s,b=r*sides+n,c=(r+1)*sides+n,d=(r+1)*sides+s;inds.push(a,b,c,a,c,d)}
  const tunnelGeo=new T.BufferGeometry();tunnelGeo.setAttribute('position',new T.Float32BufferAttribute(verts,3));tunnelGeo.setIndex(inds);tunnelGeo.computeVertexNormals();const tunnel=new T.Mesh(tunnelGeo,rock);g.add(tunnel);
  // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
  const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
@@ -592,9 +593,10 @@ function makeDragonCave(){
  // No separate ramp mesh. The actual world terrain is sculpted into the descent and deep floor by earthH(), eliminating overlapping floors and collision seams.
  // The former repeated rock ribs, circular vault rings and vertical cylinder have been deleted.
  // A single organic terminal chamber joins the spline tunnel, giving the dragon a readable lair without geometric repetition.
- const chamber=new T.Mesh(new T.SphereGeometry(1,28,18),new T.MeshStandardMaterial({color:0x302a26,roughness:1,side:T.BackSide,flatShading:true}));chamber.scale.set(18,10.5,24);chamber.position.set(cx+2,floorY+8,cz+57);g.add(chamber);
- // Sparse formations break the silhouette while keeping a broad navigable path.
- for(let i=0;i<14;i++){const a=i/14*Math.PI*2,r=13+hash(i,17,91)*3,b=new T.Mesh(new T.DodecahedronGeometry(1.2+hash(i,8,92)*1.5,0),i%2?rock:rock2);b.position.set(cx+2+Math.cos(a)*r,floorY+1+hash(i,5,93)*4,cz+57+Math.sin(a)*r*1.45);b.scale.set(1,1.6,1);g.add(b)}
+ const chamber=new T.Mesh(new T.SphereGeometry(1,36,24),rock);chamber.scale.set(20,12.5,27);chamber.position.set(cx+2,floorY+9.5,cz+57);g.add(chamber);
+ // Layered wall shelves and sparse formations add depth without intersecting the walkable centre or producing floating shards.
+ for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=16.2+hash(i,17,91)*1.8,b=new T.Mesh(new T.DodecahedronGeometry(1.1+hash(i,8,92)*1.25,1),i%3===0?rockWarm:i%2?rock:rock2);b.position.set(cx+2+Math.cos(a)*r,floorY+1.2+hash(i,5,93)*3.2,cz+57+Math.sin(a)*r*1.48);b.scale.set(1.5,1.25,1.7);g.add(b)}
+ for(let i=0;i<9;i++){const shelf=new T.Mesh(new T.BoxGeometry(4+hash(i,2,72)*3,.55,2.2+hash(i,3,73)*2),i%2?rockWarm:rock2);const sx=i%2?-1:1;shelf.position.set(cx+sx*(12.8+hash(i,5,74)*2.2),floorY+2.3+(i%3)*2.1,cz+24+i*5.2);shelf.rotation.y=(hash(i,6,75)-.5)*.55;g.add(shelf)}
  // No artificial floor planes: the sculpted terrain itself continues through the chamber, so there is nothing for the camera/player to clip between.
  // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
  const lavaPts=[];for(let i=0;i<8;i++)lavaPts.push(new T.Vector3(cx-10+Math.sin(i*.9)*2.2,floorY+.12,cz+10+i*8));const lavaCurve=new T.CatmullRomCurve3(lavaPts),stream=new T.Mesh(new T.TubeGeometry(lavaCurve,48,1.25,8,false),lava);g.add(stream);
@@ -3596,8 +3598,8 @@ function step(dt,t){
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
-       back=v.kind==='ufo'?11:v.kind==='mek'?11:v.kind==='jet'?9:v.kind==='heli'?7:v.kind==='moonbuggy'?6.5:5.5,
-       up=v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
+       back=v.kind==='dragon'?16:v.kind==='ufo'?11:v.kind==='mek'?11:v.kind==='jet'?9:v.kind==='heli'?7:v.kind==='moonbuggy'?6.5:5.5,
+       up=v.kind==='dragon'?6.2:v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
        camYaw=v.yaw-lx*0.9,
        camLift=ly*4.2;
    cameraLerpTarget.set(v.x-Math.sin(camYaw)*back,h+up+camLift,v.z-Math.cos(camYaw)*back);
