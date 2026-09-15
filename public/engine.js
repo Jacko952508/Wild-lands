@@ -581,6 +581,10 @@ function makeDragonCave(){
  // Stalactites/stalagmites and a raised dragon roost at the deepest end.
  for(let i=0;i<20;i++){const x=cx-14+hash(i,4,7)*28,z=cz+8+hash(i,9,11)*58,h=1.5+hash(i,12,3)*4;const s=new T.Mesh(new T.ConeGeometry(.35+hash(i,6,2)*.7,h,7),i%2?rock:rock2);s.position.set(x,floorY+h*.5,z);g.add(s)}
  const roost=new T.Mesh(new T.CylinderGeometry(6.5,8,1.8,12),rock2);roost.position.set(cx+5,floorY+.9,cz+62);g.add(roost);
+ // Return pad is placed on the cavern floor near the roost, safely clear of the lava stream.
+ const returnX=cx+10,returnZ=cz+54,returnRing=new T.Mesh(new T.RingGeometry(1.35,1.85,32),new T.MeshBasicMaterial({color:0x7be8ff,transparent:true,opacity:.9}));returnRing.rotation.x=-Math.PI/2;returnRing.position.set(returnX,floorY+.16,returnZ);g.add(returnRing);
+ const returnCore=new T.Mesh(new T.CircleGeometry(1.28,32),new T.MeshBasicMaterial({color:0x071d24}));returnCore.rotation.x=-Math.PI/2;returnCore.position.set(returnX,floorY+.15,returnZ);g.add(returnCore);townText(g,'RETURN TO HANGAR',returnX,floorY+2.6,returnZ,5.4,.65);
+ townInteractions.push({x:returnX,z:returnZ,type:'dragonTeleport',label:'RETURN TO HANGAR',destination:'hangar',realm:'earth'});
  const glow=new T.PointLight(0xff3d0a,4.5,55,1.5);glow.position.set(cx-7,floorY+4,cz+40);g.add(glow);scene.add(g);makeDragon(cx+5,cz+62,floorY+1.8)
 }
 function dragonFire(){
@@ -912,6 +916,12 @@ function runwayStrip(){
  startBox(g,-14.8,y+.45,-20.1,2.4,.9,1.2,innerMat,true);
  startBox(g,-12.5,y+.45,-20.1,1.0,.9,1.0,innerMat,true);
  makeWelcomeScreen(g,-17.05,y+3.2,-24);
+ // Two-way Dragon Cavern teleporter: a bright physical pad inside the starter hangar room.
+ const tpMat=new T.MeshBasicMaterial({color:0xff6a18,transparent:true,opacity:.88}),tpRing=new T.Mesh(new T.RingGeometry(1.25,1.72,32),tpMat);tpRing.rotation.x=-Math.PI/2;tpRing.position.set(-13.4,y+.13,-17.2);g.add(tpRing);
+ const tpCore=new T.Mesh(new T.CircleGeometry(1.18,32),new T.MeshBasicMaterial({color:0x321008}));tpCore.rotation.x=-Math.PI/2;tpCore.position.set(-13.4,y+.12,-17.2);g.add(tpCore);
+ const tpLight=new T.PointLight(0xff5a16,4.5,13,1.7);tpLight.position.set(-13.4,y+1.2,-17.2);g.add(tpLight);
+ townText(g,'DRAGON CAVE',-13.4,y+2.9,-17.5,4.7,.72);
+ townInteractions.push({x:-13.4,z:-17.2,type:'dragonTeleport',label:'TELEPORT TO DRAGON CAVE',destination:'cave'});
 
  // High-output hangar flood lighting.
  for(const z of[-34,-28,-22,-16,-12]){
@@ -2988,6 +2998,15 @@ $('townAction').onclick=()=>{
  else if(a.type==='cityTransit'){
    const cost=8;if(world.credits<cost){toast('Transit fare is '+cost+' credits');return}
    world.credits-=cost;activeVehicle=null;robotSpectatorMode=false;player.x=-16;player.z=-30;player.yaw=Math.PI/2;playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);persist();toast('Transit • Airfield stop')
+ }
+ else if(a.type==='dragonTeleport'){
+   activeVehicle=null;robotSpectatorMode=false;
+   if(a.destination==='cave'){
+     const floorY=H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31;player.x=DRAGON_CAVE_X+10;player.z=DRAGON_CAVE_Z+50;player.yaw=Math.PI;playerGroundY=floorY+.2;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Dragon Cavern • deep underground')
+   }else{
+     player.x=-13.4;player.z=-19.4;player.yaw=0;playerGroundY=START_PLATEAU;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Returned to hangar')
+   }
+   persist();refreshUse()
  }
  else if(a.type==='bench'){
    sitting={x:a.x,z:a.z,yaw:a.yaw||0,exitYaw:player.yaw};
