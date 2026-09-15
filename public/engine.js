@@ -1374,8 +1374,11 @@ function makeRobotArena(){
  townText(g,'ROBOT DESIGN LAB',rx,y+6.15,rz-rd/2-.27,9.5,1.1);
  // In-game design terminal.
  const desk=startBox(g,95.5,y+.72,-27,1.25,1.44,5.0,steel,true);
- const screenMat=new T.MeshBasicMaterial({map:robotFeedTarget.texture,color:0xffffff});
- robotTerminalScreen=new T.Mesh(new T.PlaneGeometry(3.3,1.856),screenMat);robotTerminalScreen.position.set(94.82,y+2.65,-27);robotTerminalScreen.rotation.y=Math.PI/2;g.add(robotTerminalScreen);
+ const screenMat=new T.MeshBasicMaterial({map:robotFeedTarget.texture,color:0xffffff,side:T.DoubleSide,toneMapped:false});
+ robotTerminalScreen=new T.Mesh(new T.PlaneGeometry(3.3,1.856),screenMat);
+ // Put the display on the player-facing surface of the monitor rather than
+ // inside the frame slab (the old placement was being occluded on iPhone).
+ robotTerminalScreen.position.set(94.775,y+2.65,-27);robotTerminalScreen.rotation.y=Math.PI/2;robotTerminalScreen.renderOrder=12;g.add(robotTerminalScreen);
  const screenFrame=startBox(g,94.88,y+2.65,-27,.18,2.35,3.7,black,false);
  addTownInteraction('robotTerminal',93,-27,'USE ROBOT DESIGN TERMINAL');
  // Victory gallery along the north-west concourse.
@@ -1552,8 +1555,13 @@ function updateRobotFeed(force=false){
  }
  robotFeedCamera.position.copy(c.p);robotFeedCamera.lookAt(look);
  const vis=robotTerminalScreen.visible;robotTerminalScreen.visible=false;
- const old=renderer.getRenderTarget();renderer.setRenderTarget(robotFeedTarget);renderer.render(scene,robotFeedCamera);renderer.setRenderTarget(old);
- robotTerminalScreen.visible=vis
+ const old=renderer.getRenderTarget(),oldBg=scene.background,oldFog=scene.fog,oldClear=renderer.getClearColor(new T.Color()),oldAlpha=renderer.getClearAlpha();
+ // Arena CCTV stays readable at night and in heavy weather instead of becoming
+ // a black monitor. Keep the main world untouched; these values only exist for
+ // the off-screen feed render.
+ scene.background=new T.Color(0x172229);if(scene.fog)scene.fog=null;
+ renderer.setRenderTarget(robotFeedTarget);renderer.setClearColor(0x172229,1);renderer.clear();renderer.render(scene,robotFeedCamera);renderer.setRenderTarget(old);
+ renderer.setClearColor(oldClear,oldAlpha);scene.background=oldBg;scene.fog=oldFog;robotTerminalScreen.visible=vis
 }
 function updateRobotArena(dt,t){
  updateRobotScoreboard();
