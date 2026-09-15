@@ -146,7 +146,7 @@ function hash(x,z,s=0){let n=Math.sin(x*127.1+z*311.7+(seed+s)*0.017)*43758.5453
 function smooth(t){return t*t*(3-2*t)}
 function noise(x,z,s=0){let X=Math.floor(x),Z=Math.floor(z),fx=x-X,fz=z-Z,a=hash(X,Z,s),b=hash(X+1,Z,s),c=hash(X,Z+1,s),d=hash(X+1,Z+1,s),u=smooth(fx),v=smooth(fz);return T.MathUtils.lerp(T.MathUtils.lerp(a,b,u),T.MathUtils.lerp(c,d,u),v)}
 function fbm(x,z,s=0){let a=0.5,f=1,v=0;for(let i=0;i<5;i++){v+=a*noise(x*f,z*f,s+i*29);a*=0.5;f*=2.02}return v}
-let moonMode=false;
+let moonMode=false,moonApproach=null;
 function earthRawH(x,z){let broad=(fbm(x*0.002,z*0.002,1)-0.5)*28,hills=(fbm(x*0.007,z*0.007,8)-0.5)*15,r=1-Math.abs(fbm(x*0.003,z*0.003,19)*2-1),ridge=Math.pow(r,3)*14,m=(fbm(x*0.03,z*0.03,30)-0.5)*1.8;return broad+hills+ridge+m-5}
 const START_PLATEAU=earthRawH(0,0);
 const TOWN_LEVEL=earthRawH(-126,8);
@@ -3260,13 +3260,16 @@ function enterMoon(v){
  moonGroup.visible=true;
  world.progress.reachedMoon=true;persist();checkMissions();
  v.realm='moon';
- v.x=0;v.z=-145;v.worldY=moonH(v.x,v.z)+92;v.alt=92;v.vy=-4;v.speed=Math.min(v.speed||0,28);v.yaw=0;v.pitch=0;v.roll=0;
+ // Begin much higher and farther from the outpost so arrival feels like an orbital approach rather than a teleport directly above the surface.
+ v.x=0;v.z=-310;v.worldY=moonH(v.x,v.z)+255;v.alt=255;v.vy=-10;v.speed=T.MathUtils.clamp(v.speed||42,30,54);v.yaw=0;v.pitch=-.12;v.roll=0;
  v.group.position.set(v.x,v.worldY,v.z);
+ moonApproach={t:0};
  player.x=v.x;player.z=v.z;player.yaw=v.yaw;
- $('region').textContent='LUNAR OUTPOST';
- toast('Lunar approach • follow the cyan beacon');
+ $('region').textContent='LUNAR APPROACH';
+ toast('Lunar orbit • descend toward the cyan beacon');
 }
 function leaveMoon(v){
+ moonApproach=null;
  moonMode=false;
  moonGroup.visible=false;
  v.realm=null;
@@ -3552,11 +3555,18 @@ function step(dt,t){
      if(v.worldY<ground){v.worldY=ground;v.vy=Math.max(0,v.vy)}
      v.worldY=Math.min(v.worldY,3400);
      v.alt=Math.max(0,v.worldY-H(v.x,v.z));
+     // Lunar arrival assist only smooths the initial hand-off. The player keeps steering/throttle control while gravity, speed and camera progressively settle into normal lunar flight.
+     if(moonMode&&moonApproach){
+       moonApproach.t+=dt;const a=T.MathUtils.clamp(moonApproach.t/7,0,1),descent=T.MathUtils.clamp(v.alt/255,0,1);
+       v.vy=Math.min(v.vy,-.8-5.2*descent);v.speed=Math.min(v.speed,22+24*descent);
+       if(a>.18)$('region').textContent=v.alt>150?'LUNAR DESCENT':v.alt>65?'LUNAR FINAL APPROACH':'LUNAR OUTPOST';
+       if(v.alt<58||moonApproach.t>14){moonApproach=null;$('region').textContent='LUNAR OUTPOST';toast('Lunar flight control • landing zone ahead')}
+     }
 
      v.group.position.set(v.x,v.worldY,v.z);
      v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
 
-     if(moonMode&&v.alt>235){
+     if(moonMode&&!moonApproach&&v.alt>285){
        leaveMoon(v);
      }else if(!moonMode&&v.inSpace){
        let md=Math.hypot(v.x-SPACE_MOON.x,v.worldY-SPACE_MOON.y,v.z-SPACE_MOON.z);
@@ -3624,8 +3634,9 @@ function step(dt,t){
    }
    player.x=v.x;player.z=v.z;player.yaw=v.yaw;
    let h=v.kind==='ufo'?v.worldY:H(v.x,v.z)+(v.alt||0),
-       back=v.kind==='dragon'?16:v.kind==='ufo'?11:v.kind==='mek'?11:v.kind==='jet'?9:v.kind==='heli'?7:v.kind==='moonbuggy'?6.5:5.5,
-       up=v.kind==='dragon'?6.2:v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
+       lunarArrival=v.kind==='ufo'&&moonMode&&moonApproach,
+       back=v.kind==='dragon'?16:lunarArrival?18:v.kind==='ufo'?11:v.kind==='mek'?11:v.kind==='jet'?9:v.kind==='heli'?7:v.kind==='moonbuggy'?6.5:5.5,
+       up=v.kind==='dragon'?6.2:lunarArrival?8:v.kind==='ufo'?5:v.kind==='mek'?6:v.kind==='jet'?3.3:v.kind==='heli'?3.2:2.5,
        camYaw=v.yaw-lx*0.9,
        camLift=ly*4.2;
    cameraLerpTarget.set(v.x-Math.sin(camYaw)*back,h+up+camLift,v.z-Math.cos(camYaw)*back);
