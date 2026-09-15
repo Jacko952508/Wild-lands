@@ -2052,6 +2052,42 @@ function makeMek(parent,x,z){
  const v={type:'MEK Miner',kind:'mek',realm:'moon',group:g,x,z,yaw:0,speed:0,alt:0,vy:0,pitch:0,roll:0,legs,knees,feet,arms,drillPivot,boosters,effectClock:0};
  vehicles.push(v);return v
 }
+let returnPodRide=null;
+function makeReturnPod(parent,x,z){
+ const y=moonH(x,z),g=new T.Group(),white=cityMat(0xd8dddf,.42,.65),dark=cityMat(0x252c31,.5,.7),glass=new T.MeshPhysicalMaterial({color:0x8fd8e5,transparent:true,opacity:.2,roughness:.08,metalness:.05,depthWrite:false,side:T.DoubleSide});
+ const body=new T.Mesh(new T.CylinderGeometry(2.25,2.6,5.8,18),white);body.position.y=3.1;g.add(body);
+ const nose=new T.Mesh(new T.ConeGeometry(2.25,2.8,18),white);nose.position.y=7.35;g.add(nose);
+ const base=new T.Mesh(new T.CylinderGeometry(2.75,2.75,.45,18),dark);base.position.y=.25;g.add(base);
+ const window=new T.Mesh(new T.PlaneGeometry(3.25,2.2),glass);window.position.set(0,4.5,-2.23);g.add(window);
+ for(const sx of[-1,1]){const leg=new T.Mesh(new T.BoxGeometry(.28,1.2,2.7),dark);leg.position.set(sx*2.2,.8,.35);leg.rotation.z=sx*.22;g.add(leg)}
+ const cv=document.createElement('canvas');cv.width=512;cv.height=256;const ctx=cv.getContext('2d'),tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;
+ const hud=new T.Mesh(new T.PlaneGeometry(3.0,1.5),new T.MeshBasicMaterial({map:tex,transparent:true,opacity:.9,depthWrite:false}));hud.position.set(0,4.45,-2.27);g.add(hud);
+ g.position.set(x,y,z);parent.add(g);const pod={group:g,x,z,y,screen:{cv,ctx,tex,hud}};
+ addTownInteraction('returnPod',x,z-3.3,'ENTER EARTH RETURN POD',{realm:'moon',pod});drawReturnPodScreen(pod,'EARTH RETURN','STANDBY');return pod
+}
+function drawReturnPodScreen(pod,title,sub){const {ctx,cv,tex}=pod.screen;ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle='rgba(2,14,19,.56)';ctx.fillRect(0,0,cv.width,cv.height);ctx.strokeStyle='#8ffcff';ctx.lineWidth=5;ctx.strokeRect(8,8,496,240);ctx.textAlign='center';ctx.fillStyle='#dfffff';ctx.font='bold 46px Arial';ctx.fillText(title,256,105);ctx.font='bold 27px Arial';ctx.fillStyle='#8ffcff';ctx.fillText(sub,256,164);tex.needsUpdate=true}
+function startReturnPod(pod){
+ if(returnPodRide)return;activeVehicle=null;sitting=null;move.x=move.y=look.x=look.y=0;
+ // Detach the chosen capsule from the Moon group so it remains visible through space/re-entry after the lunar world is hidden.
+ scene.attach(pod.group);returnPodRide={pod,t:0,lastCount:6,phase:'countdown'};player.x=pod.x;player.z=pod.z;player.yaw=0;player.pitch=0;drawReturnPodScreen(pod,'LAUNCH SEQUENCE','T-6');$('region').textContent='EARTH RETURN POD';toast('Harness locked • launch sequence');refreshUse()
+}
+function updateReturnPod(dt){
+ const r=returnPodRide;if(!r)return;const p=r.pod;r.t+=dt;
+ if(r.phase==='countdown'){
+   const n=Math.max(0,6-Math.floor(r.t));if(n!==r.lastCount){r.lastCount=n;drawReturnPodScreen(p,'LAUNCH SEQUENCE','T-'+n);sfx(420+n*28,.07,.035,'sine')}
+   camera.position.set(p.x,p.y+4.25,p.z-1.55);camera.rotation.set(-.03,0,0);
+   if(r.t>=6){r.phase='launch';r.t=0;drawReturnPodScreen(p,'LAUNCH','IGNITION');toast('Return pod launched')}
+ }else if(r.phase==='launch'){
+   const q=T.MathUtils.clamp(r.t/8,0,1),ease=q*q*(3-2*q);p.group.position.y=p.y+ease*290;p.group.rotation.z=Math.sin(r.t*17)*.006*(1-q);camera.position.set(p.x,p.group.position.y+4.25,p.z-1.55);camera.rotation.set(-.08*q,0,0);drawReturnPodScreen(p,'ASCENT',Math.round(ease*100)+'%');
+   if(r.t>8){r.phase='space';r.t=0;moonMode=false;moonGroup.visible=false;$('region').textContent='RETURN TRANSIT';drawReturnPodScreen(p,'EARTH TRANSIT','AUTOPILOT')}
+ }else if(r.phase==='space'){
+   const q=T.MathUtils.clamp(r.t/9,0,1);p.group.position.set(T.MathUtils.lerp(p.x,-13,q),T.MathUtils.lerp(p.y+290,220,q),T.MathUtils.lerp(p.z,-24,q));p.group.rotation.x=-q*.55;camera.position.set(p.group.position.x,p.group.position.y+4.25,p.group.position.z-1.55);camera.rotation.set(-.12-q*.12,0,0);drawReturnPodScreen(p,'EARTH TRANSIT',Math.round(q*100)+'%');
+   if(r.t>9){r.phase='reentry';r.t=0;moonGroup.visible=false;startBase.visible=true;drawReturnPodScreen(p,'RE-ENTRY','BRACE')}
+ }else{
+   const q=T.MathUtils.clamp(r.t/6,0,1),ease=q*q*(3-2*q),gy=H(-13,-24);p.group.position.set(-13+Math.sin(r.t*8)*(1-q)*.18,T.MathUtils.lerp(220,gy,ease),-24+T.MathUtils.lerp(0,5,ease));p.group.rotation.x=T.MathUtils.lerp(-.55,.18,ease);camera.position.set(p.group.position.x,p.group.position.y+4.25,p.group.position.z-1.55);camera.rotation.set(-.18,0,0);drawReturnPodScreen(p,q>.82?'IMPACT':'RE-ENTRY',q>.82?'BRACE':'EARTH APPROACH');
+   if(r.t>=6){const lx=-13,lz=-19,ly=H(lx,lz);p.group.position.set(lx,ly,lz);p.group.rotation.set(.18,0,.08);moonMode=false;moonApproach=null;player.x=-13;player.z=-15;player.yaw=Math.PI;playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);$('region').textContent='AIRFIELD';returnPodRide=null;lastSyncX=1e9;lastSyncZ=1e9;sync(true);persist();toast('Crash landing • Airfield');refreshUse()}
+ }
+}
 function makeMoonWorld(){
  let g=new T.Group(),geo=new T.PlaneGeometry(1600,1600,72,72);geo.rotateX(-Math.PI/2);
  let p=geo.attributes.position,cols=[];
@@ -2167,6 +2203,8 @@ function makeMoonWorld(){
  });
 
  makeMoonBuggy(g,-22,-13);makeMoonBuggy(g,22,-13);makeMek(g,34,4);
+ // Two dedicated one-way Earth return capsules beside the lunar outpost landing pads.
+ makeReturnPod(g,-38,-8);makeReturnPod(g,38,-8);
  g.visible=false;scene.add(g);return g
 }
 const moonGroup=makeMoonWorld();
@@ -2579,8 +2617,9 @@ function nearestTownInteraction(){
  return best
 }
 function refreshUse(){
- document.body.classList.toggle('vehicleMode',!!activeVehicle);
+ document.body.classList.toggle('vehicleMode',!!activeVehicle||!!returnPodRide);
  let b=$('use'),fc=$('flightControls'),mine=$('mine'),pickup=$('pickup'),town=$('townAction'),jump=$('jump'),tool=$('toolAction'),equip=$('equippedTool');
+ if(returnPodRide){for(const e of[b,fc,mine,pickup,town,jump,tool,equip,$('sprint')])e.classList.add('hidden');toolView.visible=false;return}
  if(activeVehicle){
    pickup.classList.add('hidden');town.classList.add('hidden');jump.classList.add('hidden');tool.classList.add('hidden');equip.classList.add('hidden');toolView.visible=false;
    b.classList.remove('hidden');
@@ -3036,6 +3075,7 @@ function standFromBench(){
 $('townAction').onclick=()=>{
  if(sitting){standFromBench();return}
  const a=nearestTownInteraction();if(!a)return;
+ if(a.type==='returnPod'){startReturnPod(a.pod);return}
  if(a.type==='shop'){openShop();toast('Westside Supply opened')}
  else if(a.type==='robotTerminal'){openRobotDesigner();toast('Robot Combat Design Lab online')}
  else if(a.type==='robotBossStart'){if(!robotBossPending){toast('Configure both robots in the Design Lab first');return}startRobotBattle('boss')}
@@ -3332,7 +3372,8 @@ function updateSky(time,dt=0.016){
  earthMoon.position.set(player.x+Math.cos(moonA)*skyR,Math.max(-80,moonY)+42,player.z+Math.sin(moonA)*skyR);earthMoon.visible=!moonMode&&Math.sin(moonA)>-.22;
  earthMoonOrb.material.emissiveIntensity=.45+night*.55;earthMoonHalo.material.opacity=.07+night*.12;
  let ufoAlt=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.alt:0,
-     spaceFactor=moonMode?1:T.MathUtils.clamp((ufoAlt-110)/170,0,1),
+     podSpace=returnPodRide?(returnPodRide.phase==='space'?1:returnPodRide.phase==='reentry'?Math.max(0,1-returnPodRide.t/3):0):0,
+     spaceFactor=moonMode?1:Math.max(podSpace,T.MathUtils.clamp((ufoAlt-110)/170,0,1)),
      dayCol=new T.Color(w==='storm'?0x48545b:w==='rain'?0x6f8088:w==='cloudy'?0x8fa2a4:0xa7c0bd),
      nightCol=new T.Color(0x0b1725),
      c=moonMode?new T.Color(0x000005):nightCol.clone().lerp(dayCol,day).lerp(new T.Color(0x000106),spaceFactor);
@@ -3361,7 +3402,8 @@ function updateSky(time,dt=0.016){
    let baseY=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.worldY:(moonMode?camera.position.y:0);
    spaceSun.position.set(player.x+5200,baseY+1700,player.z-4100);
  }
- const earthScene=!moonMode&&spaceFactor<0.88,
+ const podTransit=!!returnPodRide&&(returnPodRide.phase==='space'),
+       earthScene=!moonMode&&spaceFactor<0.88&&!podTransit,
        airfieldNear=Math.hypot(player.x,player.z)<340,
        townNear=Math.hypot(player.x+126,player.z-6)<240,
       arenaNear=Math.hypot(player.x-132,player.z)<390;
@@ -3374,7 +3416,7 @@ function updateSky(time,dt=0.016){
  lootGroup.visible=earthScene;
  poiGroup.visible=earthScene;
  moonGroup.visible=moonMode;
- for(const ch of chunks.values())ch.root.visible=!moonMode&&spaceFactor<0.88;
+ for(const ch of chunks.values())ch.root.visible=earthScene;
  for(const craft of vehicles){
    if(craft===activeVehicle)continue;
    craft.group.visible=moonMode?(craft.realm==='moon'):(craft.realm!=='moon'&&spaceFactor<0.88);
@@ -3395,6 +3437,7 @@ function updateSky(time,dt=0.016){
 
 let hudUpdateAt=0,aiAccumulator=0,damageCooldown=0;const cameraLerpTarget=new T.Vector3();
 function updateSurvival(dt,t){
+ if(returnPodRide){updateReturnPod(dt);return}
  if(moonMode){const mk=lunarMapCell(player.x,player.z);if(!world.moonExplored[mk]){world.moonExplored[mk]=1;persist()}}
  const s=world.playerStats;
  const moving=Math.hypot(move.x,move.y)>.15&&!activeVehicle&&!sitting;
@@ -3434,6 +3477,7 @@ function nearestThreat(){
 }
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
+ if(returnPodRide){updateReturnPod(dt);updateSky(t,dt);return}
  player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);updateDragonFire(dt);updateRobotArena(dt,t);
  let targetFov=67;
  if(activeVehicle){
