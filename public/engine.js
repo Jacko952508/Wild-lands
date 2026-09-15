@@ -614,9 +614,11 @@ function makeDragonCave(){
  const glow=new T.PointLight(0xff3d0a,4.5,55,1.5);glow.position.set(cx-7,floorY+4,cz+40);g.add(glow);scene.add(g);makeDragon(cx+5,cz+62,floorY+1.8)
 }
 function dragonFire(){
- if(!activeVehicle||activeVehicle.kind!=='dragon')return;const v=activeVehicle,now=performance.now();if(now-v.fireClock<85)return;v.fireClock=now;
- const dir=new T.Vector3(Math.sin(v.yaw)*Math.cos(v.pitch),Math.sin(v.pitch),Math.cos(v.yaw)*Math.cos(v.pitch));
- const p=v.group.position.clone().add(new T.Vector3(0,3.3,0)).addScaledVector(dir,3.8);for(let i=0;i<3;i++){const m=new T.Mesh(new T.SphereGeometry(.24+Math.random()*.22,6,4),new T.MeshBasicMaterial({color:i?0xff6a12:0xffe36b,transparent:true,opacity:.9}));m.position.copy(p).addScaledVector(dir,i*.65);scene.add(m);dragonFires.push({m,v:dir.clone().multiplyScalar(30+Math.random()*8),life:.75})}
+ if(!activeVehicle||activeVehicle.kind!=='dragon')return;const v=activeVehicle,now=performance.now();if(now-v.fireClock<48)return;v.fireClock=now;
+ const dir=new T.Vector3(Math.sin(v.yaw)*Math.cos(v.pitch),Math.sin(v.pitch),Math.cos(v.yaw)*Math.cos(v.pitch)).normalize(),right=new T.Vector3(Math.cos(v.yaw),0,-Math.sin(v.yaw));
+ const p=v.group.position.clone().add(new T.Vector3(0,3.25,0)).addScaledVector(dir,4.2);
+ // Large continuous breath cone: a dense hot core plus a widening orange envelope. It inherits dragon velocity so it remains convincing at high flight speed.
+ for(let i=0;i<10;i++){const hot=i<4,spread=.12+i*.055,side=(Math.random()-.5)*spread,vert=(Math.random()-.5)*spread*.7,d=dir.clone().addScaledVector(right,side).add(new T.Vector3(0,vert,0)).normalize(),m=new T.Mesh(new T.SphereGeometry(hot?.42+Math.random()*.28:.65+Math.random()*.5,7,5),new T.MeshBasicMaterial({color:hot?0xffdf5a:0xff4b08,transparent:true,opacity:hot?.96:.78}));m.position.copy(p).addScaledVector(dir,i*.42);scene.add(m);dragonFires.push({m,v:d.multiplyScalar(42+Math.random()*15).add(new T.Vector3(Math.sin(v.yaw)*(v.speed||0)*.35,0,Math.cos(v.yaw)*(v.speed||0)*.35)),life:1.05})}
 }
 function updateDragonFire(dt){
  if(dragonFireHeld)dragonFire();for(let i=dragonFires.length-1;i>=0;i--){const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);f.m.material.opacity=Math.max(0,f.life*1.3);if(f.life<=0){scene.remove(f.m);f.m.geometry.dispose();f.m.material.dispose();dragonFires.splice(i,1);continue}for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();lastSyncX=1e9;lastSyncZ=1e9;sync(true);break}}}}
@@ -3038,9 +3040,11 @@ $('townAction').onclick=()=>{
    activeVehicle=null;robotSpectatorMode=false;
    if(a.destination==='cave'){
      if(!ensureDragonCave()){toast('Dragon Cavern failed to initialise');return}
-     dragonCaveActive=true;const floorY=dragonCaveFloor();player.x=DRAGON_CAVE_X;player.z=DRAGON_CAVE_Z+12;player.yaw=0;playerGroundY=floorY+.2;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Dragon Cavern • 31m below the surface')
+     // Both pads are a true pair: arrive immediately beside the return pad, facing into the cavern.
+     dragonCaveActive=true;const floorY=dragonCaveFloor();player.x=DRAGON_CAVE_X+10;player.z=DRAGON_CAVE_Z+54;player.yaw=Math.PI;playerGroundY=H(player.x,player.z)+.2;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Dragon Cavern')
    }else{
-     dragonCaveActive=false;player.x=-13.4;player.z=-19.4;player.yaw=0;playerGroundY=START_PLATEAU;camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Returned to hangar')
+     // Return to the hangar pad itself rather than several metres away from it.
+     dragonCaveActive=false;player.x=-13.25;player.z=-24;player.yaw=Math.PI;playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);toast('Returned to hangar')
    }
    persist();refreshUse()
  }
@@ -3122,6 +3126,9 @@ $('pickup').onclick=()=>{
  const c=nearestCollectible();if(!c)return;
  c.mesh.visible=false;world.inventory[c.id]=c.name;persist();renderInventory();toast(c.name+' added to inventory')
 };
+// Hold BREATHE FIRE while steering/flying for a sustained stream; pointer events work for both touch and mouse.
+$('mine').addEventListener('pointerdown',e=>{if(activeVehicle&&activeVehicle.kind==='dragon'){e.preventDefault();dragonFireHeld=true;dragonFire()}});
+for(const ev of['pointerup','pointercancel','pointerleave'])$('mine').addEventListener(ev,()=>dragonFireHeld=false);
 $('mine').onclick=()=>{
  if(activeVehicle&&activeVehicle.kind==='dragon'){dragonFire();return}
  if(!activeVehicle||activeVehicle.kind!=='mek')return;
@@ -3209,7 +3216,8 @@ function renderMap(){
    if(d&&d.mark)b.classList.add('landmark');
    if(d&&d.anomaly)b.classList.add('anomaly');
    if(x===0&&z===0)b.classList.add('airfield');
-   if(x===0&&z===1){b.classList.add('landmark');b.title='Dragon Cavern · runway end'}
+   const dragonMapChunk=chunkOf(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z);
+   if(x===dragonMapChunk.cx&&z===dragonMapChunk.cz){b.classList.add('landmark');b.title='Dragon Cavern · '+dragonMapChunk.cx+', '+dragonMapChunk.cz}
    else b.title=regionName(x,z)+' · '+x+', '+z;
    b.disabled=!isExplored;
    if(isExplored)b.onclick=()=>{mapSelected={cx:x,cz:z};renderMap()};
@@ -3218,7 +3226,7 @@ function renderMap(){
  if(mapSelected){
    let k=key(mapSelected.cx,mapSelected.cz),d=world.saved[k],label=regionName(mapSelected.cx,mapSelected.cz)+' · '+mapSelected.cx+', '+mapSelected.cz+' • '+biome(mapSelected.cx*CH,mapSelected.cz*CH);
    if(mapSelected.cx===0&&mapSelected.cz===0)label+=' • Airfield';
-   if(mapSelected.cx===0&&mapSelected.cz===1)label+=' • Dragon Cavern';
+   const dragonMapChunk=chunkOf(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z);if(mapSelected.cx===dragonMapChunk.cx&&mapSelected.cz===dragonMapChunk.cz)label+=' • Dragon Cavern';
    if(d&&d.mark)label+=' • '+(d.mark==='ring'?'Stone Ring':'Lookout Tower');
    if(d&&d.anomaly)label+=' • Unexplained signal';
    $('mapInfo').textContent=label;$('travel').disabled=false;
@@ -3427,9 +3435,13 @@ function step(dt,t){
      const pitchInput=T.MathUtils.clamp(move.y,-1,1),rollInput=T.MathUtils.clamp(move.x,-1,1),surface=H(v.x,v.z);
      if(v.worldY==null)v.worldY=v.group.position.y;
      v.pitch=T.MathUtils.lerp(v.pitch,pitchInput*.42,Math.min(1,dt*2.7));v.roll=T.MathUtils.lerp(v.roll,-rollInput*.55,Math.min(1,dt*3.1));v.yaw+=(-v.roll-lx*.45)*dt*.9;
-     const target=4+flightThrottle*32;v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.15));
+     // Energy flight model: diving converts height into speed; pulling out retains most of that momentum. Repeated swoop/glide cycles can build speed well above normal flapping cruise.
+     v.swoopEnergy=v.swoopEnergy||0;const diving=v.pitch<-.08,climbing=v.pitch>.08;
+     if(diving)v.swoopEnergy=Math.min(72,v.swoopEnergy+(-v.pitch)*46*dt);else v.swoopEnergy=Math.max(0,v.swoopEnergy-(climbing?5.5:2.2)*dt);
+     const cruise=4+flightThrottle*32,diveBoost=diving?(-v.pitch)*38:0,target=cruise+v.swoopEnergy+diveBoost;
+     v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*(diving?2.1:.72)));
      const horiz=Math.cos(v.pitch)*v.speed;v.x+=Math.sin(v.yaw)*horiz*dt;v.z+=Math.cos(v.yaw)*horiz*dt;
-     v.vy=T.MathUtils.lerp(v.vy,Math.sin(v.pitch)*v.speed+(flightThrottle-.45)*5,Math.min(1,dt*1.8));v.worldY+=v.vy*dt;
+     v.vy=T.MathUtils.lerp(v.vy,Math.sin(v.pitch)*v.speed+(flightThrottle-.45)*5,Math.min(1,dt*(diving?2.6:1.8)));v.worldY+=v.vy*dt;
      // Below the cave mouth the dragon is allowed to remain subterranean; once outside, terrain becomes its floor.
      const inCave=Math.hypot(v.x-DRAGON_CAVE_X,v.z-(DRAGON_CAVE_Z+28))<82&&v.worldY<surface+3;if(!inCave&&v.worldY<surface+.4){v.worldY=surface+.4;v.vy=Math.max(0,v.vy)}
      v.alt=v.worldY-surface;v.airborne=true;v.stalled=false;v.group.position.set(v.x,v.worldY,v.z);v.group.rotation.set(-v.pitch,v.yaw,v.roll,'XYZ');
