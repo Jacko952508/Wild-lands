@@ -31,7 +31,8 @@ camera.rotation.order='YXZ';
 
 const renderer=new T.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
 renderer.setSize(innerWidth,innerHeight);
-let renderScale=Math.min(devicePixelRatio,(matchMedia('(pointer:coarse)').matches||innerWidth<900)?1.0:1.2);
+// Keep modern phones genuinely sharp. The previous mobile cap of 1.0 made the entire 3D world look visibly low-resolution on Retina displays.
+let renderScale=Math.min(devicePixelRatio,(matchMedia('(pointer:coarse)').matches||innerWidth<900)?1.5:1.35);
 renderer.setPixelRatio(renderScale);
 renderer.outputColorSpace=T.SRGBColorSpace;
 renderer.toneMapping=T.ACESFilmicToneMapping;
@@ -358,7 +359,8 @@ function addFarTrees(group,d,cx,cz){
  const trees=[];
  for(let i=0;i<d.trees.length;i+=3){
    const q=d.trees[i],wx=cx*CH+q[0],wz=cz*CH+q[1];
-   if(!inCityZone(wx,wz)&&!inStartClearZone(wx,wz))trees.push({wx,wz,s:q[2],pine:biome(wx,wz)==='pine'})
+   const caveClear=Math.abs(wx-DRAGON_CAVE_X)<18&&wz>DRAGON_CAVE_MOUTH_Z-24&&wz<DRAGON_CAVE_Z+88;
+   if(!inCityZone(wx,wz)&&!inStartClearZone(wx,wz)&&!caveClear)trees.push({wx,wz,s:q[2],pine:biome(wx,wz)==='pine'})
  }
  if(!trees.length)return;
  const trunks=new T.InstancedMesh(farTrunkGeo,mats.trunk,trees.length),
@@ -384,8 +386,9 @@ const nearTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,7),
       nearRockGeo=new T.DodecahedronGeometry(1,0);
 sharedChunkGeometries.add(nearTrunkGeo);sharedChunkGeometries.add(nearPineGeo);sharedChunkGeometries.add(nearLeafGeo);sharedChunkGeometries.add(nearRockGeo);
 function addNearNature(group,d,cx,cz){
- const trees=d.trees.filter((q,i)=>!q[3]&&!burntTrees.has(key(cx,cz)+':'+i)&&!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
-       rocks=d.rocks.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
+ const caveClear=(q)=>Math.abs(cx*CH+q[0]-DRAGON_CAVE_X)<18&&cz*CH+q[1]>DRAGON_CAVE_MOUTH_Z-24&&cz*CH+q[1]<DRAGON_CAVE_Z+88,
+       trees=d.trees.filter((q,i)=>!q[3]&&!burntTrees.has(key(cx,cz)+':'+i)&&!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])&&!caveClear(q)),
+       rocks=d.rocks.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])&&!caveClear(q)),
        pineTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])==='pine'),
        broadTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])!=='pine'),
        trunks=trees.length?new T.InstancedMesh(nearTrunkGeo,mats.trunk,trees.length):null,
@@ -597,17 +600,13 @@ function makeDragonCave(){
  // The former repeated rock ribs, circular vault rings and vertical cylinder have been deleted.
  // A single organic terminal chamber joins the spline tunnel, giving the dragon a readable lair without geometric repetition.
  const chamber=new T.Mesh(new T.SphereGeometry(1,36,18,0,Math.PI*2,0,Math.PI*.62),rock);chamber.scale.set(20,12.5,27);chamber.position.set(cx+2,floorY+9.5,cz+57);g.add(chamber);
- // Layered wall shelves and sparse formations add depth without intersecting the walkable centre or producing floating shards.
- for(let i=0;i<18;i++){const a=i/18*Math.PI*2,r=16.2+hash(i,17,91)*1.8,b=new T.Mesh(new T.DodecahedronGeometry(1.1+hash(i,8,92)*1.25,1),i%3===0?rockWarm:i%2?rock:rock2);b.position.set(cx+2+Math.cos(a)*r,floorY+1.2+hash(i,5,93)*3.2,cz+57+Math.sin(a)*r*1.48);b.scale.set(1.5,1.25,1.7);g.add(b)}
- for(let i=0;i<9;i++){const shelf=new T.Mesh(new T.BoxGeometry(4+hash(i,2,72)*3,.55,2.2+hash(i,3,73)*2),i%2?rockWarm:rock2);const sx=i%2?-1:1;shelf.position.set(cx+sx*(12.8+hash(i,5,74)*2.2),floorY+2.3+(i%3)*2.1,cz+24+i*5.2);shelf.rotation.y=(hash(i,6,75)-.5)*.55;g.add(shelf)}
+ // Keep the cavern deliberately clean: no loose rocks, shelves or decorative geometry inside the navigation volume. The continuous cave shell supplies all visible stone.
  // No artificial floor planes: the sculpted terrain itself continues through the chamber, so there is nothing for the camera/player to clip between.
  // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
  const lavaPts=[];for(let i=0;i<8;i++)lavaPts.push(new T.Vector3(cx-10+Math.sin(i*.9)*2.2,floorY+.12,cz+10+i*8));const lavaCurve=new T.CatmullRomCurve3(lavaPts),stream=new T.Mesh(new T.TubeGeometry(lavaCurve,48,1.25,8,false),lava);g.add(stream);
  // Torch sconces alternate along both walls. Each has a visible flame and local warm light.
  const torchMetal=new T.MeshStandardMaterial({color:0x24130d,roughness:.8,metalness:.25}),flameMat=new T.MeshBasicMaterial({color:0xffa126});for(let i=0;i<8;i++)for(const sx of[-1,1]){const z=cz+8+i*8,y=floorY+3.2;const pole=new T.Mesh(new T.CylinderGeometry(.07,.1,1.3,6),torchMetal);pole.position.set(cx+sx*13.5,y,z);pole.rotation.z=sx*.5;g.add(pole);const flame=new T.Mesh(new T.ConeGeometry(.24,.75,7),flameMat);flame.position.set(cx+sx*13.15,y+.72,z);g.add(flame);if(i%2===0){const l=new T.PointLight(0xff7628,2.8,15,1.8);l.position.copy(flame.position);g.add(l)}}
- // Stalactites/stalagmites and a raised dragon roost at the deepest end.
- for(let i=0;i<20;i++){const x=cx-14+hash(i,4,7)*28,z=cz+8+hash(i,9,11)*58,h=1.5+hash(i,12,3)*4;const s=new T.Mesh(new T.ConeGeometry(.35+hash(i,6,2)*.7,h,7),i%2?rock:rock2);s.position.set(x,floorY+h*.5,z);g.add(s)}
- const roost=new T.Mesh(new T.CylinderGeometry(6.5,8,1.8,12),rock2);roost.position.set(cx+5,floorY+.9,cz+62);g.add(roost);
+ // No stalagmites, loose rocks or raised roost: keep the entire cavern floor visually and physically unobstructed.
  // Return pad is placed on the cavern floor near the roost, safely clear of the lava stream.
  const returnX=cx+10,returnZ=cz+54,returnRing=new T.Mesh(new T.RingGeometry(1.35,1.85,32),new T.MeshBasicMaterial({color:0x7be8ff,transparent:true,opacity:.9}));returnRing.rotation.x=-Math.PI/2;returnRing.position.set(returnX,floorY+.16,returnZ);g.add(returnRing);
  const returnCore=new T.Mesh(new T.CircleGeometry(1.28,32),new T.MeshBasicMaterial({color:0x071d24}));returnCore.rotation.x=-Math.PI/2;returnCore.position.set(returnX,floorY+.15,returnZ);g.add(returnCore);townText(g,'RETURN TO HANGAR',returnX,floorY+2.6,returnZ,5.4,.65);
@@ -3148,7 +3147,7 @@ document.documentElement.style.setProperty('--hud-scale',world.ui.hudScale||1);
 
 function graphicsScaleCap(){
  const q=world.ui.graphicsQuality||'balanced',r=Number(world.ui.renderQuality||1);
- const base=q==='performance'?.82:q==='high'?1.18:1.0;
+ const base=q==='performance'?1.0:q==='high'?1.65:1.45;
  return Math.min(devicePixelRatio,base*r)
 }
 function applyGraphicsSettings(resetScale=true){
@@ -3156,7 +3155,7 @@ function applyGraphicsSettings(resetScale=true){
  const shadows=world.ui.shadows!==false&&q!=='performance';
  renderer.shadowMap.enabled=shadows;sun.castShadow=shadows;
  if(resetScale){
-   renderScale=Math.max(.65,Math.min(graphicsScaleCap(),q==='performance'?.78:q==='high'?1.05:.92));
+   renderScale=Math.max(.9,Math.min(graphicsScaleCap(),q==='performance'?1.0:q==='high'?1.6:1.4));
    renderer.setPixelRatio(renderScale);renderer.setSize(innerWidth,innerHeight,false)
  }
  const rainFrac=q==='performance'?.45:q==='high'?1:.72;
@@ -3730,7 +3729,8 @@ function loop(now){
    const avg=perfTotal/Math.max(1,perfFrames),cap=graphicsScaleCap(),dynamic=world.ui.dynamicResolution!==false;
    let next=renderScale;
    if(dynamic){
-     const budget=1/target,minScale=world.ui.graphicsQuality==='performance'?.62:.68;
+     // Do not let dynamic resolution destroy image quality on Retina phones; reduce effects/shadow cadence before sacrificing this much resolution.
+     const budget=1/target,minScale=world.ui.graphicsQuality==='performance'?.82:1.0;
      if(avg>budget*1.28)next=Math.max(minScale,renderScale-.12);
      else if(avg>budget*1.08)next=Math.max(minScale,renderScale-.065);
      else if(avg<budget*.88)next=Math.min(cap,renderScale+.035)
