@@ -562,7 +562,10 @@ function makeDragonCave(){
  // Giant runway-side mouth: visible from the airfield, with a glowing threshold and unmistakable landmark silhouette.
  const mouthZ=DRAGON_CAVE_MOUTH_Z,mouthY=H(cx,mouthZ);
  for(let i=0;i<15;i++){const a=Math.PI*i/14,b=new T.Mesh(new T.DodecahedronGeometry(2.7+(i%3)*.5,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*10.5,mouthY+Math.sin(a)*8.5,mouthZ);b.scale.set(1.25,1.1,1.55);g.add(b)}
- const mouthGlow=new T.PointLight(0xff5a16,7.5,58,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ+3);g.add(mouthGlow);
+ // A literal black opening behind the rock arch makes the entrance impossible to confuse with ordinary terrain.
+ const portal=new T.Mesh(new T.CircleGeometry(8.15,32),new T.MeshBasicMaterial({color:0x020101,side:T.DoubleSide}));portal.position.set(cx,mouthY+4.15,mouthZ+1.15);g.add(portal);
+ const throat=new T.Mesh(new T.CylinderGeometry(7.7,7.7,22,24,1,true),new T.MeshStandardMaterial({color:0x100b09,roughness:1,side:T.BackSide}));throat.rotation.x=Math.PI/2;throat.position.set(cx,mouthY+3.8,mouthZ+10.5);g.add(throat);
+ const mouthGlow=new T.PointLight(0xff5a16,9.5,64,1.35);mouthGlow.position.set(cx,mouthY+3,mouthZ-1);g.add(mouthGlow);
  const emberMat=new T.MeshBasicMaterial({color:0xff6a19});for(const sx of[-1,1]){const e=new T.Mesh(new T.ConeGeometry(.42,1.8,8),emberMat);e.position.set(cx+sx*7.4,mouthY+.9,mouthZ-.6);g.add(e)}
  townText(g,'DRAGON CAVERN',cx,mouthY+10.7,mouthZ-.7,9.8,1.35);
  townInteractions.push({x:cx,z:mouthZ-4,type:'cityInfo',label:'DRAGON CAVERN',message:'Dragon Cavern • descend through the glowing stone mouth'});
@@ -590,7 +593,8 @@ function updateDragonFire(dt){
 }
 // Build the large underground lair after the core world has finished initialising.
 // Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
-setTimeout(()=>{try{makeDragonCave()}catch(e){console.error('Dragon cave init',e)}},900);
+// Build immediately: the cave entrance is a core landmark and must exist before a player can teleport to it.
+try{makeDragonCave()}catch(e){console.error('Dragon cave init',e)}
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
  for(const sx of[-spread,spread]){
