@@ -151,7 +151,8 @@ const START_PLATEAU=earthRawH(0,0);
 const TOWN_LEVEL=earthRawH(-126,8);
 const ARENA_LEVEL=earthRawH(132,0);
 // Dragon cave entrance is deliberately beside the south end of the runway, not hidden out in procedural terrain.
-const DRAGON_CAVE_X=24,DRAGON_CAVE_Z=78,DRAGON_CAVE_MOUTH_Z=50;
+// Keep the cavern completely clear of the runway geometry. The entrance sits east of the airfield in ordinary terrain, with a long walkable descent.
+const DRAGON_CAVE_X=58,DRAGON_CAVE_Z=88,DRAGON_CAVE_MOUTH_Z=58;
 function earthH(x,z){
   const raw=earthRawH(x,z),edge=Math.max(Math.abs(x),Math.abs(z));
   if(edge<=46)return START_PLATEAU;
@@ -331,7 +332,7 @@ function terrain(cx,cz,seg){
  if(!moonMode&&g.index){
    const src=Array.from(g.index.array),cut=[];
    // Cut a generous continuous trench from BEFORE the mouth all the way to the deep chamber. The old cut began almost exactly at the cave trigger, leaving a terrain triangle 'lip' that the player collision hit before cave mode could take over.
-   const inCaveCut=(i)=>{const x=worldX[i],z=worldZ[i],shaft=Math.hypot(x-DRAGON_CAVE_X,z-DRAGON_CAVE_Z)<15.5,ramp=Math.abs(x-DRAGON_CAVE_X)<12&&z>DRAGON_CAVE_MOUTH_Z-10&&z<DRAGON_CAVE_Z+8;return shaft||ramp};
+   const inCaveCut=(i)=>{const x=worldX[i],z=worldZ[i],shaft=Math.hypot(x-DRAGON_CAVE_X,z-DRAGON_CAVE_Z)<15.5,ramp=Math.abs(x-DRAGON_CAVE_X)<13&&z>DRAGON_CAVE_MOUTH_Z-12&&z<DRAGON_CAVE_Z+16;return shaft||ramp};
    for(let k=0;k<src.length;k+=3){const a=src[k],b=src[k+1],c=src[k+2];if(!inCaveCut(a)&&!inCaveCut(b)&&!inCaveCut(c))cut.push(a,b,c)}
    g.setIndex(cut)
  }
@@ -590,8 +591,10 @@ function makeDragonCave(){
  // Build a physical descending floor through the terrain opening. This is the surface the player actually walks on;
  // the procedural overworld has been removed above it, so there is no second map floor clipping through the cave.
  // The descent starts several metres OUTSIDE the terrain cut, so the surface and cave floor overlap rather than meeting at a razor-thin boundary. A broad, shallow first section prevents the player's capsule/ground sampler catching on an edge.
- const rampStart=mouthZ-8,rampEnd=cz+8,rampLen=rampEnd-rampStart,rampMid=(rampStart+rampEnd)/2,rampTopY=H(cx,rampStart)-.12,rampBottomY=floorY+.12,rampDrop=rampTopY-rampBottomY;
- const ramp=new T.Mesh(new T.BoxGeometry(19,.8,rampLen+5),rock2);ramp.position.set(cx,(rampTopY+rampBottomY)/2-.35,rampMid);ramp.rotation.x=-Math.atan2(rampDrop,rampLen);g.add(ramp);
+ const rampStart=mouthZ-10,rampEnd=cz+14,rampLen=rampEnd-rampStart,rampMid=(rampStart+rampEnd)/2,rampTopY=H(cx,rampStart)-.08,rampBottomY=floorY+.12,rampDrop=rampTopY-rampBottomY;
+ const ramp=new T.Mesh(new T.BoxGeometry(21,.9,rampLen+7),rock2);ramp.position.set(cx,(rampTopY+rampBottomY)/2-.4,rampMid);ramp.rotation.x=-Math.atan2(rampDrop,rampLen);g.add(ramp);
+ // Flat landing bridges the final ramp centimetres into the cavern floor so there is no second collision seam at the bottom.
+ const landing=new T.Mesh(new T.BoxGeometry(21,.7,14),rock2);landing.position.set(cx,floorY-.22,rampEnd+5);g.add(landing);
  // The former repeated rock ribs, circular vault rings and vertical cylinder have been deleted.
  // A single organic terminal chamber joins the spline tunnel, giving the dragon a readable lair without geometric repetition.
  const chamber=new T.Mesh(new T.SphereGeometry(1,28,18),new T.MeshStandardMaterial({color:0x302a26,roughness:1,side:T.BackSide,flatShading:true}));chamber.scale.set(18,10.5,24);chamber.position.set(cx+2,floorY+8,cz+57);g.add(chamber);
@@ -628,7 +631,7 @@ let dragonCaveBuilt=false,dragonCaveActive=false;
 function dragonCaveFloor(){return H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31}
 function caveGroundH(x,z){
  if(!dragonCaveActive)return H(x,z);
- const dx=Math.abs(x-DRAGON_CAVE_X),mouth=DRAGON_CAVE_MOUTH_Z-8,rampEnd=DRAGON_CAVE_Z+8;
+ const dx=Math.abs(x-DRAGON_CAVE_X),mouth=DRAGON_CAVE_MOUTH_Z-10,rampEnd=DRAGON_CAVE_Z+14;
  // Collision follows the same broad physical ramp from its surface overlap to the independent cavern floor. Smoothstep removes the abrupt height discontinuity at both ends.
  if(dx<10&&z>=mouth&&z<rampEnd){let t=T.MathUtils.clamp((z-mouth)/(rampEnd-mouth),0,1);t=smooth(t);return T.MathUtils.lerp(H(DRAGON_CAVE_X,mouth)-.12,dragonCaveFloor()+.12,t)}
  if(dx<19&&z>=rampEnd&&z<DRAGON_CAVE_Z+76)return dragonCaveFloor()+.12;
@@ -3627,8 +3630,8 @@ function step(dt,t){
      let f=move.y,side=move.x,baseSpeed=(sprinting?8:4.5),step=baseSpeed*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*step,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*step,nx=player.x+dx,nz=player.z+dz;
      // Crossing the exposed mouth naturally enters cave mode; the player can now walk down rather than teleport through solid terrain.
      // Enter cave-ground mode before reaching the terrain opening. This overlap is intentional: there is never a frame where movement samples the missing overworld floor while still using overworld collision.
-     if(!dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<10&&nz>DRAGON_CAVE_MOUTH_Z-9&&nz<DRAGON_CAVE_Z+9){ensureDragonCave();dragonCaveActive=true}
-     const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<10.5&&nz>DRAGON_CAVE_MOUTH_Z-9?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
+     if(!dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<10&&nz>DRAGON_CAVE_MOUTH_Z-11&&nz<DRAGON_CAVE_Z+15){ensureDragonCave();dragonCaveActive=true}
+     const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<11&&nz>DRAGON_CAVE_MOUTH_Z-11?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
      // Walkable slopes slow naturally as they get steeper. True cliffs remain
      // blocked, preventing the player from stepping through the terrain skin.
      const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade;
