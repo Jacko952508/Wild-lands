@@ -919,10 +919,11 @@ function runwayStrip(){
  startBox(g,-12.5,y+.45,-20.1,1.0,.9,1.0,innerMat,true);
  makeWelcomeScreen(g,-17.05,y+3.2,-24);
  // Two-way Dragon Cavern teleporter: a bright physical pad inside the starter hangar room.
- const tpMat=new T.MeshBasicMaterial({color:0xff6a18,transparent:true,opacity:.88}),tpRing=new T.Mesh(new T.RingGeometry(1.25,1.72,32),tpMat);tpRing.rotation.x=-Math.PI/2;tpRing.position.set(-13.4,y+.13,-17.2);g.add(tpRing);
- const tpCore=new T.Mesh(new T.CircleGeometry(1.18,32),new T.MeshBasicMaterial({color:0x321008}));tpCore.rotation.x=-Math.PI/2;tpCore.position.set(-13.4,y+.12,-17.2);g.add(tpCore);
- const tpLight=new T.PointLight(0xff5a16,4.5,13,1.7);tpLight.position.set(-13.4,y+1.2,-17.2);g.add(tpLight);
- townText(g,'DRAGON CAVE',-13.4,y+2.9,-17.5,4.7,.72);
+ const tpMat=new T.MeshBasicMaterial({color:0xff6a18,transparent:true,opacity:.95,side:T.DoubleSide}),tpRing=new T.Mesh(new T.RingGeometry(1.8,2.45,32),tpMat);tpRing.rotation.x=-Math.PI/2;tpRing.position.set(-13.25,y+.18,-24);g.add(tpRing);
+ const tpCore=new T.Mesh(new T.CircleGeometry(1.72,32),new T.MeshBasicMaterial({color:0xff3510,transparent:true,opacity:.72,side:T.DoubleSide}));tpCore.rotation.x=-Math.PI/2;tpCore.position.set(-13.25,y+.17,-24);g.add(tpCore);
+ const tpBeam=new T.Mesh(new T.CylinderGeometry(1.7,2.1,4.6,24,1,true),new T.MeshBasicMaterial({color:0xff6a18,transparent:true,opacity:.18,side:T.DoubleSide,depthWrite:false}));tpBeam.position.set(-13.25,y+2.3,-24);g.add(tpBeam);
+ const tpLight=new T.PointLight(0xff5a16,8,20,1.4);tpLight.position.set(-13.25,y+2,-24);g.add(tpLight);
+ townText(g,'ENTER DRAGON CAVERN',-13.25,y+4.9,-24,7.2,.82);
 
  // High-output hangar flood lighting.
  for(const z of[-34,-28,-22,-16,-12]){
@@ -1072,7 +1073,7 @@ function cityBuilding(parent,cx,cz,w,d,h,mat,type,label){
 }
 const townInteractions=[],townHumans=[];
 // Register the hangar teleporter only after the interaction registry exists.
-townInteractions.push({x:-13.4,z:-17.2,type:'dragonTeleport',label:'TELEPORT TO DRAGON CAVE',destination:'cave'});
+townInteractions.push({x:-13.25,z:-24,type:'dragonTeleport',label:'ENTER DRAGON CAVERN',destination:'cave'});
 function townText(parent,text,x,y,z,w=7,h=1.15){
  const cv=document.createElement('canvas');cv.width=512;cv.height=96;const ctx=cv.getContext('2d');
  ctx.fillStyle='#151b1d';ctx.fillRect(0,0,512,96);ctx.strokeStyle='#8fe6c1';ctx.lineWidth=5;ctx.strokeRect(3,3,506,90);
