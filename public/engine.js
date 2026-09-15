@@ -1823,7 +1823,7 @@ function updateRobotFeed(force=false){
  if(!robotTerminalScreen||!robotArenaGroup.visible)return;
  const labNear=Math.hypot(player.x-93,player.z+27)<26,panelOpen=!$('robotPanel').classList.contains('hidden');
  if(!force&&!labNear&&!panelOpen)return;
- const now=performance.now();if(!force&&now-robotFeedAt<(IS_MOBILE?90:66))return;robotFeedAt=now;
+ const now=performance.now();if(!force&&now-robotFeedAt<(IS_MOBILE?140:80))return;robotFeedAt=now;
  const c=robotFeedPositions[robotFeedCameraIndex]||robotFeedPositions[0],look=c.look.clone();
  if(robotMatch){
    const ap=robotMatch.a.group.position,bp=robotMatch.b.group.position;
@@ -2180,7 +2180,7 @@ scene.traverse(o=>{
 });
 const lightProbe=new T.Vector3(),shadowProbe=new T.Vector3();let lightUpdateAt=0,shadowCullAt=0;
 function updateManagedLights(day){
- const now=performance.now();if(now-lightUpdateAt<220)return;lightUpdateAt=now;
+ const now=performance.now();if(now-lightUpdateAt<(IS_MOBILE?340:240))return;lightUpdateAt=now;
  const dark=moonMode?1:T.MathUtils.clamp(1-day+.08,0,1);
  for(const l of managedLights){
    const owner=l.userData.owner;
@@ -2195,7 +2195,7 @@ function updateManagedLights(day){
  }
 }
 function updateShadowCasters(){
- const now=performance.now();if(now-shadowCullAt<(IS_MOBILE?750:500))return;shadowCullAt=now;
+ const now=performance.now();if(now-shadowCullAt<(IS_MOBILE?1200:650))return;shadowCullAt=now;
  const px=player.x,pz=player.z,maxDist=IS_MOBILE?52:72;
  scene.traverse(o=>{
    if(!o.isMesh)return;
@@ -3734,7 +3734,7 @@ function loop(now){
  step(dt,t-start);processFarQueue();processNearBuildQueue();processAnimalLoadQueue();updateShadowCasters();
 
  const shadows=renderer.shadowMap.enabled&&world.ui.shadows!==false&&world.ui.graphicsQuality!=='performance',
-       shadowInterval=world.ui.graphicsQuality==='high'?(IS_MOBILE?220:145):(IS_MOBILE?320:210);
+       shadowInterval=world.ui.graphicsQuality==='high'?(IS_MOBILE?300:165):(IS_MOBILE?450:240);
  if(shadows&&now-shadowAt>shadowInterval){shadowAt=now;renderer.shadowMap.needsUpdate=true}
 
  renderer.render(scene,camera);updateRobotFeed();
