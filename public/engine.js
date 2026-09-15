@@ -127,7 +127,9 @@ if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalS
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
-if(!player)player={x:-13.25,z:-24,yaw:Math.PI/2,pitch:0};
+if(!player)player={x:-13.25,z:-24,yaw:-Math.PI/2,pitch:0};
+// Intro-screen repair v55: once per existing save, place the player at the briefing display so the intended opening is actually seen.
+try{if(!localStorage.getItem('wi_intro_screenfix_v55')){player.x=-13.25;player.z=-24;player.yaw=-Math.PI/2;player.pitch=0;localStorage.setItem('wi_intro_screenfix_v55','1')}}catch(e){}
 // v54 intro alignment: repair the briefing-room view for existing saves that are already at the airfield spawn.
 // Never teleport a player back from elsewhere in the world.
 try{if(localStorage.getItem('wi_intro_align_v54')!=='1'&&player.x>-30&&player.x<1&&player.z>-40&&player.z<-8){player.x=-13.25;player.z=-24;player.yaw=Math.PI/2;player.pitch=0;localStorage.setItem('wi_intro_align_v54','1')}}catch(e){}
@@ -766,15 +768,17 @@ function startBox(parent,x,y,z,w,h,d,mat,collide=false){
 let welcomeDisplay=null;
 function makeWelcomeScreen(parent,x,y,z){
  const cv=document.createElement('canvas');cv.width=768;cv.height=432;
- const ctx=cv.getContext('2d'),tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;tex.minFilter=T.LinearFilter;
- const mat=new T.MeshBasicMaterial({map:tex,toneMapped:false});
- const scr=new T.Mesh(new T.PlaneGeometry(7.15,4.02),mat);
- scr.position.set(x,y,z);scr.rotation.y=Math.PI/2;parent.add(scr);
+ const ctx=cv.getContext('2d'),tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;tex.minFilter=T.LinearFilter;tex.magFilter=T.LinearFilter;tex.generateMipmaps=false;
+ const mat=new T.MeshBasicMaterial({map:tex,toneMapped:false,side:T.DoubleSide,depthTest:true,depthWrite:true,transparent:false});
+ const scr=new T.Mesh(new T.PlaneGeometry(7.9,4.45),mat);
+ scr.position.set(x+.22,y,z);scr.rotation.y=Math.PI/2;scr.frustumCulled=false;parent.add(scr);
+ // emissive-looking backing makes the physical TV unmistakable even before the canvas' first animated upload
+ const glow=new T.Mesh(new T.PlaneGeometry(8.02,4.57),new T.MeshBasicMaterial({color:0x06232b,side:T.DoubleSide}));glow.position.set(x+.08,y,z);glow.rotation.y=Math.PI/2;parent.add(glow);
  // Thin physical bezel: from the spawn point it reads as a full-screen menu until the player moves.
  const bezel=new T.MeshStandardMaterial({color:0x071015,metalness:.8,roughness:.22});
- startBox(parent,x-.035,y+2.12,z,0.13,.12,7.48,bezel,false);startBox(parent,x-.035,y-2.12,z,0.13,.12,7.48,bezel,false);
- startBox(parent,x-.035,y,z-3.68,.13,4.35,.12,bezel,false);startBox(parent,x-.035,y,z+3.68,.13,4.35,.12,bezel,false);
- welcomeDisplay={cv,ctx,tex,last:-1};drawWelcomeScreen(0,true);
+ startBox(parent,x,y+2.3,z,0.13,.12,8.18,bezel,false);startBox(parent,x,y-2.3,z,0.13,.12,8.18,bezel,false);
+ startBox(parent,x,y,z-4.05,.13,4.72,.12,bezel,false);startBox(parent,x,y,z+4.05,.13,4.72,.12,bezel,false);
+ welcomeDisplay={cv,ctx,tex,last:-1,scr};drawWelcomeScreen(0,true);tex.needsUpdate=true;
  return scr
 }
 function drawWelcomeScreen(t,force=false){
@@ -3202,7 +3206,8 @@ function updateSky(time,dt=0.016){
  }
  for(const l of flashingRunwayLights){const pulse=.28+.72*(.5+.5*Math.sin(time*5.2-l.phase));l.mesh.material.opacity=pulse;l.mesh.scale.setScalar(.85+pulse*.5)}
  // The briefing-room display is a real in-world animated canvas, not a DOM/menu overlay.
- if(startBase.visible&&Math.hypot(player.x+14.5,player.z+24)<42)drawWelcomeScreen(time);
+ // Keep its texture alive whenever the airfield base is rendered; this avoids a black first frame on mobile/Safari.
+ if(welcomeDisplay){welcomeDisplay.scr.visible=true;drawWelcomeScreen(time);}
  updateManagedLights(day);
  if(updateUi)document.querySelectorAll('.weatherButtons button').forEach(b=>b.classList.toggle('active',b.dataset.weather===w));
 }
