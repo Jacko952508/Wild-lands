@@ -127,7 +127,10 @@ if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalS
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
-if(!player)player={x:-13.25,z:-24,yaw:-Math.PI/2,pitch:0};
+if(!player)player={x:-13.25,z:-24,yaw:Math.PI/2,pitch:0};
+// v54 intro alignment: repair the briefing-room view for existing saves that are already at the airfield spawn.
+// Never teleport a player back from elsewhere in the world.
+try{if(localStorage.getItem('wi_intro_align_v54')!=='1'&&player.x>-30&&player.x<1&&player.z>-40&&player.z<-8){player.x=-13.25;player.z=-24;player.yaw=Math.PI/2;player.pitch=0;localStorage.setItem('wi_intro_align_v54','1')}}catch(e){}
 
 const seed=world.seed;
 const chunks=new Map(),colliders=[],animalAgents=[],farQueue=[],farPending=new Set();
