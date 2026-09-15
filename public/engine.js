@@ -325,8 +325,15 @@ function terrain(cx,cz,seg){
    colors[i*3]=terrainColorTmp.r;colors[i*3+1]=terrainColorTmp.g;colors[i*3+2]=terrainColorTmp.b
  }
  g.setAttribute('color',new T.BufferAttribute(colors,3));
- // Real Dragon Cavern opening: remove terrain triangles over the shaft instead of drawing cave geometry underneath an intact map floor.
- if(!moonMode&&g.index){const src=Array.from(g.index.array),cut=[];for(let k=0;k<src.length;k+=3){const a=src[k],b=src[k+1],c=src[k+2],mx=(worldX[a]+worldX[b]+worldX[c])/3,mz=(worldZ[a]+worldZ[b]+worldZ[c])/3;if(Math.hypot(mx-DRAGON_CAVE_X,mz-DRAGON_CAVE_Z)>11.5)cut.push(a,b,c)}g.setIndex(cut)}
+ // Dragon Cavern entrance is real missing topology, not a dark decal. Remove every terrain triangle that touches
+ // the walk-in opening/ramp corridor, then widen into the underground shaft. Testing only triangle centroids left
+ // large faces spanning the opening on mobile LOD, which is why the screenshots still showed a solid map floor.
+ if(!moonMode&&g.index){
+   const src=Array.from(g.index.array),cut=[];
+   const inCaveCut=(i)=>{const x=worldX[i],z=worldZ[i],shaft=Math.hypot(x-DRAGON_CAVE_X,z-DRAGON_CAVE_Z)<13.5,ramp=Math.abs(x-DRAGON_CAVE_X)<9.5&&z>DRAGON_CAVE_MOUTH_Z-2&&z<DRAGON_CAVE_Z+3;return shaft||ramp};
+   for(let k=0;k<src.length;k+=3){const a=src[k],b=src[k+1],c=src[k+2];if(!inCaveCut(a)&&!inCaveCut(b)&&!inCaveCut(c))cut.push(a,b,c)}
+   g.setIndex(cut)
+ }
  g.computeVertexNormals();
  const mesh=new T.Mesh(g,terrainMaterial);
  mesh.position.set(cx*CH,0,cz*CH);mesh.receiveShadow=seg>12;return mesh
@@ -572,8 +579,12 @@ function makeDragonCave(){
  const emberMat=new T.MeshBasicMaterial({color:0xff6a19});for(const sx of[-1,1]){const e=new T.Mesh(new T.ConeGeometry(.42,1.8,8),emberMat);e.position.set(cx+sx*7.4,mouthY+.9,mouthZ-.6);g.add(e)}
  townText(g,'DRAGON CAVERN',cx,mouthY+10.7,mouthZ-.7,9.8,1.35);
  townInteractions.push({x:cx,z:mouthZ-4,type:'cityInfo',label:'DRAGON CAVERN',message:'Dragon Cavern • descend through the glowing stone mouth'});
- // A descending stone throat leads to a genuinely subterranean chamber ~30m below terrain.
- for(let j=0;j<9;j++){const zz=cz-26+j*6,yy=surface-2-j*3.55;for(let i=0;i<12;i++){const a=i/12*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(3.1+(i%3)*.45,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*9.2,yy+Math.sin(a)*7.1,zz);b.scale.z=1.35;g.add(b)}}
+ // Build a physical descending floor through the terrain opening. This is the surface the player actually walks on;
+ // the procedural overworld has been removed above it, so there is no second map floor clipping through the cave.
+ const rampStart=mouthZ+1,rampEnd=cz+3,rampLen=rampEnd-rampStart,rampMid=(rampStart+rampEnd)/2,rampDrop=30;
+ const ramp=new T.Mesh(new T.BoxGeometry(15,.65,rampLen+3),rock2);ramp.position.set(cx,mouthY-rampDrop/2-.25,rampMid);ramp.rotation.x=-Math.atan2(rampDrop,rampLen);g.add(ramp);
+ // Rock ribs frame the descent without sealing its centre.
+ for(let j=0;j<9;j++){const t=j/8,zz=T.MathUtils.lerp(rampStart,rampEnd,t),yy=T.MathUtils.lerp(mouthY-1,floorY+3,t);for(const sx of[-1,1]){const b=new T.Mesh(new T.DodecahedronGeometry(2.5+(j%3)*.35,0),j%2?rock:rock2);b.position.set(cx+sx*8.1,yy+2.2,zz);b.scale.set(1.15,1.25,1.4);g.add(b)}}
  // Huge underground vault, rough stone shell, with an unobstructed central flight corridor back to the tunnel.
  for(let j=0;j<7;j++)for(let i=0;i<18;i++){const a=i/18*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(4.2+(i+j)%3*.65,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*(17+j*.45),floorY+8+Math.sin(a)*11,cz+29+j*5.5);b.scale.set(1.25,1.1,1.7);g.add(b)}
  // The shaft is now a true vertical void through the terrain, with its own rock walls and a completely separate cavern floor 31m below the world surface.
@@ -608,7 +619,14 @@ function updateDragonFire(dt){
 // This keeps all cave code/assets local while removing cave construction entirely from startup.
 let dragonCaveBuilt=false,dragonCaveActive=false;
 function dragonCaveFloor(){return H(DRAGON_CAVE_X,DRAGON_CAVE_Z)-31}
-function caveGroundH(x,z){return dragonCaveActive&&Math.abs(x-DRAGON_CAVE_X)<19&&z>DRAGON_CAVE_Z-13&&z<DRAGON_CAVE_Z+76?dragonCaveFloor():H(x,z)}
+function caveGroundH(x,z){
+ if(!dragonCaveActive)return H(x,z);
+ const dx=Math.abs(x-DRAGON_CAVE_X),mouth=DRAGON_CAVE_MOUTH_Z+1,rampEnd=DRAGON_CAVE_Z+3;
+ // Match collision height to the visible descending ramp, then use the independent deep-cave floor.
+ if(dx<8.2&&z>=mouth&&z<rampEnd){const t=T.MathUtils.clamp((z-mouth)/(rampEnd-mouth),0,1);return T.MathUtils.lerp(H(DRAGON_CAVE_X,DRAGON_CAVE_MOUTH_Z)-1,dragonCaveFloor(),t)}
+ if(dx<19&&z>=rampEnd&&z<DRAGON_CAVE_Z+76)return dragonCaveFloor();
+ return H(x,z)
+}
 function ensureDragonCave(){if(dragonCaveBuilt)return true;try{makeDragonCave();dragonCaveBuilt=true;return true}catch(e){console.error('Dragon cave init',e);return false}}
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
@@ -3600,7 +3618,9 @@ function step(dt,t){
        if(playerJumpY<=0){playerJumpY=0;playerJumpV=0}
      }
      let f=move.y,side=move.x,baseSpeed=(sprinting?8:4.5),step=baseSpeed*dt,dx=(Math.sin(player.yaw)*f+Math.cos(player.yaw)*side)*step,dz=(Math.cos(player.yaw)*f-Math.sin(player.yaw)*side)*step,nx=player.x+dx,nz=player.z+dz;
-     const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
+     // Crossing the exposed mouth naturally enters cave mode; the player can now walk down rather than teleport through solid terrain.
+     if(!dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<8.2&&nz>DRAGON_CAVE_MOUTH_Z&&nz<DRAGON_CAVE_Z+5){ensureDragonCave();dragonCaveActive=true}
+     const hereH=caveGroundH(player.x,player.z),nextH=caveGroundH(nx,nz),rise=nextH-hereH,grade=dragonCaveActive&&Math.abs(nx-DRAGON_CAVE_X)<8.5&&nz>DRAGON_CAVE_MOUTH_Z?0:slopeAt(nx,nz),airborne=playerJumpY>.08;
      // Walkable slopes slow naturally as they get steeper. True cliffs remain
      // blocked, preventing the player from stepping through the terrain skin.
      const maxRise=airborne?1.9:.92,maxGrade=airborne?3.4:2.35,walkable=!blocked(nx,nz)&&Math.abs(rise)<maxRise&&grade<maxGrade;
