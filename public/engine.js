@@ -45,7 +45,15 @@ const sun=new T.DirectionalLight(0xffe2ad,2.2);
 sun.castShadow=true;
 sun.shadow.mapSize.set((matchMedia('(pointer:coarse)').matches||innerWidth<900)?768:1024,(matchMedia('(pointer:coarse)').matches||innerWidth<900)?768:1024);
 sun.shadow.camera.left=-85;sun.shadow.camera.right=85;sun.shadow.camera.top=85;sun.shadow.camera.bottom=-85;
-scene.add(hemi,sun);
+const moonLight=new T.DirectionalLight(0x8eb4ff,.18);moonLight.castShadow=false;
+scene.add(hemi,sun,moonLight,moonLight.target);
+const earthSun=new T.Group(),earthMoon=new T.Group();
+const earthSunOrb=new T.Mesh(new T.SphereGeometry(26,18,12),new T.MeshBasicMaterial({color:0xffefb0}));
+const earthSunHalo=new T.Mesh(new T.SphereGeometry(38,16,10),new T.MeshBasicMaterial({color:0xffbd54,transparent:true,opacity:.12,depthWrite:false}));
+earthSun.add(earthSunHalo,earthSunOrb);scene.add(earthSun);
+const earthMoonOrb=new T.Mesh(new T.SphereGeometry(20,18,12),new T.MeshStandardMaterial({color:0xc9d2d8,emissive:0x667788,emissiveIntensity:.65,roughness:1}));
+const earthMoonHalo=new T.Mesh(new T.SphereGeometry(30,14,10),new T.MeshBasicMaterial({color:0xa7c7ff,transparent:true,opacity:.11,depthWrite:false}));
+earthMoon.add(earthMoonHalo,earthMoonOrb);scene.add(earthMoon);
 
 const starGeo=new T.BufferGeometry(),starPos=[];
 for(let i=0;i<1800;i++){
@@ -144,7 +152,7 @@ function earthH(x,z){
 
   // West town is built on a gently levelled plateau so floors and doorways
   // remain genuinely walkable, with only a narrow blend back to wild terrain.
-  const tx=Math.max(0,-190-x,x+64),tz=Math.max(0,Math.abs(z)-70),td=Math.max(tx,tz);
+  const tx=Math.max(0,-365-x,x+64),tz=Math.max(0,Math.abs(z)-100),td=Math.max(tx,tz);
   if(td<=0)return TOWN_LEVEL;
   if(td<10)return T.MathUtils.lerp(TOWN_LEVEL,raw,smooth(td/10));
 
@@ -864,7 +872,7 @@ function runwayStrip(){
 const startBase=runwayStrip();
 
 const cityColliders=[],cityDoorways=[];
-function inCityZone(x,z){return x>-190&&x<-64&&z>-70&&z<70}
+function inCityZone(x,z){return x>-365&&x<-64&&z>-100&&z<100}
 function cityMat(color,roughness=0.85,emissive=0){
  return new T.MeshStandardMaterial({color,roughness,emissive,emissiveIntensity:emissive?0.32:0});
 }
@@ -1139,6 +1147,100 @@ function makeCity(){
  scene.add(g);return g
 }
 const cityGroup=makeCity();
+const cityExpansionGroup=new T.Group();cityGroup.add(cityExpansionGroup);
+const cityTraffic=[],cityTrafficLights=[],cityCrowd=[];
+function makeTrafficLight(parent,x,z,rot=0,phase=0){
+ const y=H(x,z),g=new T.Group(),pole=cityMat(0x20272a,.6),off=cityMat(0x15191b,.55);
+ cityBox(g,0,2.25,0,.16,4.5,.16,pole,false);cityBox(g,0,4.25,0,.7,1.55,.48,off,false);
+ const red=new T.Mesh(new T.SphereGeometry(.13,7,5),new T.MeshBasicMaterial({color:0xff352e})),
+       amber=new T.Mesh(new T.SphereGeometry(.13,7,5),new T.MeshBasicMaterial({color:0xffb632})),
+       green=new T.Mesh(new T.SphereGeometry(.13,7,5),new T.MeshBasicMaterial({color:0x59ff87}));
+ red.position.set(0,4.7,.25);amber.position.set(0,4.25,.25);green.position.set(0,3.8,.25);g.add(red,amber,green);
+ g.position.set(x,y,z);g.rotation.y=rot;parent.add(g);cityTrafficLights.push({g,red,amber,green,phase})
+}
+function makeCityCar(parent,route,index,color){
+ const g=new T.Group(),body=cityMat(color,.38),dark=cityMat(0x1a2024,.55),glass=cityM.glass;
+ cityBox(g,0,.52,0,1.75,.62,3.55,body,false);cityBox(g,0,1.0,-.15,1.45,.62,1.8,glass,false);
+ for(const sx of[-.82,.82])for(const sz of[-1.05,1.05]){const w=new T.Mesh(new T.CylinderGeometry(.28,.28,.18,10),dark);w.rotation.z=Math.PI/2;w.position.set(sx,.32,sz);g.add(w)}
+ const h1=new T.Mesh(new T.SphereGeometry(.09,6,4),new T.MeshBasicMaterial({color:0xfff2c2}));h1.position.set(-.48,.62,1.81);const h2=h1.clone();h2.position.x=.48;g.add(h1,h2);
+ parent.add(g);cityTraffic.push({g,route,index:index||0,t:Math.random(),speed:5.5+Math.random()*2.5,wait:0})
+}
+function addCityInterior(parent,cx,cz,w,d,y,kind){
+ const mat=kind==='gallery'?cityM.cream:kind==='hotel'?cityM.wood:cityM.dark;
+ if(kind==='market'){
+   for(const z of[cz-3,cz+2])for(const x of[cx-5,cx,cx+5])cityBox(parent,x,y+.65,z,3.4,1.3,1.1,cityM.wood,true)
+ }else if(kind==='garage'){
+   for(const x of[cx-5,cx,cx+5]){cityBox(parent,x,y+.45,cz+2,2.8,.9,4.4,cityM.dark,true);cityBox(parent,x,y+2.2,cz+4,.15,3.2,.15,cityM.red,false)}
+ }else{
+   cityBox(parent,cx,y+.55,cz+2,w*.55,1.1,1.2,mat,true);
+   for(const sx of[-w*.27,w*.27])cityBox(parent,cx+sx,y+.38,cz-2,2.1,.76,1.2,cityM.wood,true)
+ }
+}
+function makeCityExpansion(){
+ const g=cityExpansionGroup,y=TOWN_LEVEL;
+ // Main boulevard continues west from the original town.
+ cityRoad(g,-184,8,-352,8,12,44);
+ for(const z of[-62,72])cityRoad(g,-194,z,-350,z,9,38);
+ for(const x of[-210,-250,-292,-334])cityRoad(g,x,-82,x,86,9,34);
+ for(let x=-342;x<=-202;x+=18){cityLamp(g,x,-51);cityLamp(g,x,61)}
+ for(const x of[-222,-264,-306,-344])for(let z=-45;z<=54;z+=20)cityLamp(g,x,z);
+
+ // Accessible civic/commercial buildings.
+ let s=townShell(g,-218,-28,28,24,8.2,cityM.brick,'CITY MARKET');addCityInterior(g,-218,-28,28,24,s.y,'market');addTownInteraction('shop',-218,-20,'SHOP AT CITY MARKET');
+ s=townShell(g,-258,-28,30,24,9.2,cityM.plaster,'GRAND HOTEL');addCityInterior(g,-258,-28,30,24,s.y,'hotel');addTownInteraction('cityHotel',-258,-20,'REST AT GRAND HOTEL');
+ s=townShell(g,-300,-28,30,24,8.4,cityM.blue,'MOTOR GARAGE');addCityInterior(g,-300,-28,30,24,s.y,'garage');addTownInteraction('shop',-300,-20,'BROWSE MOTOR GARAGE');
+ s=townShell(g,-340,-28,28,24,8.6,cityM.cream,'CITY HALL');addCityInterior(g,-340,-28,28,24,s.y,'gallery');addTownInteraction('noticeboard',-340,-20,'CHECK CITY NOTICE BOARD');
+
+ s=townShell(g,-218,48,28,24,8.2,cityM.blue,'TRANSIT HUB','north');addCityInterior(g,-218,48,28,24,s.y,'gallery');addTownInteraction('cityTransit',-218,40,'TAKE TRANSIT TO AIRFIELD');
+ s=townShell(g,-258,48,30,24,8.4,cityM.brick,'TECH CENTRE','north');addCityInterior(g,-258,48,30,24,s.y,'gallery');addTownInteraction('robotTerminal',-258,40,'USE TECH CENTRE ROBOT TERMINAL');
+ s=townShell(g,-300,48,30,24,8.2,cityM.plaster,'CITY MUSEUM','north');addCityInterior(g,-300,48,30,24,s.y,'gallery');addTownInteraction('cityInfo',-300,40,'ENTER CITY MUSEUM',{message:'City Museum • local history and exploration exhibits'});
+ s=townShell(g,-340,48,28,24,8.8,cityM.cream,'APARTMENTS','north');addCityInterior(g,-340,48,28,24,s.y,'hotel');addTownInteraction('cityInfo',-340,40,'ENTER APARTMENT LOBBY',{message:'Residential tower lobby • lift access under development'});
+
+ // Skyline shells behind accessible street-front buildings. Kept collider-free.
+ const skylineMat=[cityM.dark,cityM.blue,cityM.brick,cityM.plaster];
+ for(let i=0;i<18;i++){
+   const x=-205-(i%6)*27,z=i<6?-82:i<12?90:(i%2?-92:92),h=12+(i%5)*4,w=13+(i%3)*3,d=12+(i%4)*2;
+   const yy=H(x,z);cityBox(g,x,yy+h/2,z,w,h,d,skylineMat[i%skylineMat.length],true);
+   for(let f=0;f<3;f++){const win=new T.Mesh(new T.BoxGeometry(w*.65,.35,.05),new T.MeshBasicMaterial({color:0xffe5a8,transparent:true,opacity:.5}));win.position.set(x,yy+3+f*3.1,z-d/2-.03);g.add(win)}
+ }
+
+ // Traffic signals at the main intersections.
+ for(const x of[-210,-250,-292,-334]){
+   makeTrafficLight(g,x-4,4,0,(x+400)*.01);makeTrafficLight(g,x+4,12,Math.PI,(x+400)*.01+.5)
+ }
+
+ // Cars follow two independent road loops; no physics/collision overhead.
+ const loop1=[[-190,4],[-346,4],[-346,68],[-190,68]],loop2=[[-194,12],[-334,12],[-334,-58],[-194,-58]];
+ const colors=[0xc74d3d,0x3f75b5,0xd4b348,0x4f9b74,0xdddddd,0x7a5aa6,0x2f3438,0xb56a3d];
+ for(let i=0;i<(IS_MOBILE?8:12);i++)makeCityCar(g,i%2?loop1:loop2,i%4,colors[i%colors.length]);
+
+ // More life without creating a separate expensive AI system.
+ const people=[
+  [-205,18,0x5f7892],[-226,15,0x8d5c48],[-246,21,0x4e7b5d],[-270,14,0x76508a],
+  [-289,22,0x856c45],[-314,16,0x4d7185],[-332,25,0x925d5d],[-346,12,0x596e48],
+  [-230,63,0x79604a],[-272,64,0x526f8d],[-312,63,0x8a4d67],[-344,59,0x4f7d6a]
+ ];
+ for(let i=0;i<people.length;i++){const p=people[i],h=makeHuman(g,p[0],p[1],p[2],'Resident','Citizen '+(i+1));h.userData.homeX=p[0];h.userData.homeZ=p[1];cityCrowd.push(h)}
+}
+makeCityExpansion();
+
+function updateCityTraffic(dt,t){
+ if(!cityExpansionGroup.visible)return;
+ const cycle=(t%12)/12;
+ for(const l of cityTrafficLights){
+   const q=(cycle+l.phase)%1,green=q<.48,amber=q>=.48&&q<.58;
+   l.red.visible=!green&&!amber;l.amber.visible=amber;l.green.visible=green
+ }
+ for(const c of cityTraffic){
+   if(c.wait>0){c.wait-=dt;continue}
+   const r=c.route,a=r[c.index%r.length],b=r[(c.index+1)%r.length],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz)||1;
+   const horizontal=Math.abs(dx)>Math.abs(dz),signalGreen=horizontal?cycle<.48:cycle>.58;
+   if(c.t>.86&&!signalGreen)c.t=Math.min(c.t,.88);else c.t+=dt*c.speed/len;
+   if(c.t>=1){c.t-=1;c.index=(c.index+1)%r.length}
+   const aa=r[c.index%r.length],bb=r[(c.index+1)%r.length],x=T.MathUtils.lerp(aa[0],bb[0],c.t),z=T.MathUtils.lerp(aa[1],bb[1],c.t);
+   c.g.position.set(x,H(x,z)+.03,z);c.g.rotation.y=Math.atan2(bb[0]-aa[0],bb[1]-aa[1])
+ }
+}
 
 // ---------------------------------------------------------------------------
 // EAST ROBOT COMBAT INSTITUTE
@@ -1275,8 +1377,11 @@ function robotMaterial(hex){return new T.MeshStandardMaterial({color:hex,roughne
 
 function makeCombatRobot(c,team=0,mini=false){
  c=normalRobotConfig(c);
- const g=new T.Group(),primary=robotMaterial(team?0x365d9f:0xa84032),dark=robotMaterial(0x20262b),steel=robotMaterial(0x737d83),
-       glow=new T.MeshStandardMaterial({color:team?0x75b9ff:0xffa66d,emissive:team?0x164a7d:0x7d2c16,emissiveIntensity:1.1,roughness:.25});
+ const palettesA=[0xa84032,0xd46d2f,0x9c3e75,0xb6922f,0x7d4132,0xc64d5a,0x8055a8,0xb65d28,0x8f6b35,0xd57c54],palettesB=[0x365d9f,0x2f8a85,0x4f6fb8,0x3e8c55,0x5a55a8,0x2b7894,0x55748b,0x3c82b5,0x50714d,0x527cc2],
+       chosen=(team?palettesB:palettesA)[(c.head+c.torso+c.armour+c.weapon)%10],
+       g=new T.Group(),primary=robotMaterial(chosen),dark=robotMaterial(0x20262b),steel=robotMaterial(c.armour===3?0x9aa6ad:c.armour===5?0x745f4d:0x737d83),
+       glowColor=team?([0x75b9ff,0x74ffd8,0x9aa4ff][c.core%3]):([0xffa66d,0xff6f91,0xffd46e][c.core%3]),
+       glow=new T.MeshStandardMaterial({color:glowColor,emissive:glowColor,emissiveIntensity:.72,roughness:.25});
  const torsoI=c.torso,headI=c.head,mobI=c.mobility,armI=c.arms;
  const tw=2.8+(torsoI%3)*.24,th=2.5+(torsoI%4)*.15,td=1.8+((torsoI+1)%3)*.18;
  const torso=new T.Mesh(new T.BoxGeometry(tw,th,td),primary);torso.position.y=4.2;g.add(torso);
@@ -1303,9 +1408,11 @@ function makeCombatRobot(c,team=0,mini=false){
    const count=(mobI===4||mobI===5)?4:2;
    for(let i=0;i<count;i++){const sx=(i%2?1:-1)*(count===4?1.25:.82),sz=count===4?(i<2?-.65:.65):0;const leg=new T.Mesh(new T.BoxGeometry(.55,2.25,.65),dark);leg.position.set(sx,1.55,sz);g.add(leg);legs.push(leg);const foot=new T.Mesh(new T.BoxGeometry(.9,.38,1.25),steel);foot.position.set(sx,.3,sz+.2);g.add(foot)}
  }
+ const arms=[];
  for(const sx of[-1,1]){
    const shoulder=new T.Mesh(new T.SphereGeometry(.48,8,6),steel);shoulder.position.set(sx*(tw/2+.38),4.75,0);g.add(shoulder);
-   const arm=new T.Mesh(new T.BoxGeometry(.52,2.0,.6),primary);arm.position.set(sx*(tw/2+.5),3.65,.05);arm.rotation.z=sx*(armI%3)*.05;g.add(arm)
+   const armPivot=new T.Group();armPivot.position.set(sx*(tw/2+.5),4.25,.05);
+   const arm=new T.Mesh(new T.BoxGeometry(.52,2.0,.6),primary);arm.position.y=-.6;armPivot.add(arm);armPivot.rotation.z=sx*(armI%3)*.05;g.add(armPivot);arms.push(armPivot)
  }
  const w=robotWeapons[c.weapon],wg=new T.Group();wg.position.set(0,3.9,td/2+.65);g.add(wg);
  if(c.weapon===0){const saw=new T.Mesh(new T.CylinderGeometry(.78,.78,.16,16),steel);saw.rotation.z=Math.PI/2;wg.add(saw);wg.userData.spin=saw}
@@ -1317,7 +1424,7 @@ function makeCombatRobot(c,team=0,mini=false){
  else if(c.weapon===6){for(const sx of[-.45,.45]){const pod=new T.Mesh(new T.BoxGeometry(.58,.58,1.4),dark);pod.position.set(sx,0,.7);wg.add(pod)}}
  else if(c.weapon===7){const gun=new T.Mesh(new T.CylinderGeometry(.28,.34,2.5,10),dark);gun.rotation.x=Math.PI/2;gun.position.z=1.2;wg.add(gun)}
  else if(c.weapon===8){for(const sx of[-.45,.45]){const claw=new T.Mesh(new T.BoxGeometry(.22,.28,1.65),steel);claw.position.set(sx,0,.85);claw.rotation.y=sx*.2;wg.add(claw)}}
- g.userData={config:c,weaponGroup:wg,legs,team,name:robotName(c)};
+ g.userData={config:c,weaponGroup:wg,legs,arms,team,name:robotName(c),phase:Math.random()*6.28};
  if(mini)g.scale.setScalar(.22);return g
 }
 
@@ -1471,7 +1578,8 @@ function robotDamage(attacker,defender){
  if(w.type==='ballistic'&&defender.config.mobility===6)mult*=1.12;
  if(w.type==='kinetic'&&defender.config.armour===0)mult*=1.25;
  if(w.type==='control')mult*=Math.max(.55,12/(12+defender.stats.stability));
- let dmg=Math.max(1,(w.damage+attacker.stats.damage+attacker.stats.power*.45-armourBlock)*mult);
+ const variance=.86+Math.random()*.28,crit=(Math.random()<(.035+attacker.config.head*.004))?1.32:1;
+ let dmg=Math.max(1,(w.damage+attacker.stats.damage+attacker.stats.power*.45-armourBlock)*mult*variance*(attacker.luck||1)*crit);
  return dmg
 }
 function combatEffect(pos,type){
@@ -1486,8 +1594,8 @@ function startRobotBattle(mode='screen'){
  const sa=robotStats(aCfg),sb=robotStats(bCfg);
  robotMatch={
    phase:'fight',time:0,
-   a:{group:a,config:aCfg,stats:sa,weapon:sa.weapon,hp:sa.hp,cool:1,stun:0,burn:0,heat:0},
-   b:{group:b,config:bCfg,stats:sb,weapon:sb.weapon,hp:sb.hp,cool:1.25,stun:0,burn:0,heat:0},
+   a:{group:a,config:aCfg,stats:sa,weapon:sa.weapon,hp:sa.hp,cool:.7+Math.random()*.6,stun:0,burn:0,heat:0,recoil:0,attackAnim:0,phase:Math.random()*6.28,strafe:Math.random()<.5?-1:1,luck:.94+Math.random()*.12},
+   b:{group:b,config:bCfg,stats:sb,weapon:sb.weapon,hp:sb.hp,cool:.7+Math.random()*.6,stun:0,burn:0,heat:0,recoil:0,attackAnim:0,phase:Math.random()*6.28,strafe:Math.random()<.5?-1:1,luck:.94+Math.random()*.12},
    winner:null,loser:null,endT:0
  };
  world.robotArena.matches++;sfx(180,.15,.08,'sawtooth');updateRobotFeed(true);toast(robotName(aCfg)+' VS '+robotName(bCfg)+' • '+(mode==='boss'?'BOSS MATCH START':'SCREEN MATCH START'))
@@ -1499,7 +1607,7 @@ function attackRobot(att,def,t){
  att.cool=Math.max(.14,(w.cooldown+(att.stats.cooldown||0))*(1+att.heat*.012));
  const miss=T.MathUtils.clamp((w.miss||0)+def.stats.dodge-(att.config.head===1||att.config.head===3?0.05:0),0,.45);
  if(Math.random()<miss){combatEffect(dp,'ballistic');return}
- const dmg=robotDamage(att,def);def.hp-=dmg;
+ const dmg=robotDamage(att,def);def.hp-=dmg;def.recoil=Math.min(1,(def.recoil||0)+.35+dmg*.012);att.attackAnim=1;
  if(w.stun&&Math.random()<w.stun)def.stun=Math.max(def.stun,.35+Math.random()*.45);
  if(w.burn)def.burn=Math.max(def.burn,1.6);
  if(w.push){
@@ -1570,17 +1678,29 @@ function updateRobotArena(dt,t){
    robotMatch.time+=dt;
    const pair=[[robotMatch.a,robotMatch.b],[robotMatch.b,robotMatch.a]];
    for(const [r,e] of pair){
-     r.cool=Math.max(0,r.cool-dt);r.stun=Math.max(0,r.stun-dt);r.heat=Math.max(0,r.heat-dt*.9);
+     r.cool=Math.max(0,r.cool-dt);r.stun=Math.max(0,r.stun-dt);r.heat=Math.max(0,r.heat-dt*.9);r.recoil=Math.max(0,(r.recoil||0)-dt*2.8);r.attackAnim=Math.max(0,(r.attackAnim||0)-dt*4.2);
      if(r.burn>0){r.burn-=dt;r.hp-=dt*2.4}
      const p=r.group.position,q=e.group.position,dx=q.x-p.x,dz=q.z-p.z,d=Math.hypot(dx,dz)||1,desired=Math.max(2.6,r.weapon.range*.72);
      r.group.rotation.y=Math.atan2(dx,dz);
      if(r.stun<=0){
        let dir=d>desired?1:d<desired*.62?-1:0,spd=r.stats.speed*(dir<0?.65:1);
        if(dir){p.x+=dx/d*spd*dt*dir;p.z+=dz/d*spd*dt*dir}
+       // Agile robots circle and change side occasionally so fights don't collapse
+       // into identical straight-line collisions.
+       const strafeAmt=T.MathUtils.clamp((r.stats.speed-5)/10,0,.7);
+       p.x+=(-dz/d)*Math.sin(t*1.4+r.phase)*r.strafe*strafeAmt*dt*3.4;
+       p.z+=(dx/d)*Math.sin(t*1.4+r.phase)*r.strafe*strafeAmt*dt*3.4;
+       if(Math.random()<dt*.12)r.strafe*=-1;
        p.x=T.MathUtils.clamp(p.x,108,172);p.z=T.MathUtils.clamp(p.z,-22,22);
        attackRobot(r,e,t)
      }
-     const spin=r.group.userData.weaponGroup?.userData.spin;if(spin)spin.rotation.z+=dt*(5+r.stats.power*.3)
+     const moving=d>desired*.82&&r.stun<=0,swing=Math.sin(t*(5.5+r.stats.speed*.18)+r.phase)*(moving?.42:.08);
+     r.group.userData.legs?.forEach((leg,i)=>{leg.rotation.x=T.MathUtils.lerp(leg.rotation.x,i%2?swing:-swing,.28)});
+     r.group.userData.arms?.forEach((arm,i)=>{arm.rotation.x=T.MathUtils.lerp(arm.rotation.x,(i%2?-1:1)*swing*.65-r.attackAnim*.35,.3)});
+     r.group.rotation.z=T.MathUtils.lerp(r.group.rotation.z,(r.stun>0?.14*Math.sin(t*18+r.phase):0)+(r.recoil||0)*(Math.sin(t*24+r.phase)*.08),.3);
+     r.group.position.y=ARENA_LEVEL+.3+Math.abs(Math.sin(t*(4+r.stats.speed*.12)+r.phase))*(moving?.09:.025);
+     const wg=r.group.userData.weaponGroup;if(wg){wg.rotation.x=T.MathUtils.lerp(wg.rotation.x,-r.attackAnim*.42,.35)}
+     const spin=wg?.userData.spin;if(spin)spin.rotation.z+=dt*(5+r.stats.power*.3)
    }
    if(robotMatch.a.hp<=0&&robotMatch.b.hp<=0)endRobotMatch(robotMatch.a.hp>robotMatch.b.hp?robotMatch.a:robotMatch.b,robotMatch.a.hp>robotMatch.b.hp?robotMatch.b:robotMatch.a);
    else if(robotMatch.a.hp<=0)endRobotMatch(robotMatch.b,robotMatch.a);
@@ -1941,8 +2061,8 @@ function createChunk(cx,cz){
 function ensureNearBuilt(c){
  if(c.nearBuilt)return;
  addNearNature(c.near,c.d,c.cx,c.cz);
- if(c.d.mark&&!inStartClearZone(c.cx*CH,c.cz*CH)){c.near.add(landmarkModel(c.cx,c.cz,c.d.mark));addTrail(c.near,c.cx,c.cz,c.d)}
- if(c.d.anomaly&&!inStartClearZone(c.cx*CH,c.cz*CH)){c.anomaly=anomalyModel(c.d.anomaly,c.cx,c.cz);c.near.add(c.anomaly)}
+ if(c.d.mark&&!inStartClearZone(c.cx*CH,c.cz*CH)&&!inCityZone(c.cx*CH,c.cz*CH)){c.near.add(landmarkModel(c.cx,c.cz,c.d.mark));addTrail(c.near,c.cx,c.cz,c.d)}
+ if(c.d.anomaly&&!inStartClearZone(c.cx*CH,c.cz*CH)&&!inCityZone(c.cx*CH,c.cz*CH)){c.anomaly=anomalyModel(c.d.anomaly,c.cx,c.cz);c.near.add(c.anomaly)}
  c.nearBuilt=true
 }
 const nearBuildQueue=[],nearBuildPending=new Set();let nearBuildAt=0;
@@ -1967,7 +2087,7 @@ function processAnimalLoadQueue(){
  if(c.mode==='near'&&chunks.get(c.k)===c)loadAnimals(c)
 }
 function loadAnimals(c){
- if(c.agents.length||inStartClearZone(c.cx*CH,c.cz*CH))return;
+ if(c.agents.length||inStartClearZone(c.cx*CH,c.cz*CH)||inCityZone(c.cx*CH,c.cz*CH))return;
  let saved=world.animalState[c.k]||[];
  c.d.animals.forEach((q,i)=>{
    let st=saved[i],x=st?st.x:c.cx*CH+q[0],z=st?st.z:c.cz*CH+q[1],dir=st?st.dir:hash(c.cx*9+i,c.cz*7-i,200)*Math.PI*2;
@@ -2084,7 +2204,7 @@ function sync(force=false){
  rebuildColliders(nearSet);
  saveVisitedDescriptor(cc.cx,cc.cz);
  currentChunk=key(cc.cx,cc.cz);
- $('region').textContent=regionName(cc.cx,cc.cz)+' · '+cc.cx+', '+cc.cz;
+ $('region').textContent=(player.x<-190&&inCityZone(player.x,player.z)?'WESTHAVEN CITY':regionName(cc.cx,cc.cz))+' · '+cc.cx+', '+cc.cz;
  persist();
  if(!$('panel').classList.contains('hidden'))renderMap();
 }
@@ -2148,8 +2268,8 @@ function updateTownHumans(t){
      u.moveT-=dt;
      if(u.moveT<=0||Math.hypot(h.position.x-u.targetX,h.position.z-u.targetZ)<.6){
        const a=Math.random()*Math.PI*2,r=4+Math.random()*9;
-       u.targetX=T.MathUtils.clamp(u.homeX+Math.sin(a)*r,-184,-70);
-       u.targetZ=T.MathUtils.clamp(u.homeZ+Math.cos(a)*r,-55,60);
+       u.targetX=u.homeX+Math.sin(a)*r;u.targetZ=u.homeZ+Math.cos(a)*r;
+       if(!inCityZone(u.targetX,u.targetZ)){u.targetX=u.homeX;u.targetZ=u.homeZ}
        u.moveT=4+Math.random()*8
      }
      const ang=Math.atan2(u.targetX-h.position.x,u.targetZ-h.position.z),nx=h.position.x+Math.sin(ang)*.45*dt,nz=h.position.z+Math.cos(ang)*.45*dt;
@@ -2733,6 +2853,15 @@ $('townAction').onclick=()=>{
  else if(a.type==='robotTerminal'){openRobotDesigner();toast('Robot Combat Design Lab online')}
  else if(a.type==='robotBossStart'){if(!robotBossPending){toast('Configure both robots in the Design Lab first');return}startRobotBattle('boss')}
  else if(a.type==='robotBossExit'){teleportRobotLab()}
+ else if(a.type==='cityInfo'){sfx(310,.06,.025,'sine');toast(a.message||'City facility')}
+ else if(a.type==='cityHotel'){
+   const cost=16;if(world.credits<cost){toast('Hotel rest costs '+cost+' credits');return}
+   world.credits-=cost;world.playerStats.health=100;world.playerStats.stamina=100;world.playerStats.energy=100;persist();sfx(410,.1,.04,'sine');toast('Well rested • -'+cost+' credits')
+ }
+ else if(a.type==='cityTransit'){
+   const cost=8;if(world.credits<cost){toast('Transit fare is '+cost+' credits');return}
+   world.credits-=cost;activeVehicle=null;robotSpectatorMode=false;player.x=-16;player.z=-30;player.yaw=Math.PI/2;playerGroundY=H(player.x,player.z);camera.position.set(player.x,playerGroundY+1.7,player.z);persist();toast('Transit • Airfield stop')
+ }
  else if(a.type==='bench'){
    sitting={x:a.x,z:a.z,yaw:a.yaw||0,exitYaw:player.yaw};
    move.x=move.y=0;look.x=look.y=0;playerJumpY=0;playerJumpV=0;
@@ -2952,12 +3081,19 @@ function updateSky(time,dt=0.016){
  const updateUi=now-skyUiAt>180;if(updateUi)skyUiAt=now;
  if(worldCtl.autoTime){worldCtl.time=hour;if(updateUi)$('timeSlider').value=hour.toFixed(2)}
  if(updateUi)$('timeReadout').textContent=String(Math.floor(hour)).padStart(2,'0')+':'+String(Math.floor((hour%1)*60)).padStart(2,'0');
- sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);hemi.intensity=(0.18+day*0.95)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
+ const night=1-day,skyR=330,sunY=sy*210,moonA=a+Math.PI,moonY=Math.sin(moonA)*190;
+ sun.position.set(player.x+Math.cos(a)*95,Math.max(6,sy*110),player.z+40);sun.intensity=(0.05+day*2.25)*(w==='storm'?0.42:w==='rain'?0.62:w==='cloudy'?0.78:1);
+ moonLight.position.set(player.x+Math.cos(moonA)*80,Math.max(8,moonY*.42),player.z+Math.sin(moonA)*65);moonLight.target.position.set(player.x,H(player.x,player.z),player.z);moonLight.intensity=(.1+night*.5)*(w==='storm'?.45:w==='rain'?.65:w==='cloudy'?.78:1);
+ hemi.intensity=(0.28+day*0.95+night*.15)*(w==='storm'?0.55:w==='rain'?0.72:w==='cloudy'?0.82:1);
+ earthSun.position.set(player.x+Math.cos(a)*skyR,Math.max(-100,sunY)+35,player.z+Math.sin(a)*skyR);earthSun.visible=!moonMode&&sy>-.22;
+ earthMoon.position.set(player.x+Math.cos(moonA)*skyR,Math.max(-80,moonY)+42,player.z+Math.sin(moonA)*skyR);earthMoon.visible=!moonMode&&Math.sin(moonA)>-.22;
+ earthMoonOrb.material.emissiveIntensity=.45+night*.55;earthMoonHalo.material.opacity=.07+night*.12;
  let ufoAlt=activeVehicle&&activeVehicle.kind==='ufo'?activeVehicle.alt:0,
      spaceFactor=moonMode?1:T.MathUtils.clamp((ufoAlt-110)/170,0,1),
      dayCol=new T.Color(w==='storm'?0x48545b:w==='rain'?0x6f8088:w==='cloudy'?0x8fa2a4:0xa7c0bd),
-     nightCol=new T.Color(0x06101a),
+     nightCol=new T.Color(0x0b1725),
      c=moonMode?new T.Color(0x000005):nightCol.clone().lerp(dayCol,day).lerp(new T.Color(0x000106),spaceFactor);
+ earthSun.visible=earthSun.visible&&spaceFactor<.55;earthMoon.visible=earthMoon.visible&&spaceFactor<.55;
  scene.background.copy(c);scene.fog.color.copy(c);
 
  let normalFog=w==='mist'?0.018:w==='storm'?0.012:w==='rain'?0.009:w==='cloudy'?0.0068:0.0048;
@@ -2984,10 +3120,11 @@ function updateSky(time,dt=0.016){
  }
  const earthScene=!moonMode&&spaceFactor<0.88,
        airfieldNear=Math.hypot(player.x,player.z)<340,
-       townNear=Math.hypot(player.x+126,player.z-6)<380,
+       townNear=Math.hypot(player.x+230,player.z)<300,
       arenaNear=Math.hypot(player.x-132,player.z)<390;
  startBase.visible=earthScene&&airfieldNear;
  cityGroup.visible=earthScene&&townNear;
+ cityExpansionGroup.visible=earthScene&&Math.hypot(player.x+280,player.z)<255;
  robotArenaGroup.visible=earthScene&&arenaNear;
  buildGroup.visible=earthScene;
  resourceGroup.visible=earthScene&&townNear;
@@ -3319,7 +3456,7 @@ function step(dt,t){
  aiAccumulator+=dt;
  if(aiAccumulator>=0.033){
    const simDt=Math.min(aiAccumulator,.066);aiAccumulator=0;
-   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t);if(Math.abs(player.x+126)<115&&Math.abs(player.z-6)<100)updateTownHumans(t)}
+   if(!moonMode){updateAnimals(simDt,t);updateAnomalies(simDt,t);if(inCityZone(player.x,player.z))updateTownHumans(t);updateCityTraffic(simDt,t)}
  }
 
  // HUD/context checks are intentionally throttled; movement/camera remain full-rate.
