@@ -597,8 +597,9 @@ function updateDragonFire(dt){
 }
 // Build the large underground lair after the core world has finished initialising.
 // Creating hundreds of cave meshes synchronously here was stalling mobile Safari during its first frame.
-// Build immediately: the cave entrance is a core landmark and must exist before a player can teleport to it.
-try{makeDragonCave()}catch(e){console.error('Dragon cave init',e)}
+// Keep the heavy cavern geometry off the mobile startup path. The hangar teleport exists immediately;
+// the cavern finishes building just after the first playable frame.
+setTimeout(()=>{try{makeDragonCave()}catch(e){console.error('Dragon cave init',e)}},1200);
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
  for(const sx of[-spread,spread]){
