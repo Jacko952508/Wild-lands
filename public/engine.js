@@ -907,7 +907,7 @@ function cityRoad(parent,x0,z0,x1,z1,width,segments=24){
    let t=(i+.5)/segments,x=T.MathUtils.lerp(x0,x1,t),z=T.MathUtils.lerp(z0,z1,t),
        nx=T.MathUtils.lerp(x0,x1,(i+1)/segments),nz=T.MathUtils.lerp(z0,z1,(i+1)/segments),
        len=Math.hypot(nx-x,z-nz)*2+0.35,ang=Math.atan2(x1-x0,z1-z0);
-   let m=cityBox(parent,x,H(x,z)+0.045,z,width,0.08,len,cityM.road,false);m.rotation.y=ang
+   let m=cityBox(parent,x,H(x,z)+0.045,z,width,0.08,len,cityM.road,false);m.rotation.y=ang;m.castShadow=false
  }
 }
 function furnishRoom(g,cx,cz,w,d,type,y){
@@ -1179,9 +1179,9 @@ function addCityInterior(parent,cx,cz,w,d,y,kind){
 function makeCityExpansion(){
  const g=cityExpansionGroup,y=TOWN_LEVEL;
  // Main boulevard continues west from the original town.
- cityRoad(g,-184,8,-352,8,12,44);
- for(const z of[-62,72])cityRoad(g,-194,z,-350,z,9,38);
- for(const x of[-210,-250,-292,-334])cityRoad(g,x,-82,x,86,9,34);
+ cityRoad(g,-184,8,-352,8,12,20);
+ for(const z of[-62,72])cityRoad(g,-194,z,-350,z,9,18);
+ for(const x of[-210,-250,-292,-334])cityRoad(g,x,-82,x,86,9,18);
  for(let x=-342;x<=-202;x+=18){cityLamp(g,x,-51);cityLamp(g,x,61)}
  for(const x of[-222,-264,-306,-344])for(let z=-45;z<=54;z+=20)cityLamp(g,x,z);
 
@@ -1444,9 +1444,20 @@ function makeRobotArena(){
  startBox(g,cx,y+.12,cz,92,.24,68,black,false);
  startBox(g,cx,y+.19,cz,70,.14,48,new T.MeshStandardMaterial({color:0x30373b,roughness:.7,metalness:.35}),false);
  for(const z of[-24,24])startBox(g,cx,y+2.25,z,72,4.5,.6,steel,true);
- for(const x of[105,175])startBox(g,x,y+2.25,0,.6,4.5,48,steel,true);
- // Open west/east gate gaps represented by inset glowing portals rather than solid wall.
- startDoorways.push({x:105,z:0,hx:2.2,hz:5.5},{x:175,z:0,hx:2.2,hz:5.5});
+ // The runway-facing west wall has a real physical opening, not an invisible
+ // collision exception through a solid mesh. Two wall sections leave a wide
+ // central gate straight into the arena.
+ for(const z of[-17,17])startBox(g,105,y+2.25,z,.6,4.5,14,steel,true);
+ startBox(g,175,y+2.25,0,.6,4.5,48,steel,true);
+ startDoorways.push({x:105,z:0,hx:3.6,hz:8.2},{x:175,z:0,hx:2.2,hz:5.5});
+ // Direct entrance boulevard from the runway to the combat floor.
+ startBox(g,91,y+.20,0,28,.14,10,concrete,false);
+ startBox(g,103,y+.24,0,7,.18,9,new T.MeshStandardMaterial({color:0x2d383d,roughness:.6,metalness:.28}),false);
+ for(const z of[-5.1,5.1])startBox(g,91,y+.34,z,28,.04,.14,cyan,false);
+ // Monumental gate frame and overhead signage.
+ for(const z of[-6.5,6.5])startBox(g,103,y+5.0,z,.7,9.8,.7,steel,false);
+ startBox(g,103,y+9.5,0,.7,.7,13,steel,false);
+ townText(g,'ARENA ENTRANCE',102.6,y+8.6,-.38,9.5,1.05);
  // Floor graphics.
  const ring=new T.Mesh(new T.RingGeometry(13,13.55,48),cyan);ring.rotation.x=-Math.PI/2;ring.position.set(cx,y+.29,cz);g.add(ring);
  for(const z of[-16,16])startBox(g,cx,y+.3,z,54,.025,.16,cyan,false);
@@ -1658,7 +1669,7 @@ function endRobotMatch(win,lose){
  toast(win.group.userData.name+' WINS');sfx(720,.16,.06,'triangle')
 }
 function updateRobotScoreboard(force=false){
- if(!robotScoreCtx||!robotScoreTexture)return;
+ if(!robotScoreCtx||!robotScoreTexture||(!robotArenaGroup.visible&&!force))return;
  const now=performance.now();if(!force&&now-robotScoreAt<100)return;robotScoreAt=now;
  const c=robotScoreCtx;c.fillStyle='#071014';c.fillRect(0,0,768,192);c.strokeStyle='#74efff';c.lineWidth=7;c.strokeRect(6,6,756,180);
  c.textAlign='center';c.fillStyle='#dffcff';c.font='bold 25px Arial';c.fillText('ROBOT COMBAT INSTITUTE',384,38);
@@ -1675,6 +1686,8 @@ function updateRobotScoreboard(force=false){
 }
 function updateRobotFeed(force=false){
  if(!robotTerminalScreen||!robotArenaGroup.visible)return;
+ const labNear=Math.hypot(player.x-93,player.z+27)<26,panelOpen=!$('robotPanel').classList.contains('hidden');
+ if(!force&&!labNear&&!panelOpen)return;
  const now=performance.now();if(!force&&now-robotFeedAt<(IS_MOBILE?90:66))return;robotFeedAt=now;
  const c=robotFeedPositions[robotFeedCameraIndex]||robotFeedPositions[0],look=c.look.clone();
  if(robotMatch){
@@ -2166,7 +2179,8 @@ function blocked(x,z,radius=0.6,ignoreVehicle=null){
    if(colliderListBlocked(colliders,x,z,radius))return true;
    if(inCityZone(x,z)&&!insideDoorway(cityDoorways,x,z,radius)&&colliderListBlocked(cityColliders,x,z,radius))return true;
    if(!insideDoorway(startDoorways,x,z,radius)&&colliderListBlocked(startColliders,x,z,radius))return true;
-   if(colliderListBlocked(buildColliders,x,z,radius))return true
+   if(colliderListBlocked(buildColliders,x,z,radius))return true;
+   if(cityExpansionGroup.visible){for(const c of cityTraffic){const dx=x-c.g.position.x,dz=z-c.g.position.z,rr=1.05+radius;if(dx*dx+dz*dz<rr*rr)return true}}
  }
  for(const v of vehicles){
    if(v===activeVehicle||v===ignoreVehicle)continue;
