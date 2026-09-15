@@ -538,24 +538,34 @@ const vehicles=[];
 let activeVehicle=null;
 const dragonFires=[],burntTrees=new Set(Object.keys(world.burntTrees||{}));
 let dragon=null,dragonFireHeld=false;
-function makeDragon(x,z){
- const g=new T.Group(),scaleMat=new T.MeshStandardMaterial({color:0x561c12,roughness:.72,metalness:.05}),dark=new T.MeshStandardMaterial({color:0x21100d,roughness:.9}),wingMat=new T.MeshStandardMaterial({color:0x3a1210,side:T.DoubleSide,roughness:.82}),eye=new T.MeshBasicMaterial({color:0xffb128});
- const body=new T.Mesh(new T.SphereGeometry(1.35,12,8),scaleMat);body.scale.set(1,1,2.25);body.position.y=2.1;g.add(body);
- const neck=new T.Mesh(new T.CylinderGeometry(.55,.82,2.5,9),scaleMat);neck.rotation.x=-.62;neck.position.set(0,2.8,2.05);g.add(neck);
- const head=new T.Mesh(new T.BoxGeometry(1.25,.85,1.8),scaleMat);head.position.set(0,3.55,3.25);g.add(head);
- for(const sx of[-1,1]){const horn=new T.Mesh(new T.ConeGeometry(.16,.9,6),dark);horn.position.set(sx*.38,4.15,2.85);horn.rotation.x=-.45;g.add(horn);const e=new T.Mesh(new T.SphereGeometry(.09,6,4),eye);e.position.set(sx*.43,3.78,4.15);g.add(e)}
- const wings=[];for(const sx of[-1,1]){const w=new T.Mesh(new T.BufferGeometry().setFromPoints([new T.Vector3(0,0,0),new T.Vector3(sx*6,.15,-.7),new T.Vector3(sx*4,-.2,-4),new T.Vector3(sx*.5,0,-2)]),wingMat);w.position.set(sx*.7,2.7,.2);g.add(w);wings.push(w)}
- const tail=new T.Mesh(new T.ConeGeometry(.55,5.5,8),scaleMat);tail.rotation.x=-Math.PI/2;tail.position.set(0,2,-4.2);g.add(tail);
- g.position.set(x,H(x,z)+.3,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0};vehicles.push(v);dragon=v;return v
+function makeDragon(x,z,worldY){
+ const g=new T.Group(),scales=new T.MeshStandardMaterial({color:0x552018,roughness:.82,metalness:.08}),belly=new T.MeshStandardMaterial({color:0x9b6540,roughness:.9}),dark=new T.MeshStandardMaterial({color:0x160d0b,roughness:.95}),membrane=new T.MeshStandardMaterial({color:0x3b1514,side:T.DoubleSide,roughness:.9}),eye=new T.MeshBasicMaterial({color:0xffc32d});
+ const body=new T.Mesh(new T.SphereGeometry(1.25,20,14),scales);body.scale.set(1.15,.95,2.65);body.position.y=2.25;g.add(body);
+ const chest=new T.Mesh(new T.SphereGeometry(.9,16,12),belly);chest.scale.set(.82,.9,1.45);chest.position.set(0,2.15,1.3);g.add(chest);
+ const neck=new T.Mesh(new T.CylinderGeometry(.48,.78,3.25,12),scales);neck.rotation.x=-.48;neck.position.set(0,3.05,2.25);g.add(neck);
+ const head=new T.Mesh(new T.SphereGeometry(.78,16,10),scales);head.scale.set(1,.72,1.45);head.position.set(0,4.05,4.0);g.add(head);
+ const snout=new T.Mesh(new T.SphereGeometry(.58,14,8),scales);snout.scale.set(1,.55,1.35);snout.position.set(0,3.82,4.95);g.add(snout);
+ for(const sx of[-1,1]){const horn=new T.Mesh(new T.ConeGeometry(.17,1.35,7),dark);horn.position.set(sx*.42,4.72,3.62);horn.rotation.x=-.62;horn.rotation.z=sx*.12;g.add(horn);const e=new T.Mesh(new T.SphereGeometry(.095,8,6),eye);e.position.set(sx*.49,4.18,4.62);g.add(e);const leg=new T.Mesh(new T.CylinderGeometry(.17,.25,2.1,8),scales);leg.position.set(sx*.75,1.15,.6);leg.rotation.z=sx*.16;g.add(leg);const claw=new T.Mesh(new T.ConeGeometry(.1,.5,6),dark);claw.position.set(sx*.86,.12,1.02);claw.rotation.x=Math.PI/2;g.add(claw)}
+ const wings=[];for(const sx of[-1,1]){const wg=new T.Group(),bone=new T.Mesh(new T.CylinderGeometry(.09,.16,5.7,7),scales);bone.rotation.z=sx*Math.PI/2;bone.position.x=sx*2.7;wg.add(bone);const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute([0,0,0,sx*5.7,0,0,sx*4.4,-.18,-4.6,sx*1.6,-.08,-3.1],3));geo.setIndex([0,1,2,0,2,3]);geo.computeVertexNormals();const w=new T.Mesh(geo,membrane);wg.add(w);wg.position.set(sx*.75,3.05,.2);g.add(wg);wings.push(wg)}
+ const tail=new T.Group();for(let i=0;i<7;i++){const seg=new T.Mesh(new T.SphereGeometry(.48-i*.05,10,7),scales);seg.scale.set(1,.8,1.65);seg.position.set(0,1.95-i*.05,-2.8-i*1.05);tail.add(seg)}g.add(tail);
+ for(let i=0;i<7;i++){const spine=new T.Mesh(new T.ConeGeometry(.12+(6-i)*.018,.55+(6-i)*.06,6),dark);spine.position.set(0,3.25-i*.12,1.2-i*.9);spine.rotation.x=-.22;g.add(spine)}
+ g.position.set(x,worldY==null?H(x,z)+.3:worldY,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0,caveY:worldY};vehicles.push(v);dragon=v;return v
 }
 function makeDragonCave(){
- const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x24201e,roughness:1}),lava=new T.MeshStandardMaterial({color:0xff4b0b,emissive:0xff2600,emissiveIntensity:2.5,roughness:.4}),cx=24,cz=66,cy=H(cx,cz);
- // Open-front cavern aligned with the runway: wide/tall enough for mounted flight through the mouth.
- for(let i=0;i<15;i++){let a=i/14*Math.PI,x=cx+Math.cos(a)*15,y=cy+Math.sin(a)*10+2;const b=new T.Mesh(new T.DodecahedronGeometry(3.7+Math.random()*2,0),rock);b.position.set(x,y,cz+12);b.scale.z=3.4;g.add(b)}
- for(const x of[-11,-7,7,11]){const b=new T.Mesh(new T.DodecahedronGeometry(4.5,0),rock);b.position.set(cx+x,cy+1,cz+2);b.scale.set(1.3,1.5,4);g.add(b)}
- const pool=new T.Mesh(new T.CircleGeometry(8,28),lava);pool.rotation.x=-Math.PI/2;pool.position.set(cx,cy+.18,cz+18);g.add(pool);
- for(let i=0;i<8;i++){const s=new T.Mesh(new T.ConeGeometry(.35+Math.random()*.4,2+Math.random()*3,6),new T.MeshStandardMaterial({color:0x46352b,emissive:0x5a1605,emissiveIntensity:.4}));s.position.set(cx-10+Math.random()*20,cy+1,cz+5+Math.random()*23);g.add(s)}
- const light=new T.PointLight(0xff521c,5,48,1.5);light.position.set(cx,cy+5,cz+15);g.add(light);scene.add(g);makeDragon(cx,cz+10)
+ const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x171514,roughness:1}),rock2=new T.MeshStandardMaterial({color:0x302925,roughness:1}),lava=new T.MeshStandardMaterial({color:0xff4a08,emissive:0xff2400,emissiveIntensity:3.5,roughness:.35}),cx=24,cz=76,surface=H(cx,cz),floorY=surface-31;
+ // A descending stone throat leads to a genuinely subterranean chamber ~30m below terrain.
+ for(let j=0;j<9;j++){const zz=cz-26+j*6,yy=surface-2-j*3.55;for(let i=0;i<12;i++){const a=i/12*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(3.1+(i%3)*.45,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*9.2,yy+Math.sin(a)*7.1,zz);b.scale.z=1.35;g.add(b)}}
+ // Huge underground vault, rough stone shell, with an unobstructed central flight corridor back to the tunnel.
+ for(let j=0;j<7;j++)for(let i=0;i<18;i++){const a=i/18*Math.PI*2,b=new T.Mesh(new T.DodecahedronGeometry(4.2+(i+j)%3*.65,0),i%2?rock:rock2);b.position.set(cx+Math.cos(a)*(17+j*.45),floorY+8+Math.sin(a)*11,cz+29+j*5.5);b.scale.set(1.25,1.1,1.7);g.add(b)}
+ const floor=new T.Mesh(new T.PlaneGeometry(35,68,1,1),rock2);floor.rotation.x=-Math.PI/2;floor.position.set(cx,floorY,cz+42);g.add(floor);
+ // Lava is a narrow stream rather than a pool, winding down one side of the cavern.
+ const lavaPts=[];for(let i=0;i<8;i++)lavaPts.push(new T.Vector3(cx-10+Math.sin(i*.9)*2.2,floorY+.12,cz+10+i*8));const lavaCurve=new T.CatmullRomCurve3(lavaPts),stream=new T.Mesh(new T.TubeGeometry(lavaCurve,48,1.25,8,false),lava);g.add(stream);
+ // Torch sconces alternate along both walls. Each has a visible flame and local warm light.
+ const flameMat=new T.MeshBasicMaterial({color:0xffa126});for(let i=0;i<8;i++)for(const sx of[-1,1]){const z=cz+8+i*8,y=floorY+3.2;const pole=new T.Mesh(new T.CylinderGeometry(.07,.1,1.3,6),dark);pole.position.set(cx+sx*13.5,y,z);pole.rotation.z=sx*.5;g.add(pole);const flame=new T.Mesh(new T.ConeGeometry(.24,.75,7),flameMat);flame.position.set(cx+sx*13.15,y+.72,z);g.add(flame);if(i%2===0){const l=new T.PointLight(0xff7628,2.8,15,1.8);l.position.copy(flame.position);g.add(l)}}
+ // Stalactites/stalagmites and a raised dragon roost at the deepest end.
+ for(let i=0;i<20;i++){const x=cx-14+hash(i,4,7)*28,z=cz+8+hash(i,9,11)*58,h=1.5+hash(i,12,3)*4;const s=new T.Mesh(new T.ConeGeometry(.35+hash(i,6,2)*.7,h,7),i%2?rock:rock2);s.position.set(x,floorY+h*.5,z);g.add(s)}
+ const roost=new T.Mesh(new T.CylinderGeometry(6.5,8,1.8,12),rock2);roost.position.set(cx+5,floorY+.9,cz+62);g.add(roost);
+ const glow=new T.PointLight(0xff3d0a,4.5,55,1.5);glow.position.set(cx-7,floorY+4,cz+40);g.add(glow);scene.add(g);makeDragon(cx+5,cz+62,floorY+1.8)
 }
 function dragonFire(){
  if(!activeVehicle||activeVehicle.kind!=='dragon')return;const v=activeVehicle,now=performance.now();if(now-v.fireClock<85)return;v.fireClock=now;
@@ -2538,6 +2548,7 @@ $('use').onclick=()=>{
  if(activeVehicle){
    let v=activeVehicle;
    if(v.kind==='ufo'&&v.alt>8){toast('Land the UFO before exiting');return}
+   if(v.kind==='dragon'&&Math.abs(v.vy||0)>2){toast('Settle the dragon before dismounting');return}
    if(v.kind==='mek'&&v.alt>1.2){toast('Land the MEK before exiting');return}
    const exit=findSafeExit(v);
    activeVehicle=null;robotSpectatorMode=false;$('flightControls').classList.add('hidden');$('mine').classList.add('hidden');
@@ -3335,6 +3346,17 @@ function step(dt,t){
      v.roll=T.MathUtils.lerp(v.roll,-side*.08,Math.min(1,dt*3));
      v.group.position.set(v.x,H(v.x,v.z)+v.alt,v.z);
      v.group.rotation.set(v.pitch,v.yaw,v.roll,'XYZ');
+   }else if(v.kind==='dragon'){
+     // Dragon uses world-space altitude so it can begin deep underground and physically fly the tunnel to daylight.
+     const pitchInput=T.MathUtils.clamp(move.y,-1,1),rollInput=T.MathUtils.clamp(move.x,-1,1),surface=H(v.x,v.z);
+     if(v.worldY==null)v.worldY=v.group.position.y;
+     v.pitch=T.MathUtils.lerp(v.pitch,pitchInput*.42,Math.min(1,dt*2.7));v.roll=T.MathUtils.lerp(v.roll,-rollInput*.55,Math.min(1,dt*3.1));v.yaw+=(-v.roll-lx*.45)*dt*.9;
+     const target=4+flightThrottle*32;v.speed=T.MathUtils.lerp(v.speed,target,Math.min(1,dt*1.15));
+     const horiz=Math.cos(v.pitch)*v.speed;v.x+=Math.sin(v.yaw)*horiz*dt;v.z+=Math.cos(v.yaw)*horiz*dt;
+     v.vy=T.MathUtils.lerp(v.vy,Math.sin(v.pitch)*v.speed+(flightThrottle-.45)*5,Math.min(1,dt*1.8));v.worldY+=v.vy*dt;
+     // Below the cave mouth the dragon is allowed to remain subterranean; once outside, terrain becomes its floor.
+     const inCave=Math.hypot(v.x-24,v.z-110)<78&&v.worldY<surface+3;if(!inCave&&v.worldY<surface+.4){v.worldY=surface+.4;v.vy=Math.max(0,v.vy)}
+     v.alt=v.worldY-surface;v.airborne=true;v.stalled=false;v.group.position.set(v.x,v.worldY,v.z);v.group.rotation.set(-v.pitch,v.yaw,v.roll,'XYZ');
    }else if(v.kind==='heli'){
      // GTA-style helicopter handling: stick tilts the aircraft, tilt creates
      // momentum, the camera/look stick yaws independently, and releasing the
