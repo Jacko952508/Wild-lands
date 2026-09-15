@@ -123,7 +123,7 @@ const CH=96,NEAR=1,IS_MOBILE=matchMedia('(pointer:coarse)').matches||innerWidth<
 const WORLD='wi_world_v3',POS='wi_pos_v3';
 let world;
 try{world=JSON.parse(localStorage.getItem(WORLD)||'null')}catch(e){world=null}
-if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.progress.completed=Array.isArray(world.progress.completed)?world.progress.completed:[];world.progress.xp=Number(world.progress.xp)||0;world.progress.level=Number(world.progress.level)||1;world.progress.reputation=Number(world.progress.reputation)||0;world.progress.mission=Number(world.progress.mission)||0;world.progress.earthSites=world.progress.earthSites||{};world.progress.moonSites=world.progress.moonSites||{};world.progress.regionMilestones=world.progress.regionMilestones||{};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.gameStats=world.gameStats||{npcTalks:0,caches:0,crafted:0,upgrades:0,pois:0,moonSites:0};world.gameStats.talked=world.gameStats.talked||{};world.gameStats.npcTalks=Math.max(world.gameStats.npcTalks||0,Object.keys(world.gameStats.talked).length);world.gameStats.caches=Math.max(world.gameStats.caches||0,Object.keys(world.lootOpened||{}).length);world.gameStats.upgrades=Math.max(world.gameStats.upgrades||0,Object.values(world.vehicleUpgrades||{}).filter(v=>v>0).length);world.gameStats.pois=Math.max(world.gameStats.pois||0,Object.keys((world.progress&&world.progress.earthSites)||{}).length);world.gameStats.moonSites=Math.max(world.gameStats.moonSites||0,Object.keys((world.progress&&world.progress.moonSites)||{}).length);world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};world.ui.fpsTarget=world.ui.fpsTarget||60;world.ui.graphicsQuality=world.ui.graphicsQuality||'balanced';world.ui.renderQuality=world.ui.renderQuality||1;world.ui.dynamicResolution=world.ui.dynamicResolution!==false;world.ui.shadows=world.ui.shadows!==false;world.ui.effects=world.ui.effects!==false;
+if(!world)world={seed:Math.floor(Math.random()*1e9),explored:{},saved:{},animalState:{},discoveries:{},moonMined:{},moonOre:0,inventory:{},credits:100,builds:[],resourceGathered:{},equippedTool:null,saveVersion:5,progress:{xp:0,level:1,reputation:0,mission:0,completed:[]},playerStats:{health:100,stamina:100,energy:100},vehicleUpgrades:{ground:0,flight:0,lights:0},lootOpened:{}};world.explored=world.explored||{};world.saved=world.saved||{};world.animalState=world.animalState||{};world.discoveries=world.discoveries||{};world.moonMined=world.moonMined||{};world.moonOre=world.moonOre||0;world.inventory=world.inventory||{};world.credits=Number.isFinite(world.credits)?world.credits:100;world.builds=Array.isArray(world.builds)?world.builds:[];world.resourceGathered=world.resourceGathered||{};world.equippedTool=world.equippedTool||null;world.progress=world.progress||{xp:0,level:1,reputation:0,mission:0,completed:[]};world.progress.completed=Array.isArray(world.progress.completed)?world.progress.completed:[];world.progress.xp=Number(world.progress.xp)||0;world.progress.level=Number(world.progress.level)||1;world.progress.reputation=Number(world.progress.reputation)||0;world.progress.mission=Number(world.progress.mission)||0;world.progress.earthSites=world.progress.earthSites||{};world.progress.moonSites=world.progress.moonSites||{};world.progress.regionMilestones=world.progress.regionMilestones||{};world.playerStats=world.playerStats||{health:100,stamina:100,energy:100};world.vehicleUpgrades=world.vehicleUpgrades||{ground:0,flight:0,lights:0};world.lootOpened=world.lootOpened||{};world.burntTrees=world.burntTrees||{};world.gameStats=world.gameStats||{npcTalks:0,caches:0,crafted:0,upgrades:0,pois:0,moonSites:0};world.gameStats.talked=world.gameStats.talked||{};world.gameStats.npcTalks=Math.max(world.gameStats.npcTalks||0,Object.keys(world.gameStats.talked).length);world.gameStats.caches=Math.max(world.gameStats.caches||0,Object.keys(world.lootOpened||{}).length);world.gameStats.upgrades=Math.max(world.gameStats.upgrades||0,Object.values(world.vehicleUpgrades||{}).filter(v=>v>0).length);world.gameStats.pois=Math.max(world.gameStats.pois||0,Object.keys((world.progress&&world.progress.earthSites)||{}).length);world.gameStats.moonSites=Math.max(world.gameStats.moonSites||0,Object.keys((world.progress&&world.progress.moonSites)||{}).length);world.saveVersion=5;world.ui=world.ui||{lookSensitivity:1,hudScale:1};world.ui.fpsTarget=world.ui.fpsTarget||60;world.ui.graphicsQuality=world.ui.graphicsQuality||'balanced';world.ui.renderQuality=world.ui.renderQuality||1;world.ui.dynamicResolution=world.ui.dynamicResolution!==false;world.ui.shadows=world.ui.shadows!==false;world.ui.effects=world.ui.effects!==false;
 if(world.saved['0,0']){world.saved['0,0'].trees=(world.saved['0,0'].trees||[]).filter(q=>!inStartClearZone(q[0],q[1]));world.saved['0,0'].rocks=(world.saved['0,0'].rocks||[]).filter(q=>!inStartClearZone(q[0],q[1]));}
 let player;
 try{player=JSON.parse(localStorage.getItem(POS)||'null')}catch(e){player=null}
@@ -363,7 +363,7 @@ const nearTrunkGeo=new T.CylinderGeometry(.18,.38,3.8,7),
       nearRockGeo=new T.DodecahedronGeometry(1,0);
 sharedChunkGeometries.add(nearTrunkGeo);sharedChunkGeometries.add(nearPineGeo);sharedChunkGeometries.add(nearLeafGeo);sharedChunkGeometries.add(nearRockGeo);
 function addNearNature(group,d,cx,cz){
- const trees=d.trees.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
+ const trees=d.trees.filter((q,i)=>!q[3]&&!burntTrees.has(key(cx,cz)+':'+i)&&!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
        rocks=d.rocks.filter(q=>!inCityZone(cx*CH+q[0],cz*CH+q[1])&&!inStartClearZone(cx*CH+q[0],cz*CH+q[1])),
        pineTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])==='pine'),
        broadTrees=trees.filter(q=>biome(cx*CH+q[0],cz*CH+q[1])!=='pine'),
@@ -395,11 +395,14 @@ function addNearNature(group,d,cx,cz){
    o.position.set(wx,y+s*.55,wz);o.rotation.set(0,hash(wx,wz,31)*Math.PI*2,0);o.scale.set(s,s*.7,s);o.updateMatrix();rockMesh.setMatrixAt(ri++,o.matrix)
  }
  for(const m of[trunks,pines,leavesA,leavesB,rockMesh])if(m){m.instanceMatrix.needsUpdate=true;m.castShadow=!IS_MOBILE;m.receiveShadow=true;group.add(m)}
+ d.trees.forEach((q,i)=>{if((q[3]||burntTrees.has(key(cx,cz)+':'+i))&&!inCityZone(cx*CH+q[0],cz*CH+q[1]))group.add(makeTree(cx*CH+q[0],cz*CH+q[1],q[2],false,true))});
 }
-function makeTree(wx,wz,s,detail){
- let g=new T.Group(),b=biome(wx,wz),tr=new T.Mesh(new T.CylinderGeometry(0.18*s,0.38*s,3.8*s,detail?7:5),mats.trunk);
+function makeTree(wx,wz,s,detail,burnt=false){
+ let g=new T.Group(),b=biome(wx,wz),deadMat=new T.MeshStandardMaterial({color:0x241b16,roughness:1}),tr=new T.Mesh(new T.CylinderGeometry(0.18*s,0.38*s,3.8*s,detail?7:5),burnt?deadMat:mats.trunk);
  tr.position.y=1.9*s;tr.castShadow=detail;g.add(tr);
- if(b==='pine'){
+ if(burnt){
+   for(const sx of[-1,1]){let limb=new T.Mesh(new T.CylinderGeometry(.05*s,.11*s,1.7*s,5),deadMat);limb.position.set(sx*.38*s,3.1*s,0);limb.rotation.z=sx*.7;g.add(limb)}
+ }else if(b==='pine'){
    let layers=detail?3:1;
    for(let i=0;i<layers;i++){let c=new T.Mesh(new T.ConeGeometry((1.3-i*0.18)*s,(detail?2.5:4.2)*s,detail?8:6),mats.pine);c.position.y=(detail?3.2+i*0.75:4.0)*s;c.castShadow=detail;g.add(c)}
  }else if(detail){
@@ -533,6 +536,36 @@ function anomalyModel(type,cx,cz){
 
 const vehicles=[];
 let activeVehicle=null;
+const dragonFires=[],burntTrees=new Set(Object.keys(world.burntTrees||{}));
+let dragon=null,dragonFireHeld=false;
+function makeDragon(x,z){
+ const g=new T.Group(),scaleMat=new T.MeshStandardMaterial({color:0x561c12,roughness:.72,metalness:.05}),dark=new T.MeshStandardMaterial({color:0x21100d,roughness:.9}),wingMat=new T.MeshStandardMaterial({color:0x3a1210,side:T.DoubleSide,roughness:.82}),eye=new T.MeshBasicMaterial({color:0xffb128});
+ const body=new T.Mesh(new T.SphereGeometry(1.35,12,8),scaleMat);body.scale.set(1,1,2.25);body.position.y=2.1;g.add(body);
+ const neck=new T.Mesh(new T.CylinderGeometry(.55,.82,2.5,9),scaleMat);neck.rotation.x=-.62;neck.position.set(0,2.8,2.05);g.add(neck);
+ const head=new T.Mesh(new T.BoxGeometry(1.25,.85,1.8),scaleMat);head.position.set(0,3.55,3.25);g.add(head);
+ for(const sx of[-1,1]){const horn=new T.Mesh(new T.ConeGeometry(.16,.9,6),dark);horn.position.set(sx*.38,4.15,2.85);horn.rotation.x=-.45;g.add(horn);const e=new T.Mesh(new T.SphereGeometry(.09,6,4),eye);e.position.set(sx*.43,3.78,4.15);g.add(e)}
+ const wings=[];for(const sx of[-1,1]){const w=new T.Mesh(new T.BufferGeometry().setFromPoints([new T.Vector3(0,0,0),new T.Vector3(sx*6,.15,-.7),new T.Vector3(sx*4,-.2,-4),new T.Vector3(sx*.5,0,-2)]),wingMat);w.position.set(sx*.7,2.7,.2);g.add(w);wings.push(w)}
+ const tail=new T.Mesh(new T.ConeGeometry(.55,5.5,8),scaleMat);tail.rotation.x=-Math.PI/2;tail.position.set(0,2,-4.2);g.add(tail);
+ g.position.set(x,H(x,z)+.3,z);scene.add(g);const v={type:'Dragon',kind:'dragon',group:g,x,z,yaw:Math.PI,speed:0,alt:0,vy:0,pitch:0,roll:0,airborne:false,stalled:false,wings,fireClock:0};vehicles.push(v);dragon=v;return v
+}
+function makeDragonCave(){
+ const g=new T.Group(),rock=new T.MeshStandardMaterial({color:0x24201e,roughness:1}),lava=new T.MeshStandardMaterial({color:0xff4b0b,emissive:0xff2600,emissiveIntensity:2.5,roughness:.4}),cx=24,cz=66,cy=H(cx,cz);
+ // Open-front cavern aligned with the runway: wide/tall enough for mounted flight through the mouth.
+ for(let i=0;i<15;i++){let a=i/14*Math.PI,x=cx+Math.cos(a)*15,y=cy+Math.sin(a)*10+2;const b=new T.Mesh(new T.DodecahedronGeometry(3.7+Math.random()*2,0),rock);b.position.set(x,y,cz+12);b.scale.z=3.4;g.add(b)}
+ for(const x of[-11,-7,7,11]){const b=new T.Mesh(new T.DodecahedronGeometry(4.5,0),rock);b.position.set(cx+x,cy+1,cz+2);b.scale.set(1.3,1.5,4);g.add(b)}
+ const pool=new T.Mesh(new T.CircleGeometry(8,28),lava);pool.rotation.x=-Math.PI/2;pool.position.set(cx,cy+.18,cz+18);g.add(pool);
+ for(let i=0;i<8;i++){const s=new T.Mesh(new T.ConeGeometry(.35+Math.random()*.4,2+Math.random()*3,6),new T.MeshStandardMaterial({color:0x46352b,emissive:0x5a1605,emissiveIntensity:.4}));s.position.set(cx-10+Math.random()*20,cy+1,cz+5+Math.random()*23);g.add(s)}
+ const light=new T.PointLight(0xff521c,5,48,1.5);light.position.set(cx,cy+5,cz+15);g.add(light);scene.add(g);makeDragon(cx,cz+10)
+}
+function dragonFire(){
+ if(!activeVehicle||activeVehicle.kind!=='dragon')return;const v=activeVehicle,now=performance.now();if(now-v.fireClock<85)return;v.fireClock=now;
+ const dir=new T.Vector3(Math.sin(v.yaw)*Math.cos(v.pitch),Math.sin(v.pitch),Math.cos(v.yaw)*Math.cos(v.pitch));
+ const p=v.group.position.clone().add(new T.Vector3(0,3.3,0)).addScaledVector(dir,3.8);for(let i=0;i<3;i++){const m=new T.Mesh(new T.SphereGeometry(.24+Math.random()*.22,6,4),new T.MeshBasicMaterial({color:i?0xff6a12:0xffe36b,transparent:true,opacity:.9}));m.position.copy(p).addScaledVector(dir,i*.65);scene.add(m);dragonFires.push({m,v:dir.clone().multiplyScalar(30+Math.random()*8),life:.75})}
+}
+function updateDragonFire(dt){
+ if(dragonFireHeld)dragonFire();for(let i=dragonFires.length-1;i>=0;i--){const f=dragonFires[i];f.life-=dt;f.m.position.addScaledVector(f.v,dt);f.m.scale.multiplyScalar(1+dt*1.7);f.m.material.opacity=Math.max(0,f.life*1.3);if(f.life<=0){scene.remove(f.m);f.m.geometry.dispose();f.m.material.dispose();dragonFires.splice(i,1);continue}for(const c of chunks.values()){if(c.mode!=='near')continue;for(let ti=0;ti<c.d.trees.length;ti++){const q=c.d.trees[ti],wx=c.cx*CH+q[0],wz=c.cz*CH+q[1],id=key(c.cx,c.cz)+':'+ti;if(!burntTrees.has(id)&&Math.hypot(f.m.position.x-wx,f.m.position.z-wz)<2.1*q[2]){burntTrees.add(id);q[3]=1;world.burntTrees=world.burntTrees||{};world.burntTrees[id]=1;spawnVehicleParticle(new T.Vector3(wx,H(wx,wz)+2,wz),0xff5a16,.8,1.3,.5,1);persist();lastSyncX=1e9;lastSyncZ=1e9;sync(true);break}}}}
+}
+makeDragonCave();
 const flashingRunwayLights=[],managedLights=[];
 function addVehicleLights(g,zFront=2.2,y=1.0,spread=.7,color=0xe8f6ff,power=4,range=45){
  for(const sx of[-spread,spread]){
@@ -739,6 +772,8 @@ function updateVehicleVisuals(dt,t){
        if(!air&&moving&&v.trackClock<=0){v.trackClock=.13;for(const sx of[-1.05,1.05])spawnVehicleTrack(v.x+Math.cos(v.yaw)*sx,v.z-Math.sin(v.yaw)*sx,H(v.x,v.z),v.yaw,false,.22,.75)}
        if(v.effectClock<=0&&flightThrottle<.55){v.effectClock=IS_MOBILE?.16:.1;const p=localWorld(v,new T.Vector3(0,1.15,-4.8));spawnVehicleParticle(p,0x6d6f70,.2,.65,.35,.25)}
      }
+   }else if(v.kind==='dragon'){
+     const flap=Math.sin(t*(5+Math.min(8,Math.abs(v.speed||0)*.18)))*(.35+Math.min(.35,(v.alt||0)*.03));if(v.wings){v.wings[0].rotation.z=flap;v.wings[1].rotation.z=-flap}if(v===activeVehicle&&flightThrottle>.25&&Math.random()<dt*3)spawnVehicleParticle(localWorld(v,new T.Vector3(0,3.3,3.8)),0xff7b22,.16,.35,.05,.45);
    }else if(v.kind==='ufo'){
      const intensity=T.MathUtils.clamp(.35+spd/70+(v.alt||0)/220,0,1.5);
      const ring=v.group.userData.ufoRing,glow=v.group.userData.ufoGlow;
@@ -2470,9 +2505,9 @@ function refreshUse(){
    pickup.classList.add('hidden');town.classList.add('hidden');jump.classList.add('hidden');tool.classList.add('hidden');equip.classList.add('hidden');toolView.visible=false;
    b.classList.remove('hidden');
    b.textContent='EXIT '+activeVehicle.type.toUpperCase();
-   const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek';
+   const flight=activeVehicle.kind==='heli'||activeVehicle.kind==='jet'||activeVehicle.kind==='ufo'||activeVehicle.kind==='mek'||activeVehicle.kind==='dragon';
    fc.classList.toggle('hidden',!flight);
-   mine.classList.toggle('hidden',activeVehicle.kind!=='mek');
+   mine.classList.toggle('hidden',activeVehicle.kind!=='mek'&&activeVehicle.kind!=='dragon');mine.textContent=activeVehicle.kind==='dragon'?'BREATHE FIRE':'MINE';
    $('sprint').classList.toggle('hidden',flight&&activeVehicle.kind!=='mek');
    $('sprint').textContent=activeVehicle.kind==='buggy'||activeVehicle.kind==='moonbuggy'||activeVehicle.kind==='mek'?'BOOST':'SPRINT';
    if(activeVehicle.kind==='mek')document.querySelector('.engineHead span').textContent='JET BOOST';
@@ -2514,7 +2549,7 @@ $('use').onclick=()=>{
  let v=nearestVehicle();if(!v)return;
  if(v.kind==='ufoCandidate')v=activateUfo(v);
  robotSpectatorMode=false;activeVehicle=v;player.x=v.x;player.z=v.z;player.yaw=v.yaw;
- if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo'||v.kind==='mek'){
+ if(v.kind==='heli'||v.kind==='jet'||v.kind==='ufo'||v.kind==='mek'||v.kind==='dragon'){
    $('flightControls').classList.remove('hidden');
    if(v.kind==='mek')flightThrottle=0;
    syncEngineUI();
@@ -3003,6 +3038,7 @@ $('pickup').onclick=()=>{
  c.mesh.visible=false;world.inventory[c.id]=c.name;persist();renderInventory();toast(c.name+' added to inventory')
 };
 $('mine').onclick=()=>{
+ if(activeVehicle&&activeVehicle.kind==='dragon'){dragonFire();return}
  if(!activeVehicle||activeVehicle.kind!=='mek')return;
  let best=null,bd=10;
  for(const r of moonMineables){
@@ -3252,7 +3288,7 @@ function nearestThreat(){
 }
 function step(dt,t){
  const lx=look.x*lookSensitivity,ly=look.y*lookSensitivity;
- player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);updateRobotArena(dt,t);
+ player.pitch=T.MathUtils.clamp(player.pitch-ly*dt*1.65,-1.02,0.92);updateSurvival(dt,t);updateBuildGhost();updateVehicleVisuals(dt,t);updateDragonFire(dt);updateRobotArena(dt,t);
  let targetFov=67;
  if(activeVehicle){
    const sp=Math.abs(activeVehicle.speed||0);
@@ -3539,7 +3575,7 @@ function step(dt,t){
        if(activeVehicle.kind==='ufo'&&activeVehicle.alt>160)vehicleHud+=' • SPACE';
        if(activeVehicle.stalled)vehicleHud+=' • STALL';
      }
-     $('modeReadout').textContent=activeVehicle.kind==='jet'||activeVehicle.kind==='heli'||activeVehicle.kind==='ufo'?'FLIGHT':activeVehicle.kind==='mek'?'MEK':'DRIVING';
+     $('modeReadout').textContent=activeVehicle.kind==='jet'||activeVehicle.kind==='heli'||activeVehicle.kind==='ufo'||activeVehicle.kind==='dragon'?'FLIGHT':activeVehicle.kind==='mek'?'MEK':'DRIVING';
      $('vehicleCard').classList.remove('hidden');$('vehicleName').textContent=activeVehicle.type.toUpperCase();$('vehicleSpeed').textContent=kmh+' km/h';
      vehicleHud+=' • '
    }else{
