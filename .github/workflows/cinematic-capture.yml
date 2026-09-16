@@ -1,7 +1,7 @@
 name: Wildlands Cinematic Capture
 on:
-  pull_request:
-    branches: [main]
+  push:
+    paths: ['.github/workflows/cinematic-capture.yml']
   workflow_dispatch:
 jobs:
   capture:
@@ -10,7 +10,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb chromium
-      - run: npm install playwright-core
+      - name: Install recorder
+        run: |
+          npm install playwright-core
+          npx playwright install ffmpeg
       - name: Capture actual game
         run: |
           cat > capture.js <<'EOF'
