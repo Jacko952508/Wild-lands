@@ -6,26 +6,39 @@ on:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg xvfb chromium
-      - name: Install recorder
+      - name: Install capture stack
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg xvfb chromium
+      - name: Capture real Wildlands renderer with hard cutoff
+        shell: bash
         run: |
-          npm install playwright-core
-          npx playwright install ffmpeg
-      - name: Capture actual game
+          set -euo pipefail
+          (cd public && python3 -m http.server 8080 >/tmp/server.log 2>&1 &) 
+          sleep 2
+          # Start the real game in Chromium under a virtual 1280x720 display.
+          Xvfb :99 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &
+          export DISPLAY=:99
+          sleep 2
+          chromium --no-sandbox --disable-dev-shm-usage --use-gl=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=1280,720 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
+          CHROME_PID=$!
+          sleep 10
+          # Record the actual X display directly; timeout guarantees this cannot hang.
+          timeout -s INT 28s ffmpeg -y -f x11grab -framerate 30 -video_size 1280x720 -i :99.0 -t 26 -an -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Preview.mp4 || true
+          kill -9 "$CHROME_PID" 2>/dev/null || true
+          pkill -9 chromium 2>/dev/null || true
+          test -s Wildlands-Cinematic-Preview.mp4
+          ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 Wildlands-Cinematic-Preview.mp4
+      - name: Validate MP4
         run: |
-          cat > capture.js <<'EOF'
-          const {chromium}=require('playwright-core');
-          (async()=>{const b=await chromium.launch({headless:false,executablePath:'/usr/bin/chromium',args:['--no-sandbox','--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist','--window-size=1280,720']});const c=await b.newContext({viewport:{width:1280,height:720},recordVideo:{dir:'video',size:{width:1280,height:720}}});const p=await c.newPage();await p.goto('http://127.0.0.1:8080');await p.waitForTimeout(10000);await p.addStyleTag({content:'#hud,#topActions,#objectiveTracker,#vitals,#cross,.controlZone,#actionCluster,#equippedTool,#buildModeHud,#vehicleCard,#flightControls,.sidePanel,#panel,#missionBanner,#toast{display:none!important}'});await p.keyboard.down('w');for(let i=0;i<24;i++){await p.mouse.move(390+i*18,350-Math.sin(i/4)*40,{steps:12});await p.waitForTimeout(850)}await p.keyboard.up('w');await p.waitForTimeout(1800);await c.close();await b.close()})().catch(e=>{console.error(e);process.exit(1)})
-          EOF
-          (cd public && python3 -m http.server 8080 >/dev/null 2>&1 &)
-          xvfb-run -a node capture.js
-          SRC=$(find video -type f | head -1)
-          test -n "$SRC"
-          ffmpeg -y -i "$SRC" -c:v libx264 -crf 20 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Preview.mp4
+          set -e
+          ffmpeg -v error -i Wildlands-Cinematic-Preview.mp4 -f null -
+          D=$(ffprobe -v error -show_entries format=duration -of csv=p=0 Wildlands-Cinematic-Preview.mp4)
+          python3 -c "d=float('$D'); assert d > 20 and d < 30, d"
       - uses: actions/upload-artifact@v4
         with:
           name: Wildlands-Cinematic-Preview
           path: Wildlands-Cinematic-Preview.mp4
+          if-no-files-found: error
+          retention-days: 7
