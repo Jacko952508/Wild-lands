@@ -12,39 +12,43 @@ jobs:
       - name: Install capture dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg xvfb chromium
-      - name: Capture only after Wildlands renders
+          sudo apt-get install -y -qq ffmpeg xvfb chromium xdotool
+      - name: Capture portrait Wildlands with clean HUD
         shell: bash
         run: |
           set -euo pipefail
+          # Capture-only CSS: remove every overlay/control while leaving the WebGL canvas visible.
+          cat >> public/style.css <<'CSS'
+          body > *:not(#game), #hud, #topActions, #objectiveTracker, #vitals, #cross, .controlZone, .actionCluster, #equippedTool, #buildModeHud, #vehicleCard, #flightControls, .sidePanel, #panel, #missionBanner, #toast, button, .btn, [role="button"] { display:none !important; visibility:hidden !important; }
+          html,body,#game,canvas { margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; max-width:none !important; max-height:none !important; overflow:hidden !important; }
+          #game,canvas { display:block !important; visibility:visible !important; }
+          CSS
           (cd public && python3 -m http.server 8080 >/tmp/server.log 2>&1 &)
-          Xvfb :99 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &
+          Xvfb :99 -screen 0 720x1280x24 >/tmp/xvfb.log 2>&1 &
           export DISPLAY=:99
           sleep 2
           mkdir -p /tmp/chrome-profile/Default
           touch /tmp/chrome-profile/'First Run'
           printf '{"browser":{"has_seen_welcome_page":true,"check_default_browser":false},"distribution":{"skip_first_run_ui":true,"suppress_first_run_bubble":true}}' > /tmp/chrome-profile/Default/Preferences
-          chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --no-sandbox --disable-dev-shm-usage --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=1280,720 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
+          chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --no-sandbox --disable-dev-shm-usage --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=720,1280 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
           CHROME_PID=$!
-          # Give the heavy procedural world time to initialise. Fail rather than record a loading screen.
           sleep 35
-          ffmpeg -y -f x11grab -video_size 1280x720 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1
-          # Reject near-black/loading frames before wasting time recording.
+          ffmpeg -y -f x11grab -video_size 720x1280 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1
           MEAN=$(ffmpeg -v error -i proof.png -vf signalstats,metadata=print:file=- -f null - 2>&1 | sed -n 's/.*lavfi.signalstats.YAVG=//p' | tail -1)
           echo "Proof-frame luma: ${MEAN:-unknown}"
           test -n "${MEAN:-}"
           python3 -c "v=float('$MEAN'); assert v > 10, 'renderer still black/loading'"
-          # Hide game chrome for the cinematic pass while keeping the real renderer untouched.
-          timeout -s INT 34s ffmpeg -y -f x11grab -framerate 30 -video_size 1280x720 -i :99.0 -t 32 -an -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Preview.mp4 || true
+          # Record portrait 9:16 only after the renderer passes the proof-frame gate.
+          timeout -s INT 34s ffmpeg -y -f x11grab -framerate 30 -video_size 720x1280 -i :99.0 -t 32 -an -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Portrait.mp4 || true
           kill -9 "$CHROME_PID" 2>/dev/null || true
           pkill -9 chromium 2>/dev/null || true
-          test -s proof.png && test -s Wildlands-Cinematic-Preview.mp4
-          ffmpeg -v error -i Wildlands-Cinematic-Preview.mp4 -f null -
+          test -s proof.png && test -s Wildlands-Cinematic-Portrait.mp4
+          ffmpeg -v error -i Wildlands-Cinematic-Portrait.mp4 -f null -
       - uses: actions/upload-artifact@v4
         with:
-          name: Wildlands-Cinematic-Preview
+          name: Wildlands-Cinematic-Portrait
           path: |
-            Wildlands-Cinematic-Preview.mp4
+            Wildlands-Cinematic-Portrait.mp4
             proof.png
           if-no-files-found: error
           retention-days: 7
