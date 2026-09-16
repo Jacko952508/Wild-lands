@@ -6,28 +6,36 @@ on:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 4
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
-      - name: Capture Wildlands without first-run UI
+      - name: Install capture dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg xvfb chromium
+      - name: Capture only after Wildlands renders
         shell: bash
         run: |
           set -euo pipefail
-          command -v chromium
-          command -v ffmpeg
-          command -v Xvfb
           (cd public && python3 -m http.server 8080 >/tmp/server.log 2>&1 &)
           Xvfb :99 -screen 0 1280x720x24 >/tmp/xvfb.log 2>&1 &
           export DISPLAY=:99
           sleep 2
           mkdir -p /tmp/chrome-profile/Default
           touch /tmp/chrome-profile/'First Run'
-          printf '{"browser":{"has_seen_welcome_page":true,"check_default_browser":false},"distribution":{"skip_first_run_ui":true,"suppress_first_run_bubble":true,"do_not_create_any_shortcuts":true}}' > /tmp/chrome-profile/Default/Preferences
-          chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --disable-features=SigninIntercept,ChromeWhatsNewUI --no-sandbox --disable-dev-shm-usage --use-gl=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=1280,720 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
+          printf '{"browser":{"has_seen_welcome_page":true,"check_default_browser":false},"distribution":{"skip_first_run_ui":true,"suppress_first_run_bubble":true}}' > /tmp/chrome-profile/Default/Preferences
+          chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --no-sandbox --disable-dev-shm-usage --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=1280,720 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
           CHROME_PID=$!
-          sleep 8
+          # Give the heavy procedural world time to initialise. Fail rather than record a loading screen.
+          sleep 35
           ffmpeg -y -f x11grab -video_size 1280x720 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1
-          timeout -s INT 24s ffmpeg -y -f x11grab -framerate 30 -video_size 1280x720 -i :99.0 -t 22 -an -c:v libx264 -preset ultrafast -crf 21 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Preview.mp4 || true
+          # Reject near-black/loading frames before wasting time recording.
+          MEAN=$(ffmpeg -v error -i proof.png -vf signalstats,metadata=print:file=- -f null - 2>&1 | sed -n 's/.*lavfi.signalstats.YAVG=//p' | tail -1)
+          echo "Proof-frame luma: ${MEAN:-unknown}"
+          test -n "${MEAN:-}"
+          python3 -c "v=float('$MEAN'); assert v > 10, 'renderer still black/loading'"
+          # Hide game chrome for the cinematic pass while keeping the real renderer untouched.
+          timeout -s INT 34s ffmpeg -y -f x11grab -framerate 30 -video_size 1280x720 -i :99.0 -t 32 -an -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Preview.mp4 || true
           kill -9 "$CHROME_PID" 2>/dev/null || true
           pkill -9 chromium 2>/dev/null || true
           test -s proof.png && test -s Wildlands-Cinematic-Preview.mp4
