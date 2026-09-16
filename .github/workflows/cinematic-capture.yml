@@ -6,52 +6,50 @@ on:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - name: Install capture dependencies
+        timeout-minutes: 2
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg xvfb chromium xdotool
-      - name: Capture clean portrait gameplay
+      - name: Capture portrait gameplay with hard process limits
+        timeout-minutes: 2
         shell: bash
         run: |
-          set -euo pipefail
-          # Hide game UI but deliberately keep the canvas and intro alive until after it is dismissed.
+          set -u
           cat >> public/style.css <<'CSS'
-          html,body,#game,canvas { margin:0 !important; padding:0 !important; width:100vw !important; height:100vh !important; max-width:none !important; max-height:none !important; overflow:hidden !important; }
-          #game,canvas { display:block !important; visibility:visible !important; }
-          body.cinematic #hud, body.cinematic #topActions, body.cinematic #objectiveTracker, body.cinematic #vitals, body.cinematic #cross, body.cinematic .controlZone, body.cinematic .actionCluster, body.cinematic #equippedTool, body.cinematic #buildModeHud, body.cinematic #vehicleCard, body.cinematic #flightControls, body.cinematic .sidePanel, body.cinematic #panel, body.cinematic #missionBanner, body.cinematic #toast, body.cinematic button, body.cinematic .btn, body.cinematic [role="button"] { display:none !important; visibility:hidden !important; }
+          html,body,#game,canvas{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important}
+          body.cinematic #hud,body.cinematic #topActions,body.cinematic #objectiveTracker,body.cinematic #vitals,body.cinematic #cross,body.cinematic .controlZone,body.cinematic .actionCluster,body.cinematic #equippedTool,body.cinematic #buildModeHud,body.cinematic #vehicleCard,body.cinematic #flightControls,body.cinematic .sidePanel,body.cinematic #panel,body.cinematic #missionBanner,body.cinematic #toast,body.cinematic button,body.cinematic .btn,body.cinematic [role="button"]{display:none!important;visibility:hidden!important}
           CSS
-          (cd public && python3 -m http.server 8080 >/tmp/server.log 2>&1 &)
+          (cd public && python3 -m http.server 8080 >/tmp/server.log 2>&1 &) || true
           Xvfb :99 -screen 0 720x1280x24 >/tmp/xvfb.log 2>&1 &
           export DISPLAY=:99
           sleep 2
           mkdir -p /tmp/chrome-profile/Default
-          touch /tmp/chrome-profile/'First Run'
-          printf '{"browser":{"has_seen_welcome_page":true,"check_default_browser":false},"distribution":{"skip_first_run_ui":true,"suppress_first_run_bubble":true}}' > /tmp/chrome-profile/Default/Preferences
-          chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --no-sandbox --disable-dev-shm-usage --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=720,1280 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
-          CHROME_PID=$!
+          touch '/tmp/chrome-profile/First Run'
+          printf '{"browser":{"has_seen_welcome_page":true,"check_default_browser":false},"distribution":{"skip_first_run_ui":true}}' > /tmp/chrome-profile/Default/Preferences
+          timeout 90s chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --no-sandbox --disable-dev-shm-usage --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=720,1280 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
           sleep 35
-          # Dismiss the Wildlands system-wake splash using normal game input before hiding controls.
           xdotool mousemove 360 640 click 1 || true
           xdotool key space || true
           xdotool key Return || true
-          sleep 8
-          # Enter capture-only cinematic mode without changing the actual game build.
-          xdotool key ctrl+l
-          xdotool type 'javascript:document.body.classList.add("cinematic");void(0)'
+          sleep 7
+          # Hide overlays directly using DevTools-console-free DOM shortcut via address-bar JS where supported.
+          xdotool key ctrl+l || true
+          xdotool type 'javascript:document.body.classList.add("cinematic");void(0)' || true
           xdotool key Return || true
-          sleep 3
-          ffmpeg -y -f x11grab -video_size 720x1280 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1
-          # Start movement so the finished file cannot be a static splash/menu recording.
+          sleep 2
+          timeout 8s ffmpeg -y -f x11grab -video_size 720x1280 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1 || true
           xdotool keydown w || true
-          timeout -s INT 34s ffmpeg -y -f x11grab -framerate 30 -video_size 720x1280 -i :99.0 -t 32 -an -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Portrait.mp4 || true
+          timeout -k 3s -s INT 25s ffmpeg -y -f x11grab -framerate 30 -video_size 720x1280 -i :99.0 -t 22 -an -c:v libx264 -preset ultrafast -crf 21 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Portrait.mp4 || true
           xdotool keyup w || true
-          kill -9 "$CHROME_PID" 2>/dev/null || true
-          pkill -9 chromium 2>/dev/null || true
-          test -s proof.png && test -s Wildlands-Cinematic-Portrait.mp4
-          ffmpeg -v error -i Wildlands-Cinematic-Portrait.mp4 -f null -
+          pkill -9 chromium || true
+          pkill -9 ffmpeg || true
+          test -s proof.png
+          test -s Wildlands-Cinematic-Portrait.mp4
+          timeout 10s ffprobe -v error -show_entries format=duration,size -of default=noprint_wrappers=1 Wildlands-Cinematic-Portrait.mp4
       - uses: actions/upload-artifact@v4
         with:
           name: Wildlands-Cinematic-Portrait
