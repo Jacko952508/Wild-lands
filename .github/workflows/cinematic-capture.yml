@@ -14,15 +14,15 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg xvfb chromium xdotool
-      - name: Capture portrait gameplay with hard process limits
+      - name: Build capture-only game shell and record
         timeout-minutes: 2
         shell: bash
         run: |
           set -u
-          cat >> public/style.css <<'CSS'
-          html,body,#game,canvas{margin:0!important;padding:0!important;width:100vw!important;height:100vh!important;overflow:hidden!important}
-          body.cinematic #hud,body.cinematic #topActions,body.cinematic #objectiveTracker,body.cinematic #vitals,body.cinematic #cross,body.cinematic .controlZone,body.cinematic .actionCluster,body.cinematic #equippedTool,body.cinematic #buildModeHud,body.cinematic #vehicleCard,body.cinematic #flightControls,body.cinematic .sidePanel,body.cinematic #panel,body.cinematic #missionBanner,body.cinematic #toast,body.cinematic button,body.cinematic .btn,body.cinematic [role="button"]{display:none!important;visibility:hidden!important}
-          CSS
+          # Replace only the Actions checkout HTML. The real game/repository build remains untouched.
+          cat > public/index.html <<'HTML'
+          <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wildlands Capture</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}#game{display:block;width:100vw;height:100vh}</style></head><body><canvas id="game"></canvas><script src="three.min.js"></script><script src="engine.js"></script></body></html>
+          HTML
           (cd public && python3 -m http.server 8080 >/tmp/server.log 2>&1 &) || true
           Xvfb :99 -screen 0 720x1280x24 >/tmp/xvfb.log 2>&1 &
           export DISPLAY=:99
@@ -31,18 +31,11 @@ jobs:
           touch '/tmp/chrome-profile/First Run'
           printf '{"browser":{"has_seen_welcome_page":true,"check_default_browser":false},"distribution":{"skip_first_run_ui":true}}' > /tmp/chrome-profile/Default/Preferences
           timeout 90s chromium --user-data-dir=/tmp/chrome-profile --no-first-run --no-default-browser-check --disable-search-engine-choice-screen --no-sandbox --disable-dev-shm-usage --use-gl=angle --use-angle=swiftshader --enable-webgl --ignore-gpu-blocklist --window-size=720,1280 --window-position=0,0 --kiosk http://127.0.0.1:8080 >/tmp/chromium.log 2>&1 &
-          sleep 35
+          sleep 38
+          # The capture shell contains no HUD, buttons, panels or intro DOM. Give the renderer keyboard movement directly.
           xdotool mousemove 360 640 click 1 || true
-          xdotool key space || true
-          xdotool key Return || true
-          sleep 7
-          # Hide overlays directly using DevTools-console-free DOM shortcut via address-bar JS where supported.
-          xdotool key ctrl+l || true
-          xdotool type 'javascript:document.body.classList.add("cinematic");void(0)' || true
-          xdotool key Return || true
-          sleep 2
-          timeout 8s ffmpeg -y -f x11grab -video_size 720x1280 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1 || true
           xdotool keydown w || true
+          timeout 8s ffmpeg -y -f x11grab -video_size 720x1280 -i :99.0 -frames:v 1 proof.png >/dev/null 2>&1 || true
           timeout -k 3s -s INT 25s ffmpeg -y -f x11grab -framerate 30 -video_size 720x1280 -i :99.0 -t 22 -an -c:v libx264 -preset ultrafast -crf 21 -pix_fmt yuv420p -movflags +faststart Wildlands-Cinematic-Portrait.mp4 || true
           xdotool keyup w || true
           pkill -9 chromium || true
