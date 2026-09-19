@@ -185,7 +185,7 @@ for frame in range(1,145):
     ship.keyframe_insert('location',frame=frame); ship.keyframe_insert('rotation_euler',frame=frame)
 
     ign=max(0,min(1,(t-.05)/.08))
-    launchlight.data.energy=3500*ign; launchlight.keyframe_insert('energy',frame=frame)
+    launchlight.data.energy=3500*ign; launchlight.data.keyframe_insert('energy',frame=frame)
     launchlight.location.z=max(3,z+1); launchlight.keyframe_insert('location',frame=frame)
     # flame objects follow ship after liftoff
     for j,(f,base) in enumerate(flames):
