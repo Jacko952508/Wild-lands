@@ -14,7 +14,7 @@ jobs:
       - name: Install Blender and FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender ffmpeg
+          sudo apt-get install -y blender ffmpeg libegl1 libgl1-mesa-dri libglx-mesa0
       - name: Render
         run: |
           mkdir -p render_output
