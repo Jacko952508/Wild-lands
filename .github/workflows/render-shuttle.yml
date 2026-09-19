@@ -1,0 +1,30 @@
+name: Render Shuttle Movie
+on:
+  push:
+    branches: [video-render-worker]
+    paths:
+      - 'render_worker/**'
+      - '.github/workflows/render-shuttle.yml'
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender and FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender ffmpeg
+      - name: Render
+        run: |
+          mkdir -p render_output
+          blender -b -P render_worker/shuttle_movie.py
+      - name: Encode
+        run: |
+          ffmpeg -y -framerate 24 -i render_output/frame_%04d.png -vf "scale=720:1280:flags=lanczos,format=yuv420p" -c:v libx264 -preset slow -crf 18 -movflags +faststart render_output/shuttle_takeoff.mp4
+          ffprobe -v error -show_entries format=duration -show_entries stream=codec_name,width,height,r_frame_rate -of json render_output/shuttle_takeoff.mp4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shuttle-takeoff-movie
+          path: render_output/shuttle_takeoff.mp4
+          retention-days: 7
