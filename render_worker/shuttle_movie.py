@@ -14,9 +14,9 @@ def mat(name, color, metallic=0, rough=.45, emission=None, alpha=1):
     m.use_nodes=True; bs=m.node_tree.nodes.get('Principled BSDF')
     bs.inputs['Base Color'].default_value=(*color,1); bs.inputs['Metallic'].default_value=metallic; bs.inputs['Roughness'].default_value=rough
     if emission:
-        bs.inputs['Emission'].default_value=(*emission,1); bs.inputs['Emission Strength'].default_value=5
+        (bs.inputs.get('Emission Color') or bs.inputs.get('Emission')).default_value=(*emission,1); bs.inputs['Emission Strength'].default_value=5
     if alpha<1:
-        bs.inputs['Alpha'].default_value=alpha; m.blend_method='BLEND'; m.use_screen_refraction=True
+        bs.inputs['Alpha'].default_value=alpha; m.blend_method='BLEND'
     return m
 WHITE=mat('thermal tiles',(0.72,.75,.77),.12,.32)
 BLACK=mat('heat shield',(.015,.018,.022),.05,.7)
