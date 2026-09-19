@@ -165,7 +165,7 @@ scene.eevee.use_bloom=True; scene.eevee.bloom_intensity=.08; scene.eevee.bloom_r
 scene.eevee.use_soft_shadows=True
 scene.render.resolution_x=540; scene.render.resolution_y=960; scene.render.resolution_percentage=100
 scene.render.image_settings.file_format='PNG'; scene.render.film_transparent=False
-scene.view_settings.look='Medium High Contrast'; scene.view_settings.exposure=-.15
+scene.view_settings.look='AgX - Medium High Contrast'; scene.view_settings.exposure=-.15
 
 # motion blur
 scene.eevee.use_motion_blur=True; scene.eevee.motion_blur_shutter=.45
