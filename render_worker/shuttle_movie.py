@@ -221,6 +221,9 @@ for frame in range(1,145):
         cam.data.lens=42
     look_at(cam,target); cam.keyframe_insert('location',frame=frame); cam.keyframe_insert('rotation_euler',frame=frame); cam.data.keyframe_insert('lens',frame=frame)
 
-scene.render.filepath=OUT+"/frame_"
 scene.render.image_settings.color_mode='RGB'
-bpy.ops.render.render(animation=True)
+start=int(os.environ.get('START_FRAME','1')); end=int(os.environ.get('END_FRAME','144'))
+for fr in range(start,end+1):
+    scene.frame_set(fr)
+    scene.render.filepath=OUT+f"/frame_{fr:04d}.png"
+    bpy.ops.render.render(write_still=True)
