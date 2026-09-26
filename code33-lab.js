@@ -1,4 +1,5 @@
 import http from "node:http";
+import fs from "node:fs";
 const PORT=Number(process.env.PORT||10000);
 const protocol=Object.freeze({version:2,seed:330033,trainEpisodes:60,testEpisodes:60,transferEpisodes:60,steps:24,baseline:"constant-velocity",frozenAfterTrain:true,passRule:"95% CI of paired gain must be above 0"});
 let state={started:new Date().toISOString(),phase:"train",episode:0,step:0,alpha:{x:0,y:0},trainSamples:0,position:{n:0,modelSum:0,baseSum:0,gains:[]},existence:{n:0,correct:0,baselineCorrect:0},frozenAt:null,complete:false};
@@ -20,4 +21,5 @@ function tick(){if(state.complete)return;state.phase=phaseFor(state.episode);con
  if(state.step>=protocol.steps){state.episode++;state.step=0;history=[];pending=null;if(state.episode===60)freeze();if(state.episode>=180){state.phase="complete";state.complete=true;console.log("LAB_COMPLETE",JSON.stringify(report()))}}}
 function report(){const p=state.position,n=p.n,ci=ci95(p.gains);return{phase:state.phase,episode:state.episode,step:state.step,alpha:state.alpha,trainSamples:state.trainSamples,position:{tests:n,modelError:n?p.modelSum/n:null,baselineError:n?p.baseSum/n:null,gain:n?(p.baseSum-p.modelSum)/n:null,gainCI95:ci,supported:!!ci&&ci.low>0},existence:{tests:state.existence.n,accuracy:state.existence.n?state.existence.correct/state.existence.n:null,baselineAccuracy:state.existence.n?state.existence.baselineCorrect/state.existence.n:null},frozenAt:state.frozenAt,complete:state.complete}}
 setInterval(tick,50);
-http.createServer((req,res)=>{res.setHeader("content-type","application/json");res.end(JSON.stringify({service:"CODE33 Development Lab",protocol,report:report()}))}).listen(PORT,()=>console.log("CODE33 Lab v2 listening",PORT));
+const dashboard=fs.readFileSync(new URL("./code33-dashboard.html",import.meta.url),"utf8");
+http.createServer((req,res)=>{if(req.url==="/api"){res.setHeader("content-type","application/json");return res.end(JSON.stringify({service:"CODE33 Development Lab",protocol,report:report()}))}res.setHeader("content-type","text/html; charset=utf-8");res.end(dashboard)}).listen(PORT,()=>console.log("CODE33 Lab dashboard listening",PORT));
