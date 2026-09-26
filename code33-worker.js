@@ -57,6 +57,23 @@ function chooseGoal(){
 function applyPolicy(){const g=agency.goal;agency.policy=g==="seek informative change"?{intervalMs:2500,retainStable:false,mode:"high-attention"}:g==="improve prediction"||g==="reduce uncertainty"?{intervalMs:4000,retainStable:true,mode:"evidence-rich"}:g==="consolidate memory"?{intervalMs:8000,retainStable:false,mode:"consolidation"}:{intervalMs:5000,retainStable:false,mode:"baseline"}}
 function log(msg){activity.push({at:new Date().toISOString(),msg});if(activity.length>100)activity.shift()}
 async function getFrame(){const x=await fetch(frameUrl,{headers:{"user-agent":"Mozilla/5.0","cache-control":"no-cache"}});return{x,b:Buffer.from(await x.arrayBuffer())}}
+const sandbox={enabled:true,episode:0,step:0,kind:"continuation",privateTrials:[],maxTrials:300,lastGroundTruth:null};
+function sandboxKind(n){return ["continuation","occlusion-return","no-return","trajectory-violation"][n%4]}
+function sandboxFrame(){
+ const width=320,height=180,kind=sandboxKind(sandbox.episode),step=sandbox.step++,data=Buffer.alloc(width*height*4,18);
+ const put=(x,y,w,h,v)=>{for(let yy=Math.max(0,y);yy<Math.min(height,y+h);yy++)for(let xx=Math.max(0,x);xx<Math.min(width,x+w);xx++){const i=(yy*width+xx)*4;data[i]=v;data[i+1]=v;data[i+2]=v;data[i+3]=255}};
+ for(let i=3;i<data.length;i+=4)data[i]=255;
+ put(145,0,30,height,72);
+ let x=20+step*12,y=78,exists=true,visible=true;
+ if(kind==="trajectory-violation"&&step>=10){x=260-step*5;y=35}
+ if(kind==="no-return"&&step>=10)exists=false;
+ if(exists&&x>=145&&x<=175)visible=false;
+ if(exists&&visible)put(Math.round(x),Math.round(y),14,14,235);
+ const gt={episode:sandbox.episode,step,kind,exists,visible,x:+x.toFixed(1),y:+y.toFixed(1),occluder:{x:145,w:30}};
+ sandbox.lastGroundTruth=gt;
+ if(step>=20){sandbox.privateTrials.push({episode:sandbox.episode,kind,completed:new Date().toISOString()});if(sandbox.privateTrials.length>sandbox.maxTrials)sandbox.privateTrials.shift();sandbox.episode++;sandbox.step=0}
+ return {buffer:jpeg.encode({data,width,height},80).data,groundTruth:gt}
+}
 const cognitiveHealth={sensor:{status:"unknown",lastOk:null,error:null},vision:{status:"unknown",lastOk:null,error:null},tracking:{status:"unknown",lastOk:null,error:null},prediction:{status:"unknown",lastOk:null,error:null},epistemics:{status:"unknown",lastOk:null,error:null}};
 function healthOk(part){cognitiveHealth[part]={...cognitiveHealth[part],status:"ok",lastOk:new Date().toISOString(),error:null}}
 function healthFail(part,e){cognitiveHealth[part]={...cognitiveHealth[part],status:"error",error:String(e),failedAt:new Date().toISOString()}}
