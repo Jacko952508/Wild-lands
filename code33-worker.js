@@ -40,6 +40,10 @@ function chooseGoal(){
 function applyPolicy(){const g=agency.goal;agency.policy=g==="seek informative change"?{intervalMs:2500,retainStable:false,mode:"high-attention"}:g==="improve prediction"||g==="reduce uncertainty"?{intervalMs:4000,retainStable:true,mode:"evidence-rich"}:g==="consolidate memory"?{intervalMs:8000,retainStable:false,mode:"consolidation"}:{intervalMs:5000,retainStable:false,mode:"baseline"}}
 function log(msg){activity.push({at:new Date().toISOString(),msg});if(activity.length>100)activity.shift()}
 async function getFrame(){const x=await fetch(frameUrl,{headers:{"user-agent":"Mozilla/5.0","cache-control":"no-cache"}});return{x,b:Buffer.from(await x.arrayBuffer())}}
+const cognitiveHealth={sensor:{status:"unknown",lastOk:null,error:null},vision:{status:"unknown",lastOk:null,error:null},tracking:{status:"unknown",lastOk:null,error:null},prediction:{status:"unknown",lastOk:null,error:null},epistemics:{status:"unknown",lastOk:null,error:null}};
+function healthOk(part){cognitiveHealth[part]={...cognitiveHealth[part],status:"ok",lastOk:new Date().toISOString(),error:null}}
+function healthFail(part,e){cognitiveHealth[part]={...cognitiveHealth[part],status:"error",error:String(e),failedAt:new Date().toISOString()}}
+function refreshHealth(){const now=Date.now();for(const v of Object.values(cognitiveHealth))if(v.lastOk&&now-Date.parse(v.lastOk)>60000&&v.status==="ok")v.status="stale"}
 function perceiveJPEG(buf){
  try{
   const im=jpeg.decode(buf,{useTArray:true,formatAsRGBA:true}),w=im.width,h=im.height,d=im.data;
