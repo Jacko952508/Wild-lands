@@ -42,24 +42,24 @@ function log(msg){activity.push({at:new Date().toISOString(),msg});if(activity.l
 async function getFrame(){const x=await fetch(frameUrl,{headers:{"user-agent":"Mozilla/5.0","cache-control":"no-cache"}});return{x,b:Buffer.from(await x.arrayBuffer())}}
 function perceiveJPEG(buf){
  try{
-  const im=jpeg.decode(buf,{useTArray:true,formatAsRGBA:true});
-  const step=Math.max(1,Math.floor(Math.sqrt((im.width*im.height)/12000)));
-  let n=0,sum=0,sum2=0,edge=0,edgeN=0,prev=null;
-  for(let y=0;y<im.height;y+=step)for(let x=0;x<im.width;x+=step){
-   const i=(y*im.width+x)*4, lum=.2126*im.data[i]+.7152*im.data[i+1]+.0722*im.data[i+2];
-   sum+=lum;sum2+=lum*lum;n++;if(prev!==null){edge+=Math.abs(lum-prev);edgeN++}prev=lum;
+  const im=jpeg.decode(buf,{useTArray:true,formatAsRGBA:true}),w=im.width,h=im.height,d=im.data;
+  const step=Math.max(1,Math.floor(Math.sqrt((w*h)/12000)));
+  let n=0,sum=0,sum2=0,edge=0,edgeN=0;
+  const cols=4,rows=3,rs=Array.from({length:12},()=>({sum:0,n:0}));
+  for(let y=0;y<h;y+=step)for(let x=0;x<w;x+=step){
+   const i=(y*w+x)*4,L=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];sum+=L;sum2+=L*L;n++;
+   if(x+step<w){const j=(y*w+Math.min(w-1,x+step))*4,R=.2126*d[j]+.7152*d[j+1]+.0722*d[j+2];edge+=Math.abs(L-R);edgeN++}
+   const gx=Math.min(3,Math.floor(x/w*cols)),gy=Math.min(2,Math.floor(y/h*rows)),q=rs[gy*cols+gx];q.sum+=L;q.n++;
   }
   const mean=sum/n,contrast=Math.sqrt(Math.max(0,sum2/n-mean*mean)),e=edge/(edgeN||1);
   const prevLum=visual.luminance,prevEdge=visual.edgeEnergy,dl=prevLum===null?0:mean-prevLum,de=prevEdge===null?0:e-prevEdge;
-  if(sensoryPrediction.nextLuminance!==null){
-   sensoryPrediction.luminanceError=+Math.abs(mean-sensoryPrediction.nextLuminance).toFixed(2);
-   sensoryPrediction.edgeError=+Math.abs(e-sensoryPrediction.nextEdge).toFixed(2);
-   sensoryPrediction.score=+Math.max(0,1-(sensoryPrediction.luminanceError/255+sensoryPrediction.edgeError/128)/2).toFixed(4);
-   sensoryPrediction.total++;
-  }
-  const projectedLum=mean+dl,projectedEdge=e+de;
-  sensoryPrediction.nextLuminance=sensoryPrediction.nextLuminance===null?+projectedLum.toFixed(2):+(sensoryPrediction.nextLuminance*(1-sensoryPrediction.alpha)+projectedLum*sensoryPrediction.alpha).toFixed(2);
-  sensoryPrediction.nextEdge=sensoryPrediction.nextEdge===null?+projectedEdge.toFixed(2):+(sensoryPrediction.nextEdge*(1-sensoryPrediction.alpha)+projectedEdge*sensoryPrediction.alpha).toFixed(2);
+  const regionValues=rs.map((q,i)=>{const L=q.sum/Math.max(1,q.n);return {region:i,row:Math.floor(i/4),col:i%4,luminance:+L.toFixed(2),delta:previousRegions?+(L-previousRegions[i]).toFixed(2):0}});
+  const focus=regionValues.reduce((a,b)=>Math.abs(b.delta)>Math.abs(a.delta)?b:a,regionValues[0]);
+  const now=Date.now(),cells=regionValues.filter(x=>Math.abs(x.delta)>=2.5);for(const t of tracking.active)t.seenThisFrame=false;
+  for(const cell of cells){let t=tracking.active.filter(x=>!x.seenThisFrame&&now-x.lastSeen<30000&&Math.abs(x.region-cell.region)<=5).sort((a,b)=>Math.abs(a.region-cell.region)-Math.abs(b.region-cell.region))[0];if(t){t.path.push(cell.region);if(t.path.length>20)t.path.shift();t.region=cell.region;t.lastSeen=now;t.observations++;t.seenThisFrame=true;t.strength=+Math.abs(cell.delta).toFixed(2)}else tracking.active.push({id:tracking.nextId++,born:now,lastSeen:now,region:cell.region,path:[cell.region],observations:1,seenThisFrame:true,strength:+Math.abs(cell.delta).toFixed(2)})}
+  const ended=tracking.active.filter(t=>now-t.lastSeen>=30000);for(const t of ended){tracking.history.push({...t,ended:now,durationMs:now-t.born});if(tracking.history.length>tracking.maxHistory)tracking.history.shift();if(t.observations>=3)claim("episode","anonymous visual track "+t.id+" persisted across "+t.observations+" observations",Math.min(.95,.45+t.observations*.05),[{type:"visual-track",id:t.id,path:t.path,durationMs:now-t.born}])}tracking.active=tracking.active.filter(t=>now-t.lastSeen<30000);previousRegions=regionValues.map(x=>x.luminance);
+  if(sensoryPrediction.nextLuminance!==null){sensoryPrediction.luminanceError=+Math.abs(mean-sensoryPrediction.nextLuminance).toFixed(2);sensoryPrediction.edgeError=+Math.abs(e-sensoryPrediction.nextEdge).toFixed(2);sensoryPrediction.score=+Math.max(0,1-(sensoryPrediction.luminanceError/255+sensoryPrediction.edgeError/128)/2).toFixed(4);sensoryPrediction.total++}
+  const projectedLum=mean+dl,projectedEdge=e+de;sensoryPrediction.nextLuminance=sensoryPrediction.nextLuminance===null?+projectedLum.toFixed(2):+(sensoryPrediction.nextLuminance*(1-sensoryPrediction.alpha)+projectedLum*sensoryPrediction.alpha).toFixed(2);sensoryPrediction.nextEdge=sensoryPrediction.nextEdge===null?+projectedEdge.toFixed(2):+(sensoryPrediction.nextEdge*(1-sensoryPrediction.alpha)+projectedEdge*sensoryPrediction.alpha).toFixed(2);
   visual={luminance:+mean.toFixed(2),contrast:+contrast.toFixed(2),edgeEnergy:+e.toFixed(2),deltaLuminance:+dl.toFixed(2),deltaEdge:+de.toFixed(2),trend:dl>1.5?"brightening":dl< -1.5?"darkening":Math.abs(de)>1?"scene-activity-shift":"stable",updated:new Date().toISOString(),regions:regionValues,focus:{region:focus.region,row:focus.row,col:focus.col,delta:focus.delta}};
   if(Math.abs(dl)>1.5||Math.abs(de)>1){claim("observation","visual state: "+visual.trend,.98,[{type:"sensor",at:visual.updated,luminance:visual.luminance,edgeEnergy:visual.edgeEnergy}]);updateVisualHypotheses()}
  }catch(e){log("Visual metrics error · "+e.message)}
