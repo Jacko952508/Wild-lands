@@ -35,7 +35,7 @@ function finishEpisode(){
  const ph=S.phase,A=anchor(),F=fieldF;
  if(A&&F){
   if(ph==="fit"){
-   for(let q of P.forecastQs){let actual=obsByStep[10+q];if(!actual)continue;let b=baseline(A,q),tx=actual.x-b.x,ty=actual.y-b.y;for(let e of S.experts.slice(1)){let z=basis(e.k,q),px=dot(e.wx,F)*z,py=dot(e.wy,F)*z,ex=tx-px,ey=ty-py,lr=.012;for(let i=0;i<N.length;i++){e.wx[i]+=lr*ex*F[i]*z;e.wy[i]+=lr*ey*F[i]*z}}S.fitSamples++}}
+   for(let q of P.forecastQs){let actual=obsByStep[10+q];if(!actual)continue;let b=baseline(A,q),tx=actual.x-b.x,ty=actual.y-b.y;for(let e of S.experts.slice(1)){let z=basis(e.k,q),px=dot(e.wx,F)*z,py=dot(e.wy,F)*z,ex=tx-px,ey=ty-py,lr=.012;for(let i=0;i<N.length;i++){e.wx[i]+=lr*ex*F[i]*z;e.wy[i]+=lr*ey*F[i]*z}}S.fitSamples++}
   } else if(ph==="select"){
    let probe=chooseProbe(A,F),actual=obsByStep[10+probe.q];if(actual){for(let e of S.experts){let p=predict(e,A,F,probe.q);e.selectLoss+=dist(p.model,actual);e.selectN++}S.activeInvestigations.push({episode:S.episode,q:probe.q,disagreement:probe.d});S.selectionEpisodes++}
   } else if(ph==="test"||ph==="transfer"){
