@@ -60,7 +60,7 @@ function perceiveJPEG(buf){
   const projectedLum=mean+dl,projectedEdge=e+de;
   sensoryPrediction.nextLuminance=sensoryPrediction.nextLuminance===null?+projectedLum.toFixed(2):+(sensoryPrediction.nextLuminance*(1-sensoryPrediction.alpha)+projectedLum*sensoryPrediction.alpha).toFixed(2);
   sensoryPrediction.nextEdge=sensoryPrediction.nextEdge===null?+projectedEdge.toFixed(2):+(sensoryPrediction.nextEdge*(1-sensoryPrediction.alpha)+projectedEdge*sensoryPrediction.alpha).toFixed(2);
-  visual={luminance:+mean.toFixed(2),contrast:+contrast.toFixed(2),edgeEnergy:+e.toFixed(2),deltaLuminance:+dl.toFixed(2),deltaEdge:+de.toFixed(2),trend:dl>1.5?"brightening":dl< -1.5?"darkening":Math.abs(de)>1?"scene-activity-shift":"stable",updated:new Date().toISOString()};
+  visual={luminance:+mean.toFixed(2),contrast:+contrast.toFixed(2),edgeEnergy:+e.toFixed(2),deltaLuminance:+dl.toFixed(2),deltaEdge:+de.toFixed(2),trend:dl>1.5?"brightening":dl< -1.5?"darkening":Math.abs(de)>1?"scene-activity-shift":"stable",updated:new Date().toISOString(),regions:regionValues,focus:{region:focus.region,row:focus.row,col:focus.col,delta:focus.delta}};
   if(Math.abs(dl)>1.5||Math.abs(de)>1){claim("observation","visual state: "+visual.trend,.98,[{type:"sensor",at:visual.updated,luminance:visual.luminance,edgeEnergy:visual.edgeEnergy}]);updateVisualHypotheses()}
  }catch(e){log("Visual metrics error · "+e.message)}
 }
