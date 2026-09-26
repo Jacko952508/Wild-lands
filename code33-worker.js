@@ -4,8 +4,8 @@ import http from "node:http";
 const frameUrl=process.env.FRAME_URL||"https://ipcamlive.com/player/snapshot.php?alias=portholecamera",baseInterval=5000,memories=[],activity=[],maxMem=720;let latestFrame=null,latestFrameData=null;const prediction={alpha:.04,pChange:.1,lastPrediction:null,correct:0,total:0};const agency={goal:"establish continuity",since:new Date().toISOString(),decisions:0,drives:{understand:.5,uncertainty:.5,continuity:0,novelty:.5,memory:.2},reason:"boot",goalScore:0,lastDecisionAt:Date.now(),previousGoal:null,action:"baseline sensing",lastOutcome:null,policy:{intervalMs:5000,retainStable:false,mode:"baseline"}};
 const persistence={enabled:!!process.env.DATABASE_URL,ready:false,lastSaved:null,lastRestored:null,error:null};
 const pool=persistence.enabled?new pg.Pool({connectionString:process.env.DATABASE_URL,ssl:{rejectUnauthorized:false}}):null;
-async function initPersistence(){if(!pool)return;try{await pool.query("CREATE TABLE IF NOT EXISTS code33_checkpoints (id BIGSERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), payload JSONB NOT NULL)");const r=await pool.query("SELECT payload,created_at FROM code33_checkpoints ORDER BY id DESC LIMIT 1");if(r.rows[0]){const p=r.rows[0].payload;if(p.inner)Object.assign(inner,p.inner);if(p.prediction)Object.assign(prediction,p.prediction);if(p.agency)Object.assign(agency,p.agency);if(Array.isArray(p.memories)){memories.splice(0,memories.length,...p.memories.slice(-maxMem))}persistence.lastRestored=r.rows[0].created_at}persistence.ready=true;log("Persistence ready"+(persistence.lastRestored?" · restored "+persistence.lastRestored:" · fresh state"))}catch(e){persistence.error=String(e);log("Persistence error · "+e.message)}}
-async function saveCheckpoint(){if(!pool||!persistence.ready)return;try{const payload={inner,prediction,agency,memories:memories.slice(-200)};await pool.query("INSERT INTO code33_checkpoints(payload) VALUES($1)",[payload]);persistence.lastSaved=new Date().toISOString();persistence.error=null}catch(e){persistence.error=String(e);log("Checkpoint error · "+e.message)}}
+async function initPersistence(){if(!pool)return;try{await pool.query("CREATE TABLE IF NOT EXISTS code33_checkpoints (id BIGSERIAL PRIMARY KEY, created_at TIMESTAMPTZ NOT NULL DEFAULT now(), payload JSONB NOT NULL)");const r=await pool.query("SELECT payload,created_at FROM code33_checkpoints ORDER BY id DESC LIMIT 1");if(r.rows[0]){const p=r.rows[0].payload;if(p.inner)Object.assign(inner,p.inner);if(p.prediction)Object.assign(prediction,p.prediction);if(p.sensoryPrediction)Object.assign(sensoryPrediction,p.sensoryPrediction);if(p.visual)Object.assign(visual,p.visual);if(p.agency)Object.assign(agency,p.agency);if(Array.isArray(p.memories)){memories.splice(0,memories.length,...p.memories.slice(-maxMem))}persistence.lastRestored=r.rows[0].created_at}persistence.ready=true;log("Persistence ready"+(persistence.lastRestored?" · restored "+persistence.lastRestored:" · fresh state"))}catch(e){persistence.error=String(e);log("Persistence error · "+e.message)}}
+async function saveCheckpoint(){if(!pool||!persistence.ready)return;try{const payload={inner,prediction,sensoryPrediction,visual,agency,memories:memories.slice(-200)};await pool.query("INSERT INTO code33_checkpoints(payload) VALUES($1)",[payload]);persistence.lastSaved=new Date().toISOString();persistence.error=null}catch(e){persistence.error=String(e);log("Checkpoint error · "+e.message)}}
 
 let s={started:new Date().toISOString(),samples:0,changes:0,failures:0,lastSeen:null,last:null,lastHash:null,lastChange:null,changeRate:0};let inner={novelty:0,uncertainty:.5,continuity:1,stimulation:0,reliability:1,predictionError:0,updated:new Date().toISOString(),cause:"initial state"};
 function hash(b){let h=2166136261;for(let i=0;i<b.length;i+=Math.max(1,Math.floor(b.length/4096))){h^=b[i];h=Math.imul(h,16777619)}return(h>>>0).toString(16)}
@@ -40,7 +40,16 @@ function perceiveJPEG(buf){
    sum+=lum;sum2+=lum*lum;n++;if(prev!==null){edge+=Math.abs(lum-prev);edgeN++}prev=lum;
   }
   const mean=sum/n,contrast=Math.sqrt(Math.max(0,sum2/n-mean*mean)),e=edge/(edgeN||1);
-  const dl=visual.luminance===null?0:mean-visual.luminance,de=visual.edgeEnergy===null?0:e-visual.edgeEnergy;
+  const prevLum=visual.luminance,prevEdge=visual.edgeEnergy,dl=prevLum===null?0:mean-prevLum,de=prevEdge===null?0:e-prevEdge;
+  if(sensoryPrediction.nextLuminance!==null){
+   sensoryPrediction.luminanceError=+Math.abs(mean-sensoryPrediction.nextLuminance).toFixed(2);
+   sensoryPrediction.edgeError=+Math.abs(e-sensoryPrediction.nextEdge).toFixed(2);
+   sensoryPrediction.score=+Math.max(0,1-(sensoryPrediction.luminanceError/255+sensoryPrediction.edgeError/128)/2).toFixed(4);
+   sensoryPrediction.total++;
+  }
+  const projectedLum=mean+dl,projectedEdge=e+de;
+  sensoryPrediction.nextLuminance=sensoryPrediction.nextLuminance===null?+projectedLum.toFixed(2):+(sensoryPrediction.nextLuminance*(1-sensoryPrediction.alpha)+projectedLum*sensoryPrediction.alpha).toFixed(2);
+  sensoryPrediction.nextEdge=sensoryPrediction.nextEdge===null?+projectedEdge.toFixed(2):+(sensoryPrediction.nextEdge*(1-sensoryPrediction.alpha)+projectedEdge*sensoryPrediction.alpha).toFixed(2);
   visual={luminance:+mean.toFixed(2),contrast:+contrast.toFixed(2),edgeEnergy:+e.toFixed(2),deltaLuminance:+dl.toFixed(2),deltaEdge:+de.toFixed(2),trend:dl>1.5?"brightening":dl< -1.5?"darkening":Math.abs(de)>1?"scene-activity-shift":"stable",updated:new Date().toISOString()};
  }catch(e){log("Visual metrics error · "+e.message)}
 }
