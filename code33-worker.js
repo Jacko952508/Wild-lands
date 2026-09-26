@@ -9,6 +9,16 @@ async function saveCheckpoint(){if(!pool||!persistence.ready)return;try{const pa
 
 let s={started:new Date().toISOString(),samples:0,changes:0,failures:0,lastSeen:null,last:null,lastHash:null,lastChange:null,changeRate:0};let inner={novelty:0,uncertainty:.5,continuity:1,stimulation:0,reliability:1,predictionError:0,updated:new Date().toISOString(),cause:"initial state"};
 function hash(b){let h=2166136261;for(let i=0;i<b.length;i+=Math.max(1,Math.floor(b.length/4096))){h^=b[i];h=Math.imul(h,16777619)}return(h>>>0).toString(16)}
+
+function updateVisualHypotheses(){
+ const obs=epistemics.claims.filter(x=>x.kind==="observation").slice(-40), groups={};
+ for(const o of obs){const m=o.text.match(/^visual state: (.+)$/);if(m)groups[m[1]]=(groups[m[1]]||0)+1}
+ const total=Object.values(groups).reduce((a,b)=>a+b,0);if(total<8)return;
+ for(const [regime,n] of Object.entries(groups)){let h=epistemics.claims.find(x=>x.kind==="hypothesis"&&x.key==="visual-regime:"+regime&&x.status==="open");const conf=n/total;
+  if(!h){h=claim("hypothesis","visual regime recurs: "+regime,conf,[{type:"aggregated-observations",support:n,total}]);h.key="visual-regime:"+regime;h.support=n;h.contradictions=total-n}
+  else{h.support=n;h.contradictions=total-n;reviseClaim(h.id,conf,conf<.1?"retired":"open",[{type:"recount",support:n,total}])}
+ }
+}
 function chooseGoal(){
  const d=agency.drives={
   understand:Math.min(1,inner.predictionError*.55+(sensoryPrediction.score===null?.5:1-sensoryPrediction.score)*.45),
@@ -51,7 +61,7 @@ function perceiveJPEG(buf){
   sensoryPrediction.nextLuminance=sensoryPrediction.nextLuminance===null?+projectedLum.toFixed(2):+(sensoryPrediction.nextLuminance*(1-sensoryPrediction.alpha)+projectedLum*sensoryPrediction.alpha).toFixed(2);
   sensoryPrediction.nextEdge=sensoryPrediction.nextEdge===null?+projectedEdge.toFixed(2):+(sensoryPrediction.nextEdge*(1-sensoryPrediction.alpha)+projectedEdge*sensoryPrediction.alpha).toFixed(2);
   visual={luminance:+mean.toFixed(2),contrast:+contrast.toFixed(2),edgeEnergy:+e.toFixed(2),deltaLuminance:+dl.toFixed(2),deltaEdge:+de.toFixed(2),trend:dl>1.5?"brightening":dl< -1.5?"darkening":Math.abs(de)>1?"scene-activity-shift":"stable",updated:new Date().toISOString()};
-  if(Math.abs(dl)>1.5||Math.abs(de)>1)claim("observation","visual state: "+visual.trend,.98,[{type:"sensor",at:visual.updated,luminance:visual.luminance,edgeEnergy:visual.edgeEnergy}]);
+  if(Math.abs(dl)>1.5||Math.abs(de)>1){claim("observation","visual state: "+visual.trend,.98,[{type:"sensor",at:visual.updated,luminance:visual.luminance,edgeEnergy:visual.edgeEnergy}]);updateVisualHypotheses()}
  }catch(e){log("Visual metrics error · "+e.message)}
 }
 async function tick(){try{const{x:r,b}=await getFrame(),h=hash(b),type=r.headers.get("content-type")||"",at=new Date().toISOString(),changed=!!s.lastHash&&h!==s.lastHash;let expected=prediction.pChange,actual=changed?1:0;prediction.lastPrediction=expected>=.5?"change":"stable";prediction.total++;if((changed&&expected>=.5)||(!changed&&expected<.5))prediction.correct++;inner.predictionError=Math.abs(actual-expected);prediction.pChange=prediction.pChange*(1-prediction.alpha)+actual*prediction.alpha;inner.novelty=inner.novelty*.85+(changed?.15:0);inner.stimulation=inner.stimulation*.9+(changed?.1:0);inner.uncertainty=Math.min(1,Math.max(0,.15+inner.predictionError*.7));inner.continuity=Math.min(1,inner.continuity+.01);inner.reliability=Math.min(1,inner.reliability+.005);inner.updated=at;inner.cause=changed?"unexpected/changed visual input":"stable visual input";agency.lastOutcome={at,goal:agency.goal,action:agency.action,changed,predictionError:Number(inner.predictionError.toFixed(4)),visualPredictionScore:sensoryPrediction.score,luminanceError:sensoryPrediction.luminanceError,edgeError:sensoryPrediction.edgeError,pChange:Number(prediction.pChange.toFixed(4))};
