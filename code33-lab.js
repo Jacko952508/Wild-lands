@@ -5,7 +5,6 @@ import dns from "node:dns/promises";
 import net from "node:net";
 import { chromium } from "playwright";
 import path from "node:path";
-import fs from "node:fs";
 
 const PORT=process.env.PORT||10000;
 const P=Object.freeze({version:"7.2",seed:772033,fit:80,select:40,test:100,transfer:100,steps:22,forecastQs:[1,2,3,4,5,6],pass:"selection-only winner; frozen model; episode-level paired gain CI95 low > 0 on test and transfer"});
